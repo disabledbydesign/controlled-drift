@@ -1,0 +1,6 @@
+.DS_Store
+# Machine-specific local settings (contains absolute paths to the Reframe install).
+# The portable Reframe project config (.reframe/, .reframe-active) IS tracked.
+.claude/settings.local.json
+# Transient per-session Reframe state.
+.reframe/session/
