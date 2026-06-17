@@ -18,6 +18,10 @@ EXPECTED = {
     "GSDO Strategy": ["GSDO Strategy status", "GSDO What for", "GSDO Learning notes", "GSDO Context"],
 }
 
+# Guard-critical formats (guard #3: capacity/affect signals must NEVER be scalars).
+# Linkage alone wouldn't catch a property accidentally created with the wrong format.
+GUARD_FORMATS = {"GSDO Affective": "text", "GSDO Excitement level": "number"}
+
 def verify():
     sid = g.get_space_id()
     passed = total = 0
@@ -32,7 +36,13 @@ def verify():
         ok = not missing
         passed += ok
         print(f"  [{'PASS' if ok else 'FAIL'}] {type_name}: {'all props linked' if ok else f'missing {missing}'}")
-    print(f"\nSUMMARY: {passed}/{total} types fully built")
+    for nm, fmt in GUARD_FORMATS.items():
+        total += 1
+        actual = (g.find_property(nm) or {}).get("format")
+        ok = actual == fmt
+        passed += ok
+        print(f"  [{'PASS' if ok else 'FAIL'}] guard-format {nm}: {actual!r} (expect {fmt!r})")
+    print(f"\nSUMMARY: {passed}/{total} checks passed")
     return passed == total
 
 if __name__ == "__main__":

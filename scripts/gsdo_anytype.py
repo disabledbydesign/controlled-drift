@@ -36,7 +36,8 @@ def ensure_property(name, fmt, options=None):
         key = existing.get("key")
     else:
         st, b = call("POST", f"/spaces/{get_space_id()}/properties", {"name": name, "format": fmt})
-        assert st in (200, 201), f"create property {name} failed: {st} {b}"
+        if st not in (200, 201):
+            raise RuntimeError(f"create property {name} failed: {st} {b}")
         key = b["property"]["key"]
     if options and fmt in ("select", "multi_select"):
         ensure_select_options(key, options)
@@ -54,7 +55,8 @@ def ensure_select_options(property_key, options, color="grey"):
     for opt in options:
         if opt not in existing:
             st, b = call("POST", f"/spaces/{sid}/properties/{pid}/tags", {"name": opt, "color": color})
-            assert st in (200, 201), f"create tag {opt} on {property_key} failed: {st} {b}"
+            if st not in (200, 201):
+                raise RuntimeError(f"create tag {opt} on {property_key} failed: {st} {b}")
 
 def link_properties_to_type(type_id, property_keys):
     sid = get_space_id()
@@ -66,7 +68,8 @@ def link_properties_to_type(type_id, property_keys):
         merged = t.get("properties", []) + to_add
         st, b = call("PATCH", f"/spaces/{sid}/types/{type_id}",
                      {"properties": merged})
-        assert st in (200, 201), f"link properties to type {type_id} failed: {st} {b}"
+        if st not in (200, 201):
+            raise RuntimeError(f"link properties to type {type_id} failed: {st} {b}")
 
 def ensure_type(name, plural, property_keys, layout="basic"):
     existing = find_type(name)
@@ -75,7 +78,8 @@ def ensure_type(name, plural, property_keys, layout="basic"):
     else:
         st, b = call("POST", f"/spaces/{get_space_id()}/types",
                      {"name": name, "plural_name": plural, "layout": layout})
-        assert st in (200, 201), f"create type {name} failed: {st} {b}"
+        if st not in (200, 201):
+            raise RuntimeError(f"create type {name} failed: {st} {b}")
         type_id, key = b["type"]["id"], b["type"]["key"]
     link_properties_to_type(type_id, property_keys)
     return key

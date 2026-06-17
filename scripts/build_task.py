@@ -24,7 +24,8 @@ def build_task():
     p_surfaced   = g.ensure_property("GSDO Last surfaced", "date")       # plan note 1
 
     task_type = g.find_type("task")
-    assert task_type, "built-in 'task' type not found"
+    if not task_type:
+        raise RuntimeError("built-in 'task' type not found")
     g.link_properties_to_type(task_type["id"],
         [p_duration, p_clarify, p_status, p_project, p_blocked, p_deadline,
          p_affective, p_access, p_access_nts, p_autonomous, p_docs, p_context, p_surfaced])
