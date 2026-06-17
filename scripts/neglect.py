@@ -39,9 +39,9 @@ def query_neglected(days=3, now=None):
     import gsdo_anytype as g
     now = now or dt.datetime.now()
     sid = g.get_space_id()
-    surfaced = g.find_property("GSDO Last surfaced")
+    surfaced = g.find_property("Last surfaced")
     if surfaced is None:
-        raise RuntimeError("query_neglected: 'GSDO Last surfaced' property not found "
+        raise RuntimeError("query_neglected: 'Last surfaced' property not found "
                            "(run build_task.py first) — refusing to report all items as neglected")
     surfaced_key = surfaced.get("key")
     data = call("GET", f"/spaces/{sid}/objects?limit=200")[1].get("data", [])

@@ -5,22 +5,21 @@ sys.path.insert(0, os.path.dirname(__file__))
 import gsdo_anytype as g
 
 EXPECTED = {
-    "GSDO Goal":     ["GSDO Reaching for (text)", "GSDO Horizon", "GSDO Goal status", "GSDO Barriers", "GSDO Context"],
-    "GSDO Project":  ["GSDO Goal link", "GSDO Description", "GSDO Reaching for (text)", "GSDO Project status",
-                      "GSDO Deadline", "GSDO Parent project", "GSDO Excitement level", "GSDO Relevant docs",
-                      "GSDO Affective", "GSDO Barriers", "GSDO Context"],
-    "task":          ["GSDO Duration min", "GSDO Needs clarifying", "GSDO Task status",
-                      "GSDO Project link", "GSDO Blocked on", "GSDO Deadline", "GSDO Affective",
-                      "GSDO Access conditions", "GSDO Access notes",
-                      "GSDO AI autonomous", "GSDO Last surfaced", "GSDO Context"],
-    "GSDO Recurring":["GSDO Frequency", "GSDO Has target", "GSDO Target", "GSDO Context",
-                      "GSDO Day of week", "GSDO Time of day", "GSDO Duration min"],
-    "GSDO Strategy": ["GSDO Strategy status", "GSDO What for", "GSDO Learning notes", "GSDO Context"],
+    "Goal":      ["Reaching for", "Horizon", "Goal status", "Barriers", "Context"],
+    "Project":   ["Goal link", "Description", "Reaching for", "Project status",
+                  "Deadline", "Parent project", "Excitement level", "Relevant docs",
+                  "Affective", "Barriers", "Context"],
+    "task":      ["Duration min", "Needs clarifying", "Task status", "Blocked on", "Affective",
+                  "Access conditions", "Access notes", "AI autonomous", "Last surfaced", "Context",
+                  "Due date", "Linked Projects"],   # Due date / Linked Projects = built-ins (replace custom Deadline/Project link)
+    "Recurring": ["Frequency", "Has target", "Target", "Project link", "Context",
+                  "Day of week", "Time of day", "Duration min"],
+    "Strategy":  ["Strategy status", "What for", "Learning notes", "Context"],
 }
 
 # Guard-critical formats (guard #3: capacity/affect signals must NEVER be scalars).
 # Linkage alone wouldn't catch a property accidentally created with the wrong format.
-GUARD_FORMATS = {"GSDO Affective": "text", "GSDO Excitement level": "number"}
+GUARD_FORMATS = {"Affective": "text", "Excitement level": "number"}
 
 def verify():
     sid = g.get_space_id()
