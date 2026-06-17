@@ -149,7 +149,7 @@ The fork was: does `reaching_for` (the project philosophy) belong to gsdo or to 
 
 ## 8. Open questions / next subsystems
 
-- **(a) The capacity-axis set** — port concretely from June's sister's framework (*get her actual parameters, with permission — a real source, not to reconstruct from memory*) + June's own additions.
+- **(a) The capacity-axis set** — port concretely from June's sister's framework (*get her actual parameters, with permission — a real source, not to reconstruct from memory*) + June's own additions. → **captured 2026-06-14: see `JULIA_FRAMEWORK.md`** (Julia Cordero's framework, credited).
 - **(b) List-generation logic** — how the AI assembles a day/week from params + current state + goal-alignment + errand-batching + rest blocks. (This is gsdo's version of PMA's "central unsolved problem": the what-do-I-do-right-now picker.)
 - **(c) The learning loop** — own session; duration-estimation first, then which axes/modes actually serve her.
 - **Global vs. per-project/per-repo scope** (Param #14) — still open; one system across all repos vs. dev-task sprawl. PMA bears on it.
