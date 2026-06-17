@@ -6,3 +6,7 @@
 .claude/settings.local.json
 # Transient per-session Reframe state.
 .reframe/session/
+
+# Python
+__pycache__/
+*.pyc
