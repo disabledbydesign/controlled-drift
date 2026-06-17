@@ -45,6 +45,8 @@ def ensure_property(name, fmt, options=None):
 def ensure_select_options(property_key, options, color="grey"):
     sid = get_space_id()
     prop = find_property(property_key)
+    if prop is None:
+        raise ValueError(f"ensure_select_options: property {property_key!r} not found")
     pid = prop["id"]
     # Confirmed path: /spaces/{sid}/properties/{pid}/tags
     # color is required by the API (CreateTagRequest schema); defaults to "grey"
