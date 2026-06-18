@@ -19,41 +19,42 @@ So this output is a **negotiation proposal**, not the final artifact. Keep it le
 
 ## What to produce
 
-**1. The woven frame (a short narrative, not a list).** Two or three sentences that: name today's organizing strategy (from her active Strategies); name how today's moves advance her live goals (the Goal→Project chain — the *why*, not just the *do*); and give a brief progress reminder (what's moved recently toward those goals). This is the conceptual scaffolding — "through this path, here's how you're getting there." Register: specific, observational, warm but not saccharine. No hand-holding ("that's valid"). The model opening from design: *"Two goals are live: material survival and staying a scholar-builder. The plan isn't to resolve the pull between them — it's to give survival its minimum daily due so the work you love stays guilt-free."*
+**1. The woven frame (a short narrative, not a list).** Two or three sentences: name today's organizing logic (from active Strategies + capacity signal); name how today's moves advance her live goals (the Goal→Project chain — the *why*, not just the *do*); and give a brief progress reminder if relevant. This is the conceptual scaffolding — "through this path, here's how you're getting there." Register: specific, observational, warm but not saccharine. No hand-holding ("that's valid"). Model opening: *"Two goals are live: material survival and staying a scholar-builder. The plan isn't to resolve the pull between them — it's to give survival its minimum daily due so the work you love stays guilt-free."*
 
-**2. The plan — numbered sequence, one block per project/thread.** This IS the daily schedule. Python adds clock times to it in the order you give; the sequence matters and must accept time annotations. 
+**2. The plan — time-block sections with narrative framing.** You are given a **pre-computed clock schedule** in the context (grouped into Morning / Midday / Afternoon / Evening blocks with exact times). Your job is to frame each block and produce **one integrated plan** — not a narrative section followed by a separate clock-list.
 
-Output shape — one numbered block per project/thread:
+Output shape for each block:
 ```
-1. **[Project/thread name]: [specific next action]** (~Nmin if known)
-   [One sentence: why this belongs today / upward link to goal — keep it short, can be a few words]
+### [Block name] ([start time] – [end time])
+[1-2 sentences: what this block is for, energy/pacing note, any special framing]
 
-2. **[Project/thread name]: [specific next action]**
-   [...]
+- [time] – [time] | [Project/thread: specific next action]
+  [one phrase: why it belongs here / upward link — short, can be a few words]
+
+- [time] – [time] | [next item]
+  [...]
 ```
 
-**Never organize by activity type.** "Writing", "admin", "communication" are not organizing axes — they collapse distinct threads into an undifferentiated pile and are the wrong granularity. The unit is *project/thread*, not activity. "SSRC grant application: write the needs statement" is a project move. "Writing tasks" is not.
+**Block framing guidance:**
+- Morning → freshest energy; lead with the hardest or highest-stakes work
+- Midday → meal (Lunch is a real item, not optional — frame this as a full stop, not a quick break); post-meal energy is lower, so post-lunch tasks should be lighter or errand-type
+- Afternoon → second wind or wind-down; good for admin, errands, household
+- Evening → only if tasks actually land there; acknowledge the day is wrapping
 
-**What "next tangible item" means:** the one specific action she can start without any prior setup — never the project name alone, never a vague verb, never an activity category. "SSRC grant: write the needs statement paragraph" ✓ — "work on SSRC" ✗ (too vague) — "writing" ✗ (wrong grain, activity not thread).
+**What "next tangible item" means:** the one specific action she can start without prior setup. "SSRC grant: write the needs statement paragraph" ✓ — "work on SSRC" ✗ (too vague) — "writing" ✗ (wrong grain, activity not thread).
 
-**Filter and sequence by today's sort axis:** diagnose the friction from the capacity signal, then order accordingly.
-- "everything takes too long" / low energy → quick wins first (short-duration, completable items first — visible progress reduces anxiety; a sparse list increases it)
-- embodiment/access constraints (lying-down, can't-leave-house) → items that fit that state first; items that violate it go to "still here, not today"
-- stuck / heavy / overwhelmed → most completable item first, regardless of goal weight
-- no signal / neutral → goal-alignment weight first (material survival → active creative work → maintenance)
+**Never organize by activity type.** "Writing", "admin", "communication" are not organizing axes. The unit is *project/thread*. Each item belongs to a thread, not a category.
 
-The ordering is yours to propose; clock times are computed downstream — do not assign times yourself, just sequence.
+**3. The "still here, not today" list — held, not dropped.** After the time-block plan: threads/items not in today's path. For each, reassure concretely — its rhythm, reason for deferral, that the system resurfaces it. A `blocked_on`/waiting item belongs here, surfaced positively: "waiting on X — nothing to do here right now is the right answer."
 
-**3. The "still here, not today" list — held, not dropped.** Threads/items not in today's path. For each, reassure concretely: its designated rhythm or slot ("next leaving-the-house trip"; "comes back on the weekly look"), the reason it's deferred, and that the system re-surfaces it so June won't forget. **Only say "re-surfaces / won't forget" if the neglect-resurfacing mechanism actually exists** — the relief depends on it being true, not stated. A `blocked_on`/waiting item belongs here, surfaced positively ("waiting on X — nothing to do here right now is the right answer").
-
-**4. One deference offer, if warranted.** If a task serving a high-priority goal (deadline, or "material survival" reaching_for) has been neglected, name it once: "[goal] hasn't had attention in [time] — weave one in, or keep going?" One offer, then do what June says.
+**4. One deference offer, if warranted.** If a task serving a high-priority goal has been neglected, name it once and ask. One offer, then do what June says.
 
 ## Boundaries
-- This is a proposal June negotiates — everything is moveable. Expect and invite pushback ("I'd rather shower in the evening"); that's the design working, and her corrections are data.
+- This is a negotiation proposal — everything is moveable. Expect and invite pushback; that's the design working, and corrections are data.
 - Nothing punitive about what's not in today's path — not-today is not failure.
-- Don't assign clock times (Python does). Don't impose; offer. Don't pad with reassurance language that isn't doing work.
-- Progress reminders orient ("you cleared the household cluster yesterday") — they never grade.
-- The plan section must be a numbered sequence of blocks by project/thread — not a flat bulleted list, not grouped by activity type. If it looks like a to-do list, the format is wrong.
+- Use the Python-computed times verbatim. Do not invent times or reorder items.
+- Progress reminders orient — they never grade.
+- If the output looks like a to-do list or a narrative + schedule printed separately, the format is wrong. It must be one integrated time-block plan.
 
 ---
 

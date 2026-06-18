@@ -225,19 +225,101 @@ def format_context(goals, projects, tasks, strategies, today_recurrings, neglect
     return "\n".join(lines)
 
 
-# --- Clock-time schedule ----------------------------------------------------
+# --- Clock-time schedule + time-block formatting ----------------------------
 
-def build_schedule(llm_ordered_items, today_recurrings, start_time=None):
-    """Merge LLM-proposed task order with today's Recurring fixed anchors.
+# Default meal anchors — injected when no meal-type Recurring item exists.
+# June can override by adding a Recurring "Lunch" item in Anytype.
+_DEFAULT_MEALS = [
+    {"name": "Lunch", "hour": 12, "minute": 0, "duration_min": 30},
+]
+
+def default_meal_anchors(today_recurrings, start_time):
+    """Return default meal anchor items not already covered by a Recurring item."""
+    existing = {r["name"].lower() for r in today_recurrings}
+    anchors = []
+    today = start_time.date()
+    for meal in _DEFAULT_MEALS:
+        if not any(meal["name"].lower() in name for name in existing):
+            fixed = dt.datetime.combine(today, dt.time(meal["hour"], meal["minute"]))
+            if fixed > start_time:
+                anchors.append({
+                    "id": None,
+                    "name": meal["name"],
+                    "fixed_time": fixed,
+                    "duration_min": meal["duration_min"],
+                    "_default_anchor": True,
+                })
+    return anchors
+
+
+def build_schedule(llm_ordered_items, all_anchors, start_time=None):
+    """Merge LLM-proposed task order with fixed anchors (Recurring + meal defaults).
     llm_ordered_items: list of {"name", "duration_min", ...} in proposed order.
+    all_anchors: today_recurrings + default_meal_anchors (both have fixed_time).
     Returns scheduled list with start_time/end_time on each item.
     """
     start_time = start_time or dt.datetime.now().replace(second=0, microsecond=0)
+    existing_names = {it["name"] for it in llm_ordered_items}
     all_items = list(llm_ordered_items) + [
-        {**r, "fixed_time": r["fixed_time"]} for r in today_recurrings
-        if r["name"] not in {it["name"] for it in llm_ordered_items}
+        {**r, "fixed_time": r["fixed_time"]} for r in all_anchors
+        if r["name"] not in existing_names
     ]
     return schedule(all_items, start_time)
+
+
+def _block_label(hour):
+    if hour < 12:
+        return "Morning"
+    elif hour < 14:
+        return "Midday"
+    elif hour < 17:
+        return "Afternoon"
+    else:
+        return "Evening"
+
+
+def format_schedule_blocks(scheduled):
+    """Group the Python-computed schedule into named time blocks.
+
+    Claude reads this and adds narrative framing for each block, producing
+    one integrated plan. Python owns times and order; Claude owns framing.
+    """
+    from collections import OrderedDict
+    blocks: OrderedDict = OrderedDict()
+    for item in scheduled:
+        start = item.get("start_time")
+        if not start:
+            continue
+        label = _block_label(start.hour)
+        blocks.setdefault(label, []).append(item)
+
+    def _fmt_time(t):
+        # "9:15 AM" not "09:15 AM"
+        return t.strftime("%I:%M %p").lstrip("0")
+
+    lines = []
+    lines.append("## Pre-computed clock schedule — your output skeleton")
+    lines.append("Python owns times and order. Your job:")
+    lines.append("  1. Write 1-2 sentence narrative framing for each block (what it's for, energy note).")
+    lines.append("  2. List each item with its clock time verbatim.")
+    lines.append("  3. Produce ONE integrated plan — not a narrative followed by a separate schedule.")
+    lines.append("  Do not change times or reorder items.")
+    lines.append("")
+
+    for label, items in blocks.items():
+        b_start = items[0]["start_time"]
+        b_end = items[-1].get("end_time") or items[-1]["start_time"]
+        lines.append(f"### {label} ({_fmt_time(b_start)} – {_fmt_time(b_end)})")
+        for item in items:
+            s = item.get("start_time")
+            e = item.get("end_time")
+            time_str = f"{_fmt_time(s)} – {_fmt_time(e)}" if s and e else "?"
+            dur = item.get("duration_min")
+            dur_str = f" (~{dur}min)" if dur else ""
+            lines.append(f"  {time_str} | {item['name']}{dur_str}")
+        lines.append("")
+
+    return "\n".join(lines)
 
 
 # --- Anytype writes ----------------------------------------------------------
@@ -267,66 +349,62 @@ def run():
     except EOFError:
         capacity = ""
 
+    # Compute the clock-time schedule FIRST so it can be part of the LLM's context.
+    # Python owns times and order; the LLM adds narrative framing around the skeleton.
+    start_time = dt.datetime.now().replace(second=0, microsecond=0)
+    meals = default_meal_anchors(today_recurrings, start_time)
+    all_anchors = today_recurrings + meals
+    task_items = [{"name": t["name"], "duration_min": t.get("duration_min")} for t in tasks]
+    scheduled = build_schedule(task_items, all_anchors, start_time)
+    schedule_block = format_schedule_blocks(scheduled)
+
     context_block = format_context(
         goals, projects, tasks, strategies, today_recurrings, neglected, capacity)
+
+    # Combine context + schedule skeleton so the LLM receives both
+    full_context = context_block + "\n" + schedule_block
 
     # Read the prompt template
     prompt_path = os.path.join(os.path.dirname(__file__), "..", "prompts", "daily_list.md")
     with open(prompt_path) as f:
         prompt_template = f.read()
 
-    # Inject context into prompt
+    # Inject context + schedule into prompt
     prompt = prompt_template.replace(
         "- Capacity signal: [what June said about today, or empty]",
         f"- Capacity signal: {capacity or '(none given)'}"
     ).replace(
         "- Active tasks/projects/goals/strategies: [via MCP]",
-        f"- Active tasks/projects/goals/strategies:\n\n{context_block}"
+        f"- Active tasks/projects/goals/strategies:\n\n{full_context}"
     ).replace(
         "- Current time: [system time, for the downstream scheduler]",
-        f"- Current time: {dt.datetime.now().strftime('%A %B %d, %Y — %I:%M %p')}"
+        f"- Current time: {start_time.strftime('%A %B %d, %Y — %I:%M %p')}"
     )
 
-    print("\n--- Context loaded. Prompt ready for LLM. ---")
+    print("\n--- Context + schedule loaded. Prompt ready for LLM. ---")
     print(f"Goals: {len(goals)}  Projects: {len(projects)}  Tasks: {len(tasks)}  "
           f"Strategies: {len(strategies)}  Recurring today: {len(today_recurrings)}  "
-          f"Neglected: {len(neglected)}")
-    print("\nContext block:\n")
-    print(context_block)
-    print("\n--- Full prompt injected into daily_list.md ---")
-    print("(In the /drift skill flow, this prompt + context goes to the LLM.)")
-    print("(Run via /drift for the full negotiation loop.)")
-
-    # Build the clock-time schedule: LLM-ordered flexible tasks + Recurring fixed anchors.
-    # The LLM proposes ORDER (via daily_list.md); Python places items in TIME deterministically.
-    # v1: tasks don't yet have LLM ordering wired (that comes from the /drift negotiation loop),
-    # so we pass them in load order. The schedule is still useful for showing Recurring anchors.
-    scheduled = build_schedule(
-        [{"name": t["name"], "duration_min": t.get("duration_min")} for t in tasks],
-        today_recurrings,
-    )
-    print("\n--- Proposed clock-time schedule ---")
-    for item in scheduled:
-        start = item.get("start_time")
-        end = item.get("end_time")
-        if start and end:
-            print(f"  {start.strftime('%H:%M')}–{end.strftime('%H:%M')}  {item['name']}")
+          f"Meals injected: {len(meals)}  Neglected: {len(neglected)}")
+    print("\nFull context (injected into daily_list.md prompt):\n")
+    print(full_context)
+    print("\n(In the /drift skill flow, the LLM receives this prompt and returns the")
+    print(" integrated time-block plan with narrative framing. Run via /drift.)")
 
     try:
         confirm = input("\nConfirm and update last_surfaced? [y/N]: ").strip().lower()
     except EOFError:
         confirm = "n"
     if confirm == "y":
-        surfaced_ids = [t["id"] for t in tasks] + [r["id"] for r in today_recurrings]
+        # Only write to Anytype for real objects — exclude default meal anchors (no id)
+        anytype_recurrings = [r for r in all_anchors if r.get("id")]
+        surfaced_ids = [t["id"] for t in tasks] + [r["id"] for r in anytype_recurrings]
         update_last_surfaced(sid, surfaced_ids)
         log_surfaced_batch(
             [{"id": t["id"], "name": t["name"], "type": "task"} for t in tasks] +
-            [{"id": r["id"], "name": r["name"], "type": "recurring"} for r in today_recurrings]
+            [{"id": r["id"], "name": r["name"], "type": "recurring"} for r in anytype_recurrings]
         )
-        # Log each scheduled item as a plan-correction baseline (kind="initial_placement").
-        # When June later moves an item, log_correction("move_time", before, after) captures the delta.
         for item in scheduled:
-            if item.get("start_time"):
+            if item.get("start_time") and item.get("id"):
                 log_correction("initial_placement", None,
                                {"name": item["name"],
                                 "start": item["start_time"].isoformat(),
