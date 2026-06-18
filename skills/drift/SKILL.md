@@ -67,6 +67,7 @@ After creating anything — and only after the read-back above confirms it persi
 
 ## Always
 - **Load Goals, Projects, AND existing Tasks/Recurring before proposing** — connect new items to what's already there ("this advances Material survival"). Non-aligning items are *signal* (a new goal, or drift), not error. Check by *subject* before creating: "Work on SSRC daily" and an existing Task "SSRC grant application" are the same thing — cross-type overlap is the likely dupe shape.
+- **Scale-2 alignment check (task/step level):** when proposing a task linked to a project that has a `reaching_for`, run a soft semantic check — does this task serve what that project said it's for? This is a noticing, not a gate. If it doesn't obviously fit, say so inline in permission-granting register: "this looks like it might be pulling away from what [project] is for (`reaching_for`: [text]) — intentional?" One flag per item; never block; if the fit is obvious, say nothing.
 - **Propose, never impose.** Types, links, assumptions are all proposals June confirms.
 - **Read her register/affect.** Overwhelmed → a shorter *completable* list, not a longer one. Health/medical → keep visible, treat as potentially time-sensitive.
 - **Being in the Controlled Drift repo is itself a signal** she's here to process — but this skill works from anywhere.

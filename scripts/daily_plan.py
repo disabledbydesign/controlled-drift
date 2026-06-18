@@ -68,6 +68,7 @@ def load_active_items(sid):
                 continue  # Done projects are invisible in the daily plan
 
             projects.append({"id": oid, "name": name,
+                              "reaching_for": pv("gsdo_reaching_for", "text"),
                               "context": pv("gsdo_context", "text"),
                               "affective": pv("gsdo_affective", "text"),
                               "deadline": pv("gsdo_deadline", "date"),
@@ -152,8 +153,11 @@ def format_context(goals, projects, tasks, strategies, today_recurrings, neglect
             line = f"- {p['name']} [{eng}]"
             if eng_notes:
                 line += f" | {eng_notes}"
+            rf = p.get("reaching_for") or ""
             ctx = p.get("context") or ""
             aff = p.get("affective") or ""
+            if rf:
+                line += f" | reaching for: {rf}"
             if ctx:
                 line += f" | context: {ctx}"
             if aff:
