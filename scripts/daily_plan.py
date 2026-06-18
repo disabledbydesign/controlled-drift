@@ -69,10 +69,13 @@ def load_active_items(sid):
                 done = pv("done", "checkbox")
                 if done:
                     continue
+                access_tags = pv("gsdo_access", "multi_select") or []
+                access = [t.get("name") for t in access_tags if isinstance(t, dict)]
                 tasks.append({"id": oid, "name": name,
                                "status": status,
                                "duration_min": pv("gsdo_duration_min", "number"),
                                "affective": pv("gsdo_affective", "text"),
+                               "access": access,
                                "blocked_on": pv("gsdo_blocked_on", "text"),
                                "context": pv("gsdo_context", "text")})
 
@@ -149,6 +152,8 @@ def format_context(goals, projects, tasks, strategies, today_recurrings, neglect
                 extras.append(f"~{t['duration_min']}min")
             if t.get("affective"):
                 extras.append(f"affective: {t['affective']}")
+            if t.get("access"):
+                extras.append(f"access: {', '.join(t['access'])}")
             if extras:
                 line += f" ({'; '.join(extras)})"
             lines.append(line)
@@ -250,11 +255,20 @@ def run():
     print("(In the /drift skill flow, this prompt + context goes to the LLM.)")
     print("(Run via /drift for the full negotiation loop.)")
 
-    # Demo: show what the schedule would look like for today's Recurring items
-    if today_recurrings:
-        print("\n--- Today's fixed anchors (Recurring) ---")
-        for r in today_recurrings:
-            print(f"  {r['fixed_time'].strftime('%H:%M')}  {r['name']}")
+    # Build the clock-time schedule: LLM-ordered flexible tasks + Recurring fixed anchors.
+    # The LLM proposes ORDER (via daily_list.md); Python places items in TIME deterministically.
+    # v1: tasks don't yet have LLM ordering wired (that comes from the /drift negotiation loop),
+    # so we pass them in load order. The schedule is still useful for showing Recurring anchors.
+    scheduled = build_schedule(
+        [{"name": t["name"], "duration_min": t.get("duration_min")} for t in tasks],
+        today_recurrings,
+    )
+    print("\n--- Proposed clock-time schedule ---")
+    for item in scheduled:
+        start = item.get("start_time")
+        end = item.get("end_time")
+        if start and end:
+            print(f"  {start.strftime('%H:%M')}–{end.strftime('%H:%M')}  {item['name']}")
 
     try:
         confirm = input("\nConfirm and update last_surfaced? [y/N]: ").strip().lower()
@@ -267,7 +281,15 @@ def run():
             [{"id": t["id"], "name": t["name"], "type": "task"} for t in tasks] +
             [{"id": r["id"], "name": r["name"], "type": "recurring"} for r in today_recurrings]
         )
-        print(f"✓ Updated last_surfaced on {len(surfaced_ids)} items.")
+        # Log each scheduled item as a plan-correction baseline (kind="initial_placement").
+        # When June later moves an item, log_correction("move_time", before, after) captures the delta.
+        for item in scheduled:
+            if item.get("start_time"):
+                log_correction("initial_placement", None,
+                               {"name": item["name"],
+                                "start": item["start_time"].isoformat(),
+                                "end": item.get("end_time", "").isoformat() if item.get("end_time") else None})
+        print(f"✓ Updated last_surfaced on {len(surfaced_ids)} items. Schedule logged.")
 
 
 if __name__ == "__main__":

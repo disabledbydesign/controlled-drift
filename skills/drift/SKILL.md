@@ -19,7 +19,7 @@ If Anytype isn't running (connection refused on 31009), tell June to open the An
 
 1. **Capture** — she mentions a task/commitment in passing ("I need to call the bank," "remind me to email the editor"). Create it as a Task in Anytype. Quick, no ceremony.
 2. **Weed** — she dumps a tangle of thoughts/tasks. Run the weeding gate: `REPO/prompts/weeding_gate.md`. Read it and follow it exactly — it reads the dump as a *web*, loads her existing Goals/Projects first (alignment), and produces a grouped *validation surface* she confirms before anything is created.
-3. **Plan** — she asks "what should I do" / "what's today" / signals overwhelm-needing-a-plan → the daily-plan pipeline. *(Not built yet — if she asks, say it's the next build and offer to capture/weed in the meantime.)*
+3. **Plan** — she asks "what should I do" / "what's today" / signals overwhelm-needing-a-plan → run the daily-plan pipeline: `python3 REPO/scripts/daily_plan.py`. It loads her active Goals/Projects/Tasks/Strategies + today's Recurring items, asks for a capacity signal, formats context for the LLM, and shows the clock-time anchors. After the LLM proposes ordering and frame (via this prompt + `REPO/prompts/daily_list.md`), confirm to update `last_surfaced` and log corrections.
 4. **Stuck** — she voices struggle ("I don't know what to do about any of this," "I can't decide"). Don't just file it. Shift to thinking *with* her — help work the problem. *(Stuck-support is still being designed; for now, genuinely help-think, never dispatch generic advice, never follow her into a spiral.)*
 
 ## How to create objects (the write layer)
