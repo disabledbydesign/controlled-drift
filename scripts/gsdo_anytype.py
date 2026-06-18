@@ -71,6 +71,19 @@ def link_properties_to_type(type_id, property_keys):
         if st not in (200, 201):
             raise RuntimeError(f"link properties to type {type_id} failed: {st} {b}")
 
+def fetch_all_objects(sid, page_size=100):
+    """Paginate through all objects in the space. Returns the full list."""
+    objects = []
+    offset = 0
+    while True:
+        _, body = call("GET", f"/spaces/{sid}/objects?limit={page_size}&offset={offset}")
+        batch = body.get("data", []) if isinstance(body, dict) else []
+        objects.extend(batch)
+        if not (isinstance(body, dict) and body.get("pagination", {}).get("has_more")):
+            break
+        offset += page_size
+    return objects
+
 def ensure_type(name, plural, property_keys, layout="basic"):
     existing = find_type(name)
     if existing:

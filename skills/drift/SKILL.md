@@ -28,7 +28,7 @@ If Anytype isn't running (connection refused on 31009), tell June to open the An
 
 - **Load context** — `daily_plan.py` loads everything (goals, projects, tasks, strategies, recurring) in one call
 - **Create objects** — `gsdo_objects.create()` (see below)  
-- **Check what exists** — `call("GET", f"/spaces/{sid}/objects?limit=200")` via `anytype_test.call` + `gsdo_anytype.get_space_id()`
+- **Check what exists** — `g.fetch_all_objects(sid)` via `gsdo_anytype.fetch_all_objects` + `gsdo_anytype.get_space_id()` (paginated; handles spaces beyond 200 objects)
 
 If something seems to need a fresh query, check whether `daily_plan.py` or `gsdo_objects.py` already does it.
 

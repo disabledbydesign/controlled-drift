@@ -34,7 +34,7 @@ def _prop_val(props_dict, key, kind):
 
 def load_active_items(sid):
     """Load Goals, Projects, Tasks (Active/Needs-Clarifying), Strategies from Anytype."""
-    data = call("GET", f"/spaces/{sid}/objects?limit=200")[1].get("data", [])
+    data = g.fetch_all_objects(sid)
     goals, projects, tasks, strategies, recurrings = [], [], [], [], []
 
     for obj in data:

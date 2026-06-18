@@ -9,7 +9,7 @@
 - If something fits *no* existing goal, that's **signal, not error**: a new goal emerging, or drift worth noticing. Name it as that; don't force a link.
 - **Before proposing to create anything, check by subject — not just name or type — whether it already exists.** "Work on SSRC daily" is the same thing as an existing Task "SSRC grant application." Cross-type overlap is the likely shape (a Task and a proposed Recurring for the same subject). When there's a match, surface it: "this looks like it overlaps with [type] '[name]' already under [project] — link/add context rather than create?" June cannot catch this herself; that's why the system loads it.
 
-To load Tasks and Recurring items alongside Goals/Projects: `call("GET", f"/spaces/{sid}/objects?limit=200")`, filter for `type["key"] in ("task", "gsdo_recurring")`.
+To load Tasks and Recurring items alongside Goals/Projects: `import gsdo_anytype as g; sid = g.get_space_id(); all_objects = g.fetch_all_objects(sid)`, then filter for `type["key"] in ("task", "gsdo_recurring")` for the dedup check and `type["key"] in ("gsdo_goal", "gsdo_project")` for alignment.
 
 **Notice the whole before naming anything:**
 - Is there a feeling or capacity signal woven through? ("this is heavy," "I've been avoiding this," "I don't know where to start") — if so, it's probably the through-line.

@@ -44,7 +44,7 @@ def query_neglected(days=3, now=None):
         raise RuntimeError("query_neglected: 'Last surfaced' property not found "
                            "(run build_task.py first) — refusing to report all items as neglected")
     surfaced_key = surfaced.get("key")
-    data = call("GET", f"/spaces/{sid}/objects?limit=200")[1].get("data", [])
+    data = g.fetch_all_objects(sid)
     items = []
     for o in data:
         t = o.get("type")
