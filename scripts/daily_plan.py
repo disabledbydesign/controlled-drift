@@ -227,28 +227,86 @@ def format_context(goals, projects, tasks, strategies, today_recurrings, neglect
 
 # --- Clock-time schedule + time-block formatting ----------------------------
 
-# Default meal anchors — injected when no meal-type Recurring item exists.
-# June can override by adding a Recurring "Lunch" item in Anytype.
-_DEFAULT_MEALS = [
-    {"name": "Lunch", "hour": 12, "minute": 0, "duration_min": 30},
-]
+_MEAL_PARAMS_PATH = os.path.join(os.path.dirname(__file__), "data", "meal_params.json")
+_MEAL_PARAMS_DEFAULT = {
+    "lunch": {
+        "default_hour": 12.0,   # learned decimal hour (12.5 = 12:30); updated by corrections
+        "window_end_hour": 14,  # past this → skip injection (assume eaten or not happening)
+        "duration_min": 30
+    }
+}
+
+def _load_meal_params():
+    try:
+        with open(_MEAL_PARAMS_PATH) as f:
+            return json.load(f)
+    except (FileNotFoundError, json.JSONDecodeError):
+        return _MEAL_PARAMS_DEFAULT
+
+
+def update_meal_learned_time(meal_name, actual_hour, actual_minute=0):
+    """Nudge the learned default time toward the actual time June had the meal.
+
+    Called by the corrections loop (post-v1) when June moves a meal item in the plan.
+    Uses a gentle exponential moving average (80% current, 20% new signal) so one
+    outlier day doesn't override the pattern.
+    """
+    params = _load_meal_params()
+    key = meal_name.lower()
+    if key not in params:
+        return
+    actual_decimal = actual_hour + actual_minute / 60.0
+    current = params[key]["default_hour"]
+    params[key]["default_hour"] = round(0.8 * current + 0.2 * actual_decimal, 2)
+    os.makedirs(os.path.dirname(_MEAL_PARAMS_PATH), exist_ok=True)
+    with open(_MEAL_PARAMS_PATH, "w") as f:
+        json.dump(params, f, indent=2)
+
 
 def default_meal_anchors(today_recurrings, start_time):
-    """Return default meal anchor items not already covered by a Recurring item."""
+    """Return meal anchor items not already covered by a Recurring item.
+
+    Timing is adaptive, not hardcoded:
+    - If plan starts before the learned default lunch hour → anchor to that hour.
+    - If plan starts after the default but before window_end → anchor to
+      current_time + 30 min ("eat soon — you haven't had lunch yet").
+    - If plan starts past window_end → skip (assume eaten or not happening today).
+
+    The default_hour is a learned parameter updated by update_meal_learned_time()
+    when the corrections loop (post-v1) sees June moving the Lunch item.
+    June can also override entirely by adding a Recurring 'Lunch' item in Anytype.
+    """
     existing = {r["name"].lower() for r in today_recurrings}
+    params = _load_meal_params()
     anchors = []
     today = start_time.date()
-    for meal in _DEFAULT_MEALS:
-        if not any(meal["name"].lower() in name for name in existing):
-            fixed = dt.datetime.combine(today, dt.time(meal["hour"], meal["minute"]))
-            if fixed > start_time:
-                anchors.append({
-                    "id": None,
-                    "name": meal["name"],
-                    "fixed_time": fixed,
-                    "duration_min": meal["duration_min"],
-                    "_default_anchor": True,
-                })
+
+    lp = params.get("lunch", _MEAL_PARAMS_DEFAULT["lunch"])
+    window_end = dt.datetime.combine(today, dt.time(lp["window_end_hour"], 0))
+
+    if start_time >= window_end:
+        return []  # past the lunch window; don't nag
+
+    if not any("lunch" in name for name in existing):
+        default_h = lp["default_hour"]
+        default_dt = dt.datetime.combine(
+            today, dt.time(int(default_h), int((default_h % 1) * 60)))
+
+        if start_time < default_dt:
+            # Starting before learned lunch time — anchor to that time
+            fixed = default_dt
+        else:
+            # Past the default but still in window — suggest lunch soon
+            fixed = start_time + dt.timedelta(minutes=30)
+
+        anchors.append({
+            "id": None,
+            "name": "Lunch",
+            "fixed_time": fixed,
+            "duration_min": lp["duration_min"],
+            "_default_anchor": True,
+        })
+
     return anchors
 
 
