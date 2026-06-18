@@ -35,7 +35,13 @@ So this output is a **negotiation proposal**, not the final artifact. Keep it le
 
 ---
 
-**Inputs:**
+**Inputs (injected by `scripts/daily_plan.py`):**
 - Capacity signal: [what June said about today, or empty]
-- Active tasks/projects/goals/strategies: [via MCP]
-- Current time: [system time, for the downstream scheduler]
+- Active tasks/projects/goals/strategies: [structured context block — Goals, Projects, Tasks,
+  Strategies, Recurring items scheduled today, and any previously-surfaced items gone stale]
+- Current time: [system time — Thursday June 18, 2026 — 11:49 AM format]
+
+**Note on the neglect section:** "Items not surfaced recently" only appears after the system
+has been running long enough for previously-surfaced items to go stale (>3 days). On first
+run there will be no neglect section — that's correct, not a bug. The first time something
+is surfaced and confirmed, it starts generating history.

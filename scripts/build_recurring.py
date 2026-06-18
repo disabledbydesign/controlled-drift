@@ -15,8 +15,14 @@ def build_recurring():
                                   ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"])
     p_tod     = g.ensure_property("Time of day", "text")      # "HH:MM"
     p_dur     = g.ensure_property("Duration min", "number")   # reused from Task
+    # interval model: {unit, count} replaces the coarse Frequency select as the canonical
+    # representation. unit=day/week/month/as_needed + count=N (e.g. day/3 = every 3 days).
+    # The datetime seam uses these; gsdo_frequency is kept for display/legacy but not queried.
+    p_iunit   = g.ensure_property("Interval unit", "select", ["day", "week", "month", "as_needed"])
+    p_icount  = g.ensure_property("Interval count", "number")
     key = g.ensure_type("Recurring", "Recurring",
-                        [p_freq, p_target, p_tgt_txt, p_project, p_context, p_dow, p_tod, p_dur])
+                        [p_freq, p_target, p_tgt_txt, p_project, p_context,
+                         p_dow, p_tod, p_dur, p_iunit, p_icount])
     print(f"[ok] Recurring type ready: key={key}")
     return key
 
