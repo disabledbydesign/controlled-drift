@@ -158,14 +158,17 @@ When recurring items mix into the Task list, the list looks enormous and nothing
 | Field | Type | Notes |
 |---|---|---|
 | `name` | text | |
-| `frequency` | select | Daily / Weekly / As-needed |
+| `interval_unit` | select | `day` / `week` / `month` / `as_needed` — replaces the old `frequency` (Daily/Weekly/As-needed). The general interval model subsumes all prior cases. |
+| `interval_count` | number | N in "every N days/weeks/months." Default 1. `day/1` = daily; `day/3` = every 3 days; `week/1 + day_of_week` = weekly on those days. |
 | `has_target` | bool | True = Practice (track against a target). False = Routine (just check off). |
 | `target` | text | Optional; only if `has_target`. "3x/week." |
-| `day_of_week` | multi-select | Optional. Mon–Sun. Set only for a recurring item pinned to specific day(s) — e.g. a weekly therapy appointment (Tuesday). Empty for un-anchored routines ("meditate sometime daily"). |
-| `time_of_day` | text | Optional. Clock time the item is anchored to, "HH:MM" (e.g. "14:00"). When set, the deterministic scheduler treats this item as a **fixed anchor** the day's flexible tasks flow around — not a back-to-back placement. |
+| `day_of_week` | multi-select | Optional. Mon–Sun. Weekly anchor: set only for items pinned to specific day(s) — e.g. weekly therapy (Tuesday). Empty for un-anchored daily routines. |
+| `time_of_day` | text | Optional. Clock time "HH:MM". When set, the deterministic scheduler treats this as a **fixed anchor** the day's flexible tasks flow around. |
 | `duration_estimate` | number (min) | Optional. Reuses the Task duration property. Needed for a time-anchored item so the scheduler knows the block length. |
 | `project` | objects-relation | Optional. Links to the goal/project it serves. |
 | `context` | text | Free text. |
+
+*Note: `frequency` (select: Daily/Weekly/As-needed) was the v1-prototype field; replaced by the interval model (`interval_unit` + `interval_count`) built in session 7. The old field may still exist in the Anytype space as a legacy property — ignore it when building. `build_recurring.py` creates the interval fields idempotently.*
 
 **Fixed recurring appointments (e.g. weekly therapy).** A recurring item with `day_of_week` + `time_of_day` + `duration_estimate` set is a fixed appointment: the scheduler (§1, deterministic Python) places it at its real clock time and arranges flexible tasks around it. v1 holds appointments here, entered once. **Reading appointments from a calendar app is parked (§10):** the privacy-right path is Apple Calendar via local AppleScript (June's actual calendar; stays on-device — *not* Google Calendar), post-v1.
 
