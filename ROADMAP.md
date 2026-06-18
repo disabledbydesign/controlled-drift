@@ -30,14 +30,14 @@ Rename: drop the "GSDO" display-name prefix; Task uses built-in **Due date** + *
 3. Result: you get a capacity-first daily plan; edits get logged for the future rhythm-learning loop.
 
 ### Step 3+ — Later increments (not soon)
-Drift detection (§8b); the learning loops (rhythm, strategy lifespan, access-barrier promotion, the surface-log companion to `last_surfaced`); wins mirror; Apple-Calendar integration; the no-app-switching chat-stream surface; pagination on `query_neglected`.
+Drift detection (§8b); the learning loops (rhythm, strategy lifespan, access-barrier promotion, the surface-log companion to `last_surfaced`); wins mirror; Apple-Calendar integration; the no-app-switching chat-stream surface; pagination on `query_neglected`; **repo/folder ↔ Goal/Project binding** (being in a given folder auto-contextualizes the system to that slice of the graph — first binding: job-search folder → Material survival; mechanism + open questions in `AI_LAYER_SPEC.md §10`).
 
 ## How you invoke it (so you never have to remember functions)
 
 The system is **not this repo** — it's your Anytype data + behaviors any Claude instance can perform. Anytype runs globally on your Mac, so the system is reachable from anywhere. Invocation has three modes; you remember none of the functions:
 
 1. **From any project — the `drift` skill.** In any Claude session, anywhere, invoke `/drift` (or just mention a todo / dump / "what should I do"). The skill (`~/.claude/skills/drift/SKILL.md`, mirrored in-repo at `skills/drift/SKILL.md`) turns that instance into the system: it infers whether you're capturing, weeding, planning, or stuck — you never name the function. Verified working from outside the repo.
-2. **In this repo — being here is itself the signal.** A project `CLAUDE.md` makes any instance here operate as the system. Good for sitting down to weed/plan.
+2. **In this repo — being here is itself the signal.** A project `CLAUDE.md` makes any instance here operate as the system. Good for sitting down to weed/plan. *(Planned extension: bind **other** folders too — e.g. the job-search folder → the Material survival cluster — so being in that folder auto-scopes the system to that part of the graph. Step 3+; design in `AI_LAYER_SPEC.md §10`.)*
 3. **Endgame (not built): it comes to you.** A scheduled morning plan, a nudge when Job Search goes quiet — so you initiate nothing. This is the real destination (post-v1 automation).
 
 **Confirmation:** every time something lands in the system, the instance says what landed *and* plays an audible **ding** (`scripts/notify.py`, sound "Tink" — not "Glass", which is reserved). So you never have to open Anytype to check it saved.

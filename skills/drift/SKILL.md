@@ -24,22 +24,34 @@ If Anytype isn't running (connection refused on 31009), tell June to open the An
 
 ## How to create objects (the write layer)
 
+**⚠️ A good answer is not a saved object.** The most dangerous failure of this system is talking *as if* you captured something while never calling the backend — June trusts the ding to mean "saved," so an unbacked "got it" silently loses her data and she has no way to know. **"Captured" means: `create()` ran → you re-fetched the object and confirmed it's there → then you ding.** Never reason about an item in prose and stop; never ding before the read-back confirms.
+
 Use the deterministic creation layer — do NOT hand-roll Anytype API calls:
 
 ```python
 import sys; sys.path.insert(0, "/Users/june/Documents/GitHub/cyborg-memory/controlled-drift/scripts")
 import gsdo_objects as o, notify
-# create by friendly type name; properties by display name; select/multi_select by option name
-o.create("Task", "Call the bank", properties={"Task status": "Active"})
+from anytype_test import call
+import gsdo_anytype as g
+
+# 1. create by friendly type name; properties by display name; select/multi_select by option name
+oid = o.create("Task", "Call the bank", properties={"Task status": "Active"})
+
+# 2. READ BACK — prove it persisted before claiming success
+sid = g.get_space_id()
+obj = call("GET", f"/spaces/{sid}/objects/{oid}")[1].get("object", {})
+assert obj.get("name") == "Call the bank", f"read-back FAILED: {obj}"
+
+# 3. only now confirm + ding
 notify.ding()   # audible confirmation — see below
 ```
 Types: **Task, Goal, Project, Recurring, Strategy, Note.** Key fields (all optional): Task status (Active/Needs Clarifying/Blocked/Done), Affective (free text — never a 1–5 number), Context, Due date, Linked Projects, Access conditions, Duration min. Goals carry `Reaching for`; Projects link to Goals via `Goal link`. Full model: `REPO/AI_LAYER_SPEC.md §2`.
 
 ## Confirmation — so June never has to wonder if it saved
 
-After creating anything, do BOTH:
+After creating anything — and only after the read-back above confirms it persisted — do BOTH:
 1. **State plainly what landed** — e.g. "✓ Added 3 tasks + 1 project to Material survival."
-2. **Ding** — `notify.ding()` plays an audible cue (Tink) so she knows it worked without checking Anytype. One ding per capture/batch is enough. (The ding is reassurance; the textual confirm is the record.)
+2. **Ding** — `notify.ding()` plays an audible cue (Tink) so she knows it worked without checking Anytype. One ding per capture/batch is enough. (The ding is reassurance; the textual confirm is the record.) The ding is a *promise the write happened* — never fire it on the strength of a good answer alone.
 
 ## Always
 - **Load her existing Goals/Projects before proposing** — connect new items to what's already there ("this advances Material survival"). Non-aligning items are *signal* (a new goal, or drift), not error.
