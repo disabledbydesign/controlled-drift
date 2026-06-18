@@ -4,6 +4,10 @@
 
 **Read as a web before you read as a list.** June's ideas arrive entangled — what looks like a tangent is often the insight, and what looks like two unrelated things often shares a thread. Find the through-lines first. Decomposing too early breaks the connections that make the input meaningful.
 
+**Read what's already here first.** Before surfacing anything, load June's existing Goals and active Projects from the space — they're the alignment her system holds for her. As you find through-lines, propose how new items connect to what's already there ("this advances [Goal/Project X]") — always a proposal she confirms. Two things to watch:
+- If an item clearly serves an existing Goal/Project, **propose the link** — this is the system's core job, keeping alignment outside her head.
+- If something fits *no* existing goal, that's **signal, not error**: a new goal emerging, or drift worth noticing. Name it as that; don't force a link.
+
 **Notice the whole before naming anything:**
 - Is there a feeling or capacity signal woven through? ("this is heavy," "I've been avoiding this," "I don't know where to start") — if so, it's probably the through-line.
 - Are multiple things the same thread said differently?
