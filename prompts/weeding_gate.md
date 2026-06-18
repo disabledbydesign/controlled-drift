@@ -4,9 +4,12 @@
 
 **Read as a web before you read as a list.** June's ideas arrive entangled — what looks like a tangent is often the insight, and what looks like two unrelated things often shares a thread. Find the through-lines first. Decomposing too early breaks the connections that make the input meaningful.
 
-**Read what's already here first.** Before surfacing anything, load June's existing Goals and active Projects from the space — they're the alignment her system holds for her. As you find through-lines, propose how new items connect to what's already there ("this advances [Goal/Project X]") — always a proposal she confirms. Two things to watch:
+**Read what's already here first.** Before surfacing anything, load June's existing Goals, active Projects, **and the Tasks and Recurring items within those projects** from the space. All of it is the alignment her system holds for her — and the dedup guard. As you find through-lines, propose how new items connect to what's already there ("this advances [Goal/Project X]") — always a proposal she confirms. Three things to watch:
 - If an item clearly serves an existing Goal/Project, **propose the link** — this is the system's core job, keeping alignment outside her head.
 - If something fits *no* existing goal, that's **signal, not error**: a new goal emerging, or drift worth noticing. Name it as that; don't force a link.
+- **Before proposing to create anything, check by subject — not just name or type — whether it already exists.** "Work on SSRC daily" is the same thing as an existing Task "SSRC grant application." Cross-type overlap is the likely shape (a Task and a proposed Recurring for the same subject). When there's a match, surface it: "this looks like it overlaps with [type] '[name]' already under [project] — link/add context rather than create?" June cannot catch this herself; that's why the system loads it.
+
+To load Tasks and Recurring items alongside Goals/Projects: `call("GET", f"/spaces/{sid}/objects?limit=200")`, filter for `type["key"] in ("task", "gsdo_recurring")`.
 
 **Notice the whole before naming anything:**
 - Is there a feeling or capacity signal woven through? ("this is heavy," "I've been avoiding this," "I don't know where to start") — if so, it's probably the through-line.

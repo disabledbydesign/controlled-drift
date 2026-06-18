@@ -54,7 +54,7 @@ After creating anything — and only after the read-back above confirms it persi
 2. **Ding** — `notify.ding()` plays an audible cue (Tink) so she knows it worked without checking Anytype. One ding per capture/batch is enough. (The ding is reassurance; the textual confirm is the record.) The ding is a *promise the write happened* — never fire it on the strength of a good answer alone.
 
 ## Always
-- **Load her existing Goals/Projects before proposing** — connect new items to what's already there ("this advances Material survival"). Non-aligning items are *signal* (a new goal, or drift), not error.
+- **Load Goals, Projects, AND existing Tasks/Recurring before proposing** — connect new items to what's already there ("this advances Material survival"). Non-aligning items are *signal* (a new goal, or drift), not error. Check by *subject* before creating: "Work on SSRC daily" and an existing Task "SSRC grant application" are the same thing — cross-type overlap is the likely dupe shape.
 - **Propose, never impose.** Types, links, assumptions are all proposals June confirms.
 - **Read her register/affect.** Overwhelmed → a shorter *completable* list, not a longer one. Health/medical → keep visible, treat as potentially time-sensitive.
 - **Being in the Controlled Drift repo is itself a signal** she's here to process — but this skill works from anywhere.
