@@ -237,7 +237,7 @@ _MEAL_PARAMS_PATH = os.path.join(os.path.dirname(__file__), "data", "meal_params
 _MEAL_PARAMS_DEFAULT = {
     "lunch": {
         "default_hour": 12.0,   # learned decimal hour (12.5 = 12:30); updated by corrections
-        "window_end_hour": 14,  # past this → skip injection (assume eaten or not happening)
+        "window_end_hour": 15,  # past 3pm → skip (if she hasn't eaten by then, it's a different day)
         "duration_min": 30
     }
 }
@@ -331,6 +331,12 @@ def build_schedule(llm_ordered_items, all_anchors, start_time=None):
     return schedule(all_items, start_time)
 
 
+def _round_to_5(t):
+    """Round a datetime to the nearest 5 minutes — cleaner to read, easier to hold mentally."""
+    minutes = (t.minute + 2) // 5 * 5
+    return t.replace(minute=0, second=0, microsecond=0) + dt.timedelta(minutes=minutes)
+
+
 def _block_label(hour):
     if hour < 12:
         return "Morning"
@@ -358,8 +364,7 @@ def format_schedule_blocks(scheduled):
         blocks.setdefault(label, []).append(item)
 
     def _fmt_time(t):
-        # "9:15 AM" not "09:15 AM"
-        return t.strftime("%I:%M %p").lstrip("0")
+        return _round_to_5(t).strftime("%I:%M %p").lstrip("0")
 
     lines = []
     lines.append("## Pre-computed clock schedule — your output skeleton")
@@ -415,7 +420,7 @@ def run():
 
     # Compute the clock-time schedule FIRST so it can be part of the LLM's context.
     # Python owns times and order; the LLM adds narrative framing around the skeleton.
-    start_time = dt.datetime.now().replace(second=0, microsecond=0)
+    start_time = _round_to_5(dt.datetime.now())
     meals = default_meal_anchors(today_recurrings, start_time)
     all_anchors = today_recurrings + meals
     task_items = [{"name": t["name"], "duration_min": t.get("duration_min")} for t in tasks]

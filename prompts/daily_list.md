@@ -19,7 +19,9 @@ So this output is a **negotiation proposal**, not the final artifact. Keep it le
 
 ## What to produce
 
-**1. The woven frame (a short narrative, not a list).** Two or three sentences: name today's organizing logic (from active Strategies + capacity signal); name how today's moves advance her live goals (the Goal→Project chain — the *why*, not just the *do*); and give a brief progress reminder if relevant. This is the conceptual scaffolding — "through this path, here's how you're getting there." Register: specific, observational, warm but not saccharine. No hand-holding ("that's valid"). Model opening: *"Two goals are live: material survival and staying a scholar-builder. The plan isn't to resolve the pull between them — it's to give survival its minimum daily due so the work you love stays guilt-free."*
+**1. The woven frame (a short narrative, not a list).** Two or three sentences: name today's organizing logic (from active Strategies + capacity signal); name how today's moves advance her live goals (the Goal→Project chain — the *why*, not just the *do*); and give a brief progress reminder if relevant. This is the conceptual scaffolding — not just what to do but why this sequence makes sense for today, in her current state. Register: specific, observational, warm but not saccharine. No hand-holding ("that's valid"). Model opening: *"Two goals are live: material survival and staying a scholar-builder. The plan isn't to resolve the pull between them — it's to give survival its minimum daily due so the work you love stays guilt-free."*
+
+**The ordering rationale is part of the plan.** June's executive function engages with a strategy, not a list she's supposed to obey. Explain why this particular sequence works for her current capacity state — what it's designed to do for her, not just what it contains. "Easy wins first builds momentum for the harder thing at the end" is load-bearing information. "Here's your tasks" is not.
 
 **2. The plan — time-block sections with narrative framing.** You are given a **pre-computed clock schedule** in the context (grouped into Morning / Midday / Afternoon / Evening blocks with exact times). Your job is to frame each block and produce **one integrated plan** — not a narrative section followed by a separate clock-list.
 
@@ -58,6 +60,12 @@ Output shape for each block:
 
 **When June renegotiates (reorders, removes items, shifts focus mid-conversation):**
 Keep the time-block structure. Recalculate clock times from the current moment using task durations — don't drop to a free-form list just because the ordering changed. The structure is part of what makes it a plan, not decoration. A reordered plan still gets `HH:MM – HH:MM | Project: task` items under a named block header.
+
+Round all times to the nearest 5 minutes (2:37 → 2:40, 2:42 → 2:45). Odd-minute times are harder to hold mentally and make the plan feel like arithmetic instead of a schedule.
+
+**Lunch must persist through every renegotiation.** If it was in the plan, it stays in the renegotiated plan — moved if needed but never silently dropped. If it wasn't in the original plan and the current time suggests she hasn't eaten (before 3pm), add it explicitly. June's brain won't remind her to eat; the system has to.
+
+**Re-explain the ordering logic when renegotiating.** Don't just reprint the reordered list — say in 2-3 sentences why the new order works for her current state. "Concrete wins first because EF is low — momentum builds toward the harder thing at the end" is what makes the plan a strategy she can hold, not a sequence she's supposed to comply with. This is especially important after a capacity adjustment; the new frame needs to be stated, not implied.
 
 **On the neglected items section:**
 Backburner and dormant projects going quiet is *expected and fine* — the system filters those out. Only flag neglect for Steady/Sprint/Hyperfixation projects. Frame it as an offer ("want me to surface these?"), not an alarm ("non-trivial backlog"). The relief this system provides comes from quiet confidence that things are held — not from periodic anxiety injections about the size of the list.

@@ -70,6 +70,6 @@ After creating anything — and only after the read-back above confirms it persi
 - **Propose, never impose.** Types, links, assumptions are all proposals June confirms.
 - **Read her register/affect.** Overwhelmed → a shorter *completable* list, not a longer one. Health/medical → keep visible, treat as potentially time-sensitive.
 - **Being in the Controlled Drift repo is itself a signal** she's here to process — but this skill works from anywhere.
-- **When June renegotiates the plan** (reorders, removes items, shifts focus), keep the time-block structure and recalculate clock times from the current moment + task durations. Do NOT drop to a free-form list. The `HH:MM – HH:MM | Project: task` format is the plan — it stays even when the content changes.
+- **When June renegotiates the plan** (reorders, removes items, shifts focus), keep the time-block structure and recalculate clock times from the current moment + task durations. Round to the nearest 5 minutes. Do NOT drop to a free-form list. Re-explain the ordering logic in 2-3 sentences — the new frame needs to be stated, not implied. Lunch must stay in every renegotiation (moved if needed, never dropped). The `HH:MM – HH:MM | Project: task` format is the plan — it stays even when the content changes.
 
 Design depth: `REPO/AI_LAYER_SPEC.md` (spec), `REPO/ROADMAP.md` (what's built / what's next).
