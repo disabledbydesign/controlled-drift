@@ -22,6 +22,18 @@ If Anytype isn't running (connection refused on 31009), tell June to open the An
 3. **Plan** — she asks "what should I do" / "what's today" / signals overwhelm-needing-a-plan → run the daily-plan pipeline: `python3 REPO/scripts/daily_plan.py`. It loads her active Goals/Projects/Tasks/Strategies + today's Recurring items, asks for a capacity signal, formats context for the LLM, and shows the clock-time anchors. After the LLM proposes ordering and frame (via this prompt + `REPO/prompts/daily_list.md`), confirm to update `last_surfaced` and log corrections.
 4. **Stuck** — she voices struggle ("I don't know what to do about any of this," "I can't decide"). Don't just file it. Shift to thinking *with* her — help work the problem. *(Stuck-support is still being designed; for now, genuinely help-think, never dispatch generic advice, never follow her into a spiral.)*
 
+## Use the built scripts — do NOT hand-roll Anytype queries
+
+**Writing inline Python to query Anytype is the wrong path.** It generates one permission prompt per query, fails on edge cases the scripts already handle (auth, pagination, type-key resolution, property shape), and re-derives logic already tested. Use the existing scripts every time:
+
+- **Load context** — `daily_plan.py` loads everything (goals, projects, tasks, strategies, recurring) in one call
+- **Create objects** — `gsdo_objects.create()` (see below)  
+- **Check what exists** — `call("GET", f"/spaces/{sid}/objects?limit=200")` via `anytype_test.call` + `gsdo_anytype.get_space_id()`
+
+If something seems to need a fresh query, check whether `daily_plan.py` or `gsdo_objects.py` already does it.
+
+---
+
 ## How to create objects (the write layer)
 
 **⚠️ A good answer is not a saved object.** The most dangerous failure of this system is talking *as if* you captured something while never calling the backend — June trusts the ding to mean "saved," so an unbacked "got it" silently loses her data and she has no way to know. **"Captured" means: `create()` ran → you re-fetched the object and confirmed it's there → then you ding.** Never reason about an item in prose and stop; never ding before the read-back confirms.
@@ -58,5 +70,6 @@ After creating anything — and only after the read-back above confirms it persi
 - **Propose, never impose.** Types, links, assumptions are all proposals June confirms.
 - **Read her register/affect.** Overwhelmed → a shorter *completable* list, not a longer one. Health/medical → keep visible, treat as potentially time-sensitive.
 - **Being in the Controlled Drift repo is itself a signal** she's here to process — but this skill works from anywhere.
+- **When June renegotiates the plan** (reorders, removes items, shifts focus), keep the time-block structure and recalculate clock times from the current moment + task durations. Do NOT drop to a free-form list. The `HH:MM – HH:MM | Project: task` format is the plan — it stays even when the content changes.
 
 Design depth: `REPO/AI_LAYER_SPEC.md` (spec), `REPO/ROADMAP.md` (what's built / what's next).

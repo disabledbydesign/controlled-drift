@@ -207,16 +207,22 @@ def format_context(goals, projects, tasks, strategies, today_recurrings, neglect
             lines.append(f"- {r['name']} at {r['fixed_time'].strftime('%H:%M')}")
         lines.append("")
 
-    # Only show in neglected: items that were previously surfaced but have gone stale.
-    # "Never surfaced" items are already in the active lists above — showing them twice
-    # is noise (the system is new and everything looks neglected on first run).
+    # Only show neglected items from ACTIVE projects (Steady/Sprint/Hyperfixation).
+    # Backburner/Needs-Clarifying/unset projects going quiet is EXPECTED — don't surface that as a problem.
+    # Also exclude: never-surfaced items (already in active lists), today's recurrings, already shown tasks.
+    active_engagement = {"Steady", "Sprint", "Hyperfixation"}
+    active_project_names = {p["name"] for p in projects
+                            if p.get("engagement") in active_engagement or p.get("engagement") is None}
     active_names = {t["name"] for t in tasks} | {p["name"] for p in projects}
     neglected_stale = [n for n in neglected
                        if n.get("last_surfaced") is not None
                        and n["name"] not in {r["name"] for r in today_recurrings}
-                       and n["name"] not in active_names]
+                       and n["name"] not in active_names
+                       and any(pn in active_project_names
+                               for pn in (n.get("linked_projects") or [active_project_names]))]
     if neglected_stale:
-        lines.append("## Items not surfaced recently (resurfacing)")
+        lines.append("## Items from active projects that have gone quiet")
+        lines.append("(These are in Steady/Sprint projects and haven't appeared in a plan recently.)")
         for n in neglected_stale:
             ls = n.get("last_surfaced")
             lines.append(f"- {n['name']} (last seen {ls.date()})")
