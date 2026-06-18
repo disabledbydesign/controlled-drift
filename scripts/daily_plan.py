@@ -71,13 +71,17 @@ def load_active_items(sid):
                     continue
                 access_tags = pv("gsdo_access", "multi_select") or []
                 access = [t.get("name") for t in access_tags if isinstance(t, dict)]
+                linked_proj_objs = pv("linked_projects", "object") or []
+                linked_projects = [lp.get("name") for lp in linked_proj_objs
+                                   if isinstance(lp, dict) and lp.get("name")]
                 tasks.append({"id": oid, "name": name,
                                "status": status,
                                "duration_min": pv("gsdo_duration_min", "number"),
                                "affective": pv("gsdo_affective", "text"),
                                "access": access,
                                "blocked_on": pv("gsdo_blocked_on", "text"),
-                               "context": pv("gsdo_context", "text")})
+                               "context": pv("gsdo_context", "text"),
+                               "linked_projects": linked_projects})
 
         elif tkey == "gsdo_strategy":
             status = (pv("gsdo_status", "select") or {}).get("name")
@@ -140,9 +144,11 @@ def format_context(goals, projects, tasks, strategies, today_recurrings, neglect
         lines.append("")
 
     if tasks:
-        lines.append("## Active tasks")
-        for t in tasks:
-            line = f"- {t['name']}"
+        lines.append("## Active tasks by project/thread")
+        lines.append("(The LLM should organize the plan by these project/thread groupings,")
+        lines.append(" NOT by activity category like 'writing' or 'admin'.)")
+
+        def _task_extras(t):
             extras = []
             if t.get("status") == "Needs Clarifying":
                 extras.append("needs clarifying")
@@ -154,9 +160,27 @@ def format_context(goals, projects, tasks, strategies, today_recurrings, neglect
                 extras.append(f"affective: {t['affective']}")
             if t.get("access"):
                 extras.append(f"access: {', '.join(t['access'])}")
-            if extras:
-                line += f" ({'; '.join(extras)})"
-            lines.append(line)
+            return f" ({'; '.join(extras)})" if extras else ""
+
+        # Group tasks by project. A task linked to multiple projects appears under each.
+        project_tasks: dict = {}
+        no_project = []
+        for t in tasks:
+            projs = t.get("linked_projects") or []
+            if projs:
+                for pn in projs:
+                    project_tasks.setdefault(pn, []).append(t)
+            else:
+                no_project.append(t)
+
+        for pname, ptasks in project_tasks.items():
+            lines.append(f"- **{pname}**")
+            for t in ptasks:
+                lines.append(f"  - {t['name']}{_task_extras(t)}")
+        if no_project:
+            lines.append("- **[No project]**")
+            for t in no_project:
+                lines.append(f"  - {t['name']}{_task_extras(t)}")
         lines.append("")
 
     if today_recurrings:
