@@ -32,6 +32,18 @@ Rename: drop the "GSDO" display-name prefix; Task uses built-in **Due date** + *
 ### Step 3+ — Later increments (not soon)
 Drift detection (§8b); the learning loops (rhythm, strategy lifespan, access-barrier promotion, the surface-log companion to `last_surfaced`); wins mirror; Apple-Calendar integration; the no-app-switching chat-stream surface; pagination on `query_neglected`.
 
+## How you invoke it (so you never have to remember functions)
+
+The system is **not this repo** — it's your Anytype data + behaviors any Claude instance can perform. Anytype runs globally on your Mac, so the system is reachable from anywhere. Invocation has three modes; you remember none of the functions:
+
+1. **From any project — the `drift` skill.** In any Claude session, anywhere, invoke `/drift` (or just mention a todo / dump / "what should I do"). The skill (`~/.claude/skills/drift/SKILL.md`, mirrored in-repo at `skills/drift/SKILL.md`) turns that instance into the system: it infers whether you're capturing, weeding, planning, or stuck — you never name the function. Verified working from outside the repo.
+2. **In this repo — being here is itself the signal.** A project `CLAUDE.md` makes any instance here operate as the system. Good for sitting down to weed/plan.
+3. **Endgame (not built): it comes to you.** A scheduled morning plan, a nudge when Job Search goes quiet — so you initiate nothing. This is the real destination (post-v1 automation).
+
+**Confirmation:** every time something lands in the system, the instance says what landed *and* plays an audible **ding** (`scripts/notify.py`, sound "Tink" — not "Glass", which is reserved). So you never have to open Anytype to check it saved.
+
+**Still open (a real design conversation, not solved yet):** a dedicated always-on capture *surface* (menu-bar/hotkey) vs. the skill, and the proactive layer. Mode 1 removes the "only one repo" problem today; the richer surface is its own piece.
+
 ## "What do I (June) do now?"
 - **Nothing is required of you to keep it alive** — there's no running process to babysit. It only does something when we build + run a pipeline.
 - **Optional, low-effort:** add a real Goal or two in Anytype to feel whether the types fit. (Pure sanity check; not load-bearing.)
