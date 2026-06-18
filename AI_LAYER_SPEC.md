@@ -115,7 +115,8 @@ A discrete body of work serving one or more Goals. Nestable via `parent_project`
 | `goal_link` | objects-relation | The Goal(s) this serves. **The alignment chain.** |
 | `description` | text | What this project is and its approach. The "what." |
 | `reaching_for` | text | Optional. The project's own "why" within its goal context. AI proposes; June authors for major projects. |
-| `status` | select | Active / Parked / Inactive |
+| `engagement` | select | **Steady / Sprint / Hyperfixation / Needs Clarifying / Backburner / Done.** How June is currently engaging with this project. Drives daily plan real estate: Sprint/Hyperfixation → priority; Steady → one daily move; Backburner → invisible unless neglect threshold; Needs Clarifying → flagged. Done → excluded from all plans. Replaces the old `Project status` (Active/Parked/Inactive) — that field may still exist in the space as legacy. **Learning loop target**: system learns what each level implies for each project from June's corrections. |
+| `engagement_notes` | text | **Canonical, open-schema pair for `engagement`.** Holds the situated specifics the select can't: thresholds ("Backburner: revisit after surgery recovery"), cadence ("Steady: ~30min daily"), conditions ("Sprint: deadline July 1"), or hyperfixation context. The select is filterable; this field is authoritative about what it means *for this project right now*. |
 | `deadline` | date | Optional. Only when real. |
 | `parent_project` | objects-relation | Optional. Enables nesting / sub-routes. |
 | `excitement_level` | number 1–5 | Optional. Always displayed and confirmed as "X out of 5," never a bare number. ADHD motivation is interest-driven — excitement is a valid signal (§7). AI can read it from context rather than asking; shifts over time. |

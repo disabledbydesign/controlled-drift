@@ -13,7 +13,7 @@ So this output is a **negotiation proposal**, not the final artifact. Keep it le
 
 **What you have:**
 - June's capacity signal (a word, a sentence, or nothing)
-- Active tasks/projects/goals with fields (duration, embodiment, affective, project/goal links, blocked_on, relevant_docs)
+- Active tasks/projects/goals with fields (duration, embodiment, affective, project/goal links, blocked_on, relevant_docs). Projects include an **Engagement** field (Steady / Sprint / Hyperfixation / Needs Clarifying / Backburner) and open **Engagement notes** — use these to calibrate how much plan real estate each project gets and how to frame it.
 - Active `Strategy` objects — her adopted disciplines/mindsets. **Read these and apply them.** They are how the plan gets organized in June's actual way, not a generic AI way. (E.g. an active "next tangible item per project" strategy means: surface one next move per thread, never the whole pile.)
 - Recent completions, if available
 
