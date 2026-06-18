@@ -4,7 +4,7 @@
 
 ## 2026-06-15 — AI_LAYER_SPEC.md
 
-**Artifact:** `/Users/june/Documents/GitHub/cyborg-memory/get-shit-done-o-tron/AI_LAYER_SPEC.md`
+**Artifact:** `/Users/june/Documents/GitHub/cyborg-memory/controlled-drift/AI_LAYER_SPEC.md`
 **Stack:** design_spec (future build agent + skeptical architect + intelligibility + jargon)
 **Author-informed:** skipped (no profile)
 

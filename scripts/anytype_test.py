@@ -2,7 +2,7 @@
 """Anytype Local API validation for gsdo. Loads key from project .env (var get_shit_done)."""
 import json, sys, urllib.request, urllib.error, re, os
 
-ENV_PATH = "/Users/june/Documents/GitHub/cyborg-memory/get-shit-done-o-tron/.env"
+ENV_PATH = "/Users/june/Documents/GitHub/cyborg-memory/controlled-drift/.env"
 BASE = "http://localhost:31009/v1"
 VERSION = "2025-11-08"
 

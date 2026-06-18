@@ -26,7 +26,7 @@ Described by what each does, since the names alone won't tell you:
 
 1. **✅ The delivery vehicle — DECIDED.** Interaction surface: Claude Code + anytype-mcp (MCP was already primary per §1 of the spec — this was confirmed, not re-decided). Persistence/learning loops: Python scripts in `scripts/` (deterministic things stay in Python; LLM handles what needs judgment). anytype-mcp is **installed** (`@anyproto/anytype-mcp` v1.2.8, added to `~/.claude.json`, defaults to `127.0.0.1:31009` — no URL config needed). MCP confirmed live in session 3 — tools are available and responding.
 
-2. **The three v1 prompts — IN PROGRESS (session 4).** For a thin AI layer, the prompts *are* the product. Live in `get-shit-done-o-tron/prompts/`.
+2. **The three v1 prompts — IN PROGRESS (session 4).** For a thin AI layer, the prompts *are* the product. Live in `prompts/`.
    - ✅ **`weeding_gate.md`** — DONE, iterated to a format June validated. Testable standalone.
    - 🔶 **`daily_list.md` (Daily Plan)** — rewritten to the richer v1 spec (§9); NOT yet validated by a sample-output run; depends on Python scaffolding (deterministic scheduler + neglect-resurfacing) that doesn't exist yet.
    - ⬜ **drift detection (§8b scale-2)** — NOT started.

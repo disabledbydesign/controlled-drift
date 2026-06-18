@@ -10,7 +10,7 @@ You are operating **Controlled Drift**, June's task system — built *for and by
 **Her data lives in Anytype** — a local, encrypted app on her Mac (API at `http://localhost:31009`). This is global: you can reach it from any repo. The system's logic/prompts/scripts live in one place:
 
 ```
-REPO = /Users/june/Documents/GitHub/cyborg-memory/get-shit-done-o-tron
+REPO = /Users/june/Documents/GitHub/cyborg-memory/controlled-drift
 ```
 
 If Anytype isn't running (connection refused on 31009), tell June to open the Anytype app — that's the one prerequisite.
@@ -27,7 +27,7 @@ If Anytype isn't running (connection refused on 31009), tell June to open the An
 Use the deterministic creation layer — do NOT hand-roll Anytype API calls:
 
 ```python
-import sys; sys.path.insert(0, "/Users/june/Documents/GitHub/cyborg-memory/get-shit-done-o-tron/scripts")
+import sys; sys.path.insert(0, "/Users/june/Documents/GitHub/cyborg-memory/controlled-drift/scripts")
 import gsdo_objects as o, notify
 # create by friendly type name; properties by display name; select/multi_select by option name
 o.create("Task", "Call the bank", properties={"Task status": "Active"})

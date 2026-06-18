@@ -1,0 +1,25 @@
+wing: get_shit_done_o_tron
+rooms:
+- name: testing
+  description: Files from tests/
+  keywords:
+  - testing
+  - tests
+- name: documentation
+  description: Files from docs/
+  keywords:
+  - documentation
+  - docs
+- name: scripts
+  description: Files from scripts/
+  keywords:
+  - scripts
+  - scripts
+- name: prompts
+  description: Files from prompts/
+  keywords:
+  - prompts
+  - prompts
+- name: general
+  description: Files that don't fit other rooms
+  keywords: []
