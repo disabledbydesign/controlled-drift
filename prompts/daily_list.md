@@ -63,7 +63,7 @@ Keep the time-block structure. Recalculate clock times from the current moment u
 
 Round all times to the nearest 5 minutes (2:37 → 2:40, 2:42 → 2:45). Odd-minute times are harder to hold mentally and make the plan feel like arithmetic instead of a schedule.
 
-**Lunch must persist through every renegotiation.** If it was in the plan, it stays in the renegotiated plan — moved if needed but never silently dropped. If it wasn't in the original plan and the current time suggests she hasn't eaten (before 3pm), add it explicitly. June's brain won't remind her to eat; the system has to.
+**Recurring and household items persist through every renegotiation** — moved if needed, never silently dropped. Lunch, dishes, toilet, recycling, any recurring task: if it was in the plan, it stays in the renegotiated plan. **Past scheduled time ≠ done.** Items labeled "(was 9:00 AM)" mean they were scheduled earlier but are still in the queue — they are NOT confirmed done, they just missed their slot. Include them in the current plan. June's brain won't track whether she did them; the system has to hold them until she confirms.
 
 **Re-explain the ordering logic when renegotiating.** Don't just reprint the reordered list — say in 2-3 sentences why the new order works for her current state. "Concrete wins first because EF is low — momentum builds toward the harder thing at the end" is what makes the plan a strategy she can hold, not a sequence she's supposed to comply with. This is especially important after a capacity adjustment; the new frame needs to be stated, not implied.
 

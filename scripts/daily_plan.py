@@ -321,13 +321,27 @@ def build_schedule(llm_ordered_items, all_anchors, start_time=None):
     llm_ordered_items: list of {"name", "duration_min", ...} in proposed order.
     all_anchors: today_recurrings + default_meal_anchors (both have fixed_time).
     Returns scheduled list with start_time/end_time on each item.
+
+    Past-fixed-time handling: if a recurring item's scheduled time has already passed,
+    its time is GONE but the item is NOT assumed done — it floats to the current queue
+    as a flexible item, labeled 'was HH:MM'. Past scheduled time ≠ done.
     """
     start_time = start_time or dt.datetime.now().replace(second=0, microsecond=0)
     existing_names = {it["name"] for it in llm_ordered_items}
-    all_items = list(llm_ordered_items) + [
-        {**r, "fixed_time": r["fixed_time"]} for r in all_anchors
-        if r["name"] not in existing_names
-    ]
+    anchor_items = []
+    for r in all_anchors:
+        if r["name"] in existing_names:
+            continue
+        item = dict(r)
+        ft = item.get("fixed_time")
+        if ft is not None and ft < start_time:
+            # Time passed — drop the anchor so it flows into the current queue.
+            # Label it so the LLM and June know it was scheduled earlier.
+            item["name"] = f"{item['name']} (was {_round_to_5(ft).strftime('%-I:%M %p').lstrip('0')})"
+            del item["fixed_time"]
+            item["_overdue"] = True
+        anchor_items.append(item)
+    all_items = list(llm_ordered_items) + anchor_items
     return schedule(all_items, start_time)
 
 
