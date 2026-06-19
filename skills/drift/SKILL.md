@@ -57,7 +57,7 @@ assert obj.get("name") == "Call the bank", f"read-back FAILED: {obj}"
 # 3. only now confirm + ding
 notify.ding()   # audible confirmation — see below
 ```
-Types: **Task, Goal, Project, Recurring, Strategy, Note.** Key fields (all optional): Task status (Active/Needs Clarifying/Blocked/Done), Affective (free text — never a 1–5 number), Context, Due date, Linked Projects, Access conditions, Duration min. Goals carry `Reaching for`; Projects link to Goals via `Goal link`. Full model: `REPO/AI_LAYER_SPEC.md §2`.
+Types: **Task, Goal, Project, Recurring, Strategy, Note.** Key fields (all optional): Task status (Active/Needs Clarifying/Blocked/Done), Affective (free text — never a 1–5 number), Context, Due date, Linked Projects, Access conditions, Duration min. Goals carry `Reaching for`, `Horizon` (Chapter/Ongoing/Milestone), `Resolution condition` (for Chapter goals: what resolved looks like), `Goal engagement` (Steady/Sprint/Backburner); Projects link to Goals via `Goal link`. Full model: `REPO/AI_LAYER_SPEC.md §2`.
 
 ## Confirmation — so June never has to wonder if it saved
 

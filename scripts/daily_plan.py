@@ -48,10 +48,16 @@ def load_active_items(sid):
             return _prop_val(props, key, kind)
 
         if tkey == "gsdo_goal":
-            status = (pv("gsdo_status", "select") or {}).get("name")
+            status = (pv("gsdo_goal_status", "select") or {}).get("name")
             if status in (None, "Active"):
+                props_by_name = {p.get("name"): p for p in obj.get("properties", [])}
+                def pvn_g(nm, kind, _pbn=props_by_name):
+                    p = _pbn.get(nm, {})
+                    return p.get(kind) if p else None
                 goals.append({"id": oid, "name": name,
-                               "reaching_for": pv("gsdo_reaching_for", "text"),
+                               "reaching_for": pv("gsdo_reaching_for_(text)", "text"),
+                               "resolution_condition": pvn_g("Resolution condition", "text"),
+                               "engagement": (pvn_g("Goal engagement", "select") or {}).get("name"),
                                "context": pv("gsdo_context", "text")})
 
         elif tkey == "gsdo_project":
@@ -138,9 +144,20 @@ def format_context(goals, projects, tasks, strategies, today_recurrings, neglect
 
     if goals:
         lines.append("## Active goals")
+        lines.append("(engagement: Sprint → priority context; Steady → normal; Backburner → note but de-emphasize)")
         for g_ in goals:
+            eng = g_.get("engagement") or "Steady"
+            line = f"- {g_['name']} [{eng}]"
             rf = g_.get("reaching_for") or ""
-            lines.append(f"- {g_['name']}" + (f" (reaching for: {rf})" if rf else ""))
+            rc = g_.get("resolution_condition") or ""
+            ctx = g_.get("context") or ""
+            if rf:
+                line += f" | reaching for: {rf}"
+            if rc:
+                line += f" | resolved when: {rc}"
+            if ctx:
+                line += f" | context: {ctx}"
+            lines.append(line)
         lines.append("")
 
     if projects:
