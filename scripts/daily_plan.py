@@ -73,13 +73,17 @@ def load_active_items(sid):
             if engagement == "Done":
                 continue  # Done projects are invisible in the daily plan
 
+            parent_proj_ids = pv("gsdo_parent_project", "objects") or []
+            parent_project_id = parent_proj_ids[0] if parent_proj_ids else None
+
             projects.append({"id": oid, "name": name,
                               "reaching_for": pv("gsdo_reaching_for", "text"),
                               "context": pv("gsdo_context", "text"),
                               "affective": pv("gsdo_affective", "text"),
                               "deadline": pv("gsdo_deadline", "date"),
                               "engagement": engagement,
-                              "engagement_notes": pvn("Engagement notes", "text")})
+                              "engagement_notes": pvn("Engagement notes", "text"),
+                              "parent_project_id": parent_project_id})
 
         elif tkey == "task":
             status_tag = pv("status", "select") or {}
@@ -164,10 +168,12 @@ def format_context(goals, projects, tasks, strategies, today_recurrings, neglect
         lines.append("## Active projects")
         lines.append("(engagement: Sprint/Hyperfixation → priority real estate; Steady → daily move;"
                      " Backburner → only if neglected; Needs Clarifying → flag it)")
-        for p in projects:
+        lines.append("(sub-projects are indented under their parent)")
+
+        def _project_line(p, indent=""):
             eng = p.get("engagement") or "Steady"
             eng_notes = p.get("engagement_notes") or ""
-            line = f"- {p['name']} [{eng}]"
+            line = f"{indent}- {p['name']} [{eng}]"
             if eng_notes:
                 line += f" | {eng_notes}"
             rf = p.get("reaching_for") or ""
@@ -179,7 +185,26 @@ def format_context(goals, projects, tasks, strategies, today_recurrings, neglect
                 line += f" | context: {ctx}"
             if aff:
                 line += f" | affective: {aff}"
-            lines.append(line)
+            return line
+
+        # Build tree: top-level projects first, then sub-projects nested under parent
+        project_by_id = {p["id"]: p for p in projects}
+        top_level = [p for p in projects if not p.get("parent_project_id")]
+        children_by_parent: dict = {}
+        for p in projects:
+            pid = p.get("parent_project_id")
+            if pid:
+                children_by_parent.setdefault(pid, []).append(p)
+
+        for p in top_level:
+            lines.append(_project_line(p))
+            for child in children_by_parent.get(p["id"], []):
+                lines.append(_project_line(child, indent="  "))
+        # Orphaned sub-projects (parent not in active list) — show flat with note
+        for p in projects:
+            pid = p.get("parent_project_id")
+            if pid and pid not in project_by_id:
+                lines.append(_project_line(p) + " [sub-project]")
         lines.append("")
 
     if tasks:
