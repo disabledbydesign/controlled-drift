@@ -57,7 +57,7 @@ assert obj.get("name") == "Call the bank", f"read-back FAILED: {obj}"
 # 3. only now confirm + ding
 notify.ding()   # audible confirmation — see below
 ```
-Types: **Task, Goal, Project, Recurring, Strategy, Note.** Key fields (all optional): Task status (Active/Needs Clarifying/Blocked/Done), Affective (free text — never a 1–5 number), Context, Due date, Linked Projects, Access conditions, Duration min. Goals carry `Reaching for`, `Horizon` (Chapter/Ongoing/Milestone), `Resolution condition` (for Chapter goals: what resolved looks like), `Goal engagement` (Steady/Sprint/Backburner); Projects link to Goals via `Goal link`. Full model: `REPO/AI_LAYER_SPEC.md §2`.
+Types: **Task, Goal, Project, Recurring, Strategy, Note.** Key fields (all optional): Task status (Active/Needs Clarifying/Blocked/Done), Affective (free text — never a 1–5 number), Context, Due date, Linked Projects, Access conditions, Duration min. Goals carry `Reaching for`, `Horizon` (Chapter/Ongoing/Milestone), `Resolution condition` (for Chapter goals: what resolved looks like); Projects carry `Engagement` (Steady/Sprint/Hyperfixation/Backburner/Done) and link to Goals via `Goal link`. **Hyperfixation on a project is a space-wide signal, not a local one**: one project in Hyperfixation explains why other projects are neglected — read it systemically. Don't add barriers to every neglected project; surface the Hyperfixation project as the context. Full model: `REPO/AI_LAYER_SPEC.md §2`.
 
 ## Confirmation — so June never has to wonder if it saved
 
