@@ -176,7 +176,8 @@ def extract_code_signals(filepath):
     try:
         with open(filepath, encoding="utf-8", errors="ignore") as f:
             lines = f.readlines()
-    except Exception:
+    except OSError as e:
+        print(f"warning: could not read {filepath}: {e}", file=sys.stderr)
         return []
     for i, line in enumerate(lines, 1):
         stripped = line.strip()
