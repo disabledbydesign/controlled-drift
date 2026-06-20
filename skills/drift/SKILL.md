@@ -42,6 +42,19 @@ if is_sweep_stale("."):
 ```
 If stale (no `last_sweep` in `.gsdot`, or > 7 days old), offer once: *"I haven't read through this project's files in a while — want me to check what's here and catch anything not yet in Anytype?"* She can decline. If she accepts, run Mode 2. Do not re-offer in the same session.
 
+**After the startup checks, always show the menu** — don't wait for her to name a function. One short line per option, no jargon:
+
+```
+What would you like to do?
+  — See the map (where your work streams are and what's going on in them)
+  — Add something (a task, idea, or commitment)
+  — Sort out a pile (dump what's on your mind → organized into the right streams)
+  — Plan today (what to actually work on given your capacity right now)
+  — I'm stuck (think through something together)
+```
+
+She picks by saying any of it in her own words — she never has to use these exact phrases. If it's already clear from context what she wants (she said it before startup finished), skip the menu and proceed.
+
 **Binding is a suggestion, not a mandate.** She can always route differently mid-session. Silent after the startup offer — no redundant banners.
 
 **Binding creation flow** (triggered when she says "create a new project here"):
@@ -82,25 +95,36 @@ If stale (no `last_sweep` in `.gsdot`, or > 7 days old), offer once: *"I haven't
    - Load the full space and render each top-level Goal cluster as a group. For each cluster's parent project, run `render_map(project_name)`.
 
    **After rendering — if `gaps` is non-empty:**
-   Name the streams that need the structured description pass. Offer once, plainly: *"[N] work streams don't have structured descriptions yet: [names]. Want me to help write them?"* If she says yes, go one stream at a time. For each, draft three lines — read what's in the repo about it if needed — and propose them for her to confirm or edit:
+   Name the streams that need the structured description pass. Offer once, plainly: *"[N] work streams need descriptions. Want me to help write them? I'll go one at a time."* If she says yes, go one stream at a time. For each stream, read what's in the repo about it and propose:
+
+   1. **A revised name** — concrete and action-oriented, not marketing-register. Like "Finish the pipeline: brain-dump → scheduled plan" rather than "Getting your thoughts in, and a usable daily plan out." Keep it short enough to read at a glance.
+   2. **Three description lines** — for ● ACTIVE streams, all three; for ○ later streams, at minimum "what it's doing":
 
    ```
-   what it's doing — [the purpose of this stream, plain words]
-   where we are    — [current status — what's built, what's not, where you are in it]
-   where it goes   — [next direction — what the next move is]
+   what it's doing — [the purpose of this stream, plain words — what does it exist to do?]
+   where we are    — [current status — what's built, what's not, where you are in it right now]
+   where it goes   — [next direction — what the actual next move is]
    ```
 
-   Once she confirms, write those three lines as the full value of `gsdo_context` and update the object in Anytype:
+   For ○ later streams with nothing actively happening, one line is enough:
+   ```
+   what it's doing — [what it is + where it stands: "not built; needs real data first"]
+   ```
+
+   Show your proposals plainly. She confirms, edits, or rejects each. On confirm, update BOTH the name and the context in Anytype:
 
    ```python
    from anytype_test import call
    import gsdo_anytype as g
    sid = g.get_space_id()
+   # Update name
+   call("PATCH", f"/spaces/{sid}/objects/{stream_id}", json={"name": confirmed_name})
+   # Update context
    call("PATCH", f"/spaces/{sid}/objects/{stream_id}",
-        json={"fields": {"gsdo_context": confirmed_description}})
+        json={"properties": [{"key": "gsdo_context", "text": confirmed_context}]})
    ```
 
-   Read it back to confirm it saved, then ding. After all gaps are filled, re-run `render_map()` and show the updated map.
+   Read it back to confirm both saved, then ding (one ding per stream confirmed). After all streams are done, re-run `render_map()` and show the updated map.
 
    **After rendering — if streams exist but there are no work streams at all under the bound project:**
    The structure doesn't exist yet. Offer once: *"There are no work streams under [project name] yet. Want me to help build out the structure?"* If she says yes, read the repo (or ask her a few questions), propose an initial set of named work streams with descriptions, and create them via `gsdo_objects.create("Project", name, properties={...})` after she confirms. These are sub-projects of the bound project.
