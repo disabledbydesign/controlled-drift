@@ -161,6 +161,24 @@ def get_last_sweep_info(folder):
     }
 
 
+def update_last_sweep(folder, items_surfaced=None):
+    """Write last_sweep (today) and optionally items_surfaced to .gsdot.
+    Loads, merges, and writes back — never overwrites wholesale.
+    Raises FileNotFoundError if no binding found.
+    """
+    path = find_marker(folder)
+    if not path:
+        raise FileNotFoundError(f"No .gsdot binding found from {os.path.abspath(folder)}")
+    with open(path) as f:
+        marker = json.load(f)
+    marker["last_sweep"] = datetime.date.today().isoformat()
+    if items_surfaced is not None:
+        marker["items_surfaced"] = list(items_surfaced)
+    with open(path, "w") as f:
+        json.dump(marker, f, indent=2)
+        f.write("\n")
+
+
 _SIGNAL_PATTERNS = [
     (r"#\s*TODO[:\s]+(.*)", "todo"),
     (r"#\s*FIXME[:\s]+(.*)", "fixme"),
@@ -213,6 +231,11 @@ if __name__ == "__main__":
     p_sig = sub.add_parser("signals", help="extract task signals from a code file")
     p_sig.add_argument("filepath")
 
+    p_upd = sub.add_parser("update", help="write last_sweep to .gsdot after a sweep")
+    p_upd.add_argument("folder", nargs="?", default=".")
+    p_upd.add_argument("--items", default=None,
+                       help='JSON array of item names surfaced, e.g. \'["Task A","Task B"]\'')
+
     args = ap.parse_args()
 
     if args.cmd == "select":
@@ -222,5 +245,9 @@ if __name__ == "__main__":
         print("true" if is_sweep_stale(args.folder, args.days) else "false")
     elif args.cmd == "signals":
         print(json.dumps(extract_code_signals(args.filepath), indent=2))
+    elif args.cmd == "update":
+        items = json.loads(args.items) if args.items else None
+        update_last_sweep(args.folder, items)
+        print(f"[ok] last_sweep updated: {datetime.date.today().isoformat()}")
     else:
         ap.print_help()

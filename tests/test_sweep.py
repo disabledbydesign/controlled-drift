@@ -145,3 +145,16 @@ def test_extract_signals_includes_source_file(tmp_path):
     from sweep import extract_code_signals
     sigs = extract_code_signals(str(f))
     assert sigs[0]["source_file"] == str(f)
+
+def test_update_last_sweep_stale_becomes_fresh(tmp_path):
+    import json, datetime
+    old = (datetime.date.today() - datetime.timedelta(days=10)).isoformat()
+    gsdot = {"system": "Controlled Drift",
+             "binds_to": {"projects": [{"id": "x", "name": "X"}]},
+             "last_sweep": old}
+    with open(os.path.join(str(tmp_path), ".gsdot"), "w") as f:
+        json.dump(gsdot, f)
+    from sweep import update_last_sweep, is_sweep_stale
+    assert is_sweep_stale(str(tmp_path)) == True
+    update_last_sweep(str(tmp_path))
+    assert is_sweep_stale(str(tmp_path)) == False
