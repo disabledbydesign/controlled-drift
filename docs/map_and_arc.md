@@ -36,6 +36,17 @@ The UI need is a **map** — some structured surface where June can see the stre
 
 The weeding / brain-dump pipeline **works** — it was tested and validated. Treating it as the blocking next step, and surfacing "you need to do a brain-dump" repeatedly, *became a stressor that made the system harder to use*. That is the system manufacturing urgency on something already done — exactly what it must not do. The brain-dump is not owed. The actual missing piece was the map. Future instances: do not re-surface the brain-dump as a gate.
 
+## Parked: the Finished section can't grow forever (large/long-term repos)
+
+On a long-running project the Finished section will eventually be longer than the live map — which defeats "see the whole picture at once." Direction (June, 2026-06-20): don't let finished work pile up on the map. Options, to decide when it matters:
+
+- **Cut Finished from the map.** Either leave it off entirely, or replace it with a one-line *"where the project stands so far"* / *"what's been completed so far"* brief summary, so the sense of accumulated progress is kept without the list.
+- **Move finished streams to a wins mirror** (below) — the map stays about live work; completed work is celebrated and held elsewhere.
+
+## Parked: a "project wins" mirror (sibling of the daily wins mirror)
+
+The system already plans a **daily wins mirror** (§8g — "went on a walk, couldn't a week ago" counts; capacity-relative wins, not just task-completion). June's addition (2026-06-20): build a **project wins mirror** too — a surface that displays *finished work streams* as wins. This is where completed streams go when they leave the map, so finishing a body of work is visible as an accomplishment rather than just disappearing. Two mirrors: daily wins (moments) + project wins (finished streams). Belongs to the **"Time visualizations and wins display"** work stream when that's built. Documented here because it governs where Finished streams live.
+
 ## Parked: work-stream breakdown (later addition)
 
 When June opens a work stream, the system should not only show her the steps that exist — it should help build them out if they don't. This is a focused breakdown conversation: "what would it take to complete this work stream?" The output is an ordered list of Tasks in Anytype, linked to that Project. She confirms before anything is created.
