@@ -47,7 +47,7 @@ If stale (no `last_sweep` in `.gsdot`, or > 7 days old), offer once: *"I haven't
 ```
 What would you like to do?
   Map        — see where your work streams are and what's going on in them
-  Capture    — add a task, idea, or commitment
+  Add        — add a task, idea, or commitment
   Brain dump — get what's on your mind sorted into the right streams
   Daily plan — figure out what to actually work on given your capacity right now
   I'm stuck  — think something through together
