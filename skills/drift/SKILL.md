@@ -49,8 +49,8 @@ What would you like to do?
   Map        — see where your work streams are and what's going on in them
   Capture    — add a task, idea, or commitment
   Brain dump — get what's on your mind sorted into the right streams
-  Plan       — figure out what to actually work on given your capacity right now
-  Stuck      — think something through together
+  Daily plan — figure out what to actually work on given your capacity right now
+  I'm stuck  — think something through together
 ```
 
 She picks by saying any of it in her own words — she never has to use these exact phrases. If it's already clear from context what she wants (she said it before startup finished), skip the menu and proceed.
