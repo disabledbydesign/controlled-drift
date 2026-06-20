@@ -39,9 +39,26 @@ Usage:
   python3 scripts/orient_map.py "Build Controlled Drift" --stream "stream name"
   python3 scripts/orient_map.py "Build Controlled Drift" --missing
 """
-import sys, os
+import sys, os, textwrap
 sys.path.insert(0, os.path.dirname(__file__))
 import gsdo_anytype as g
+
+# Layout: "   What it is:  value" — labels left-aligned, values aligned at one column.
+# Wrapped continuation lines hang-indent to the value column so a wrap never
+# collapses the visual organization.
+_BASE = "   "
+_LABEL_W = 11          # width of the widest label ("What it is:")
+_VALUE_COL = len(_BASE) + _LABEL_W + 2   # column where values start (16)
+_WIDTH = 78            # wrap width
+
+
+def _wrap(label, value):
+    """Render 'label:  value' with continuation lines hanging under the value."""
+    cont = " " * _VALUE_COL
+    avail = max(20, _WIDTH - _VALUE_COL)
+    pieces = textwrap.wrap(value, width=avail) or [""]
+    first = f"{_BASE}{label:<{_LABEL_W}}  {pieces[0]}"
+    return [first] + [cont + p for p in pieces[1:]]
 
 
 # ---------------------------------------------------------------------------
@@ -95,29 +112,32 @@ def _is_later(stream):
 # ---------------------------------------------------------------------------
 
 def _parse_context(ctx):
-    """Parse the two-line structured format from gsdo_context.
+    """Parse the structured format from gsdo_context.
 
     Looks for lines starting with:
       what it is —
-      next step  —
+      the arc   —   (optional; active streams)
+      next step —
 
-    Returns (what_it_is, next_step); a missing line returns None.
+    Returns (what_it_is, the_arc, next_step); a missing line returns None.
     Splits only on the FIRST em-dash, so the value may contain its own dashes.
     """
     if not ctx:
-        return None, None
-    what_it_is = next_step = None
+        return None, None, None
+    what_it_is = the_arc = next_step = None
     for line in ctx.splitlines():
         stripped = line.strip()
         low = stripped.lower()
         if low.startswith("what it is"):
             what_it_is = stripped.split("—", 1)[-1].strip() if "—" in stripped else None
+        elif low.startswith("the arc"):
+            the_arc = stripped.split("—", 1)[-1].strip() if "—" in stripped else None
         elif low.startswith("next step"):
             next_step = stripped.split("—", 1)[-1].strip() if "—" in stripped else None
-    return what_it_is, next_step
+    return what_it_is, the_arc, next_step
 
 def _is_structured(ctx):
-    what_it_is, next_step = _parse_context(ctx)
+    what_it_is, _the_arc, next_step = _parse_context(ctx)
     return bool(what_it_is or next_step)
 
 
@@ -131,15 +151,17 @@ def _header(stream):
     return f"{circle} {label:<6}  {stream['name']}"
 
 def _detail_lines(stream, tasks):
-    """The indented What it is / Next step / Tasks block for an active stream."""
+    """The indented What it is / The arc / Next step / Tasks block for an active stream."""
     lines = []
     ctx = _txt(_props(stream), "gsdo_context")
-    what_it_is, next_step = _parse_context(ctx)
+    what_it_is, the_arc, next_step = _parse_context(ctx)
 
     if what_it_is:
-        lines.append(f"   What it is:  {what_it_is}")
+        lines += _wrap("What it is:", what_it_is)
+    if the_arc:
+        lines += _wrap("The arc:", the_arc)
     if next_step:
-        lines.append(f"   Next step:   {next_step}")
+        lines += _wrap("Next step:", next_step)
 
     stream_tasks = _tasks_for(stream["name"], tasks)
     if stream_tasks:
@@ -220,7 +242,8 @@ def render_map(project_name):
         hz_str = f"  ({hz.lower()})" if hz else ""
         lines.append(f"GOAL:  {goal['name']}{hz_str}")
         if rf:
-            lines.append(f"       {rf}")
+            for piece in textwrap.wrap(rf, width=_WIDTH - 7) or [""]:
+                lines.append(f"       {piece}")
         lines.append("")
 
     lines.append(f"WORK STREAMS — {proj['name']}:")
@@ -239,12 +262,12 @@ def render_map(project_name):
             lines.extend(detail)
         lines.append("")
 
-    # Later streams — name + What it is only
+    # Later streams — name + a short What it is only
     for s in later:
         lines.append(_header(s))
-        what_it_is, _ = _parse_context(_txt(_props(s), "gsdo_context"))
+        what_it_is, _, _ = _parse_context(_txt(_props(s), "gsdo_context"))
         if what_it_is:
-            lines.append(f"   What it is:  {what_it_is}")
+            lines += _wrap("What it is:", what_it_is)
         lines.append("")
 
     # Finished — name only
@@ -305,6 +328,28 @@ def missing_descriptions(project_name):
                and not _is_done(o)]
     return [s["name"] for s in streams
             if not _is_structured(_txt(_props(s), "gsdo_context"))]
+
+
+def gap_streams(project_name):
+    """Like missing_descriptions, but returns full dicts so the fix-up pass can
+    update each stream in place without re-querying every object one by one.
+
+    Returns [{id, name, context, engagement}] for active streams that need a pass.
+    """
+    _, projects, _ = _load()
+    proj = next((o for o in projects if o.get("name") == project_name), None)
+    if proj is None:
+        return []
+    pid = proj["id"]
+    out = []
+    for s in projects:
+        if pid not in _objs(_props(s), "gsdo_parent_project") or _is_done(s):
+            continue
+        ctx = _txt(_props(s), "gsdo_context")
+        if not _is_structured(ctx):
+            out.append({"id": s["id"], "name": s["name"], "context": ctx,
+                        "engagement": _sel(_props(s), "engagement")})
+    return out
 
 
 if __name__ == "__main__":

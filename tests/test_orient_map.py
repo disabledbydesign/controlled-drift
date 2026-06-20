@@ -37,25 +37,36 @@ STRUCTURED_CTX = (
 # ---------------------------------------------------------------------------
 
 def test_parse_context_structured():
-    what_it_is, next_step = om._parse_context(STRUCTURED_CTX)
+    what_it_is, the_arc, next_step = om._parse_context(STRUCTURED_CTX)
     assert what_it_is == "takes a messy brain-dump and hands you back a real day"
     assert next_step == "build the planning half — pick what matters, fit it to your day"
+    assert the_arc is None
+
+def test_parse_context_with_arc():
+    ctx = ("what it is — the purpose\n"
+           "the arc — where this sits in the bigger picture\n"
+           "next step — the move")
+    what_it_is, the_arc, next_step = om._parse_context(ctx)
+    assert what_it_is == "the purpose"
+    assert the_arc == "where this sits in the bigger picture"
+    assert next_step == "the move"
 
 def test_parse_context_keeps_internal_dashes():
     """The next-step value contains its own em-dash; only the first split applies."""
-    _, next_step = om._parse_context(STRUCTURED_CTX)
+    _, _, next_step = om._parse_context(STRUCTURED_CTX)
     assert "—" in next_step
 
 def test_parse_context_empty():
-    assert om._parse_context("") == (None, None)
-    assert om._parse_context(None) == (None, None)
+    assert om._parse_context("") == (None, None, None)
+    assert om._parse_context(None) == (None, None, None)
 
 def test_parse_context_unstructured():
-    assert om._parse_context("just a raw blob") == (None, None)
+    assert om._parse_context("just a raw blob") == (None, None, None)
 
 def test_parse_context_partial():
-    what_it_is, next_step = om._parse_context("what it is — only the purpose")
+    what_it_is, the_arc, next_step = om._parse_context("what it is — only the purpose")
     assert what_it_is == "only the purpose"
+    assert the_arc is None
     assert next_step is None
 
 
@@ -110,6 +121,31 @@ def test_render_map_active_stream_full_detail(monkeypatch):
     assert "● ACTIVE  Finish the pipeline" in out
     assert "What it is:  takes a messy brain-dump" in out
     assert "Next step:   build the planning half" in out
+
+def test_render_map_active_shows_arc(monkeypatch):
+    proj = _make_obj("My Project", "gsdo_project", "p1")
+    ctx = ("what it is — the purpose\n"
+           "the arc — the through-line of where this sits\n"
+           "next step — the move")
+    s = _make_obj("Stream", "gsdo_project", "s1",
+                  props={"gsdo_parent_project": ["p1"], "gsdo_context": ctx})
+    _patch_load([], [proj, s], monkeypatch)
+    out = om.render_map("My Project")
+    assert "The arc:" in out
+    assert "the through-line of where this sits" in out
+    # order: What it is, then The arc, then Next step
+    assert out.index("What it is:") < out.index("The arc:") < out.index("Next step:")
+
+def test_wrap_hanging_indent():
+    """A long value wraps with continuation lines aligned under the value column."""
+    long_val = "word " * 40
+    lines = om._wrap("What it is:", long_val.strip())
+    assert len(lines) > 1
+    # First line carries the label
+    assert lines[0].startswith("   What it is:")
+    # Continuation lines are indented to the value column (16 spaces), no label
+    assert lines[1].startswith(" " * om._VALUE_COL)
+    assert "What it is:" not in lines[1]
 
 def test_render_map_later_stream_what_it_is_only(monkeypatch):
     proj = _make_obj("My Project", "gsdo_project", "p1")
@@ -258,3 +294,30 @@ def test_missing_excludes_done(monkeypatch):
                      props={"gsdo_parent_project": ["p1"], "engagement": "Done"})
     _patch_load([], [proj, done], monkeypatch)
     assert om.missing_descriptions("P") == []
+
+
+# ---------------------------------------------------------------------------
+# gap_streams
+# ---------------------------------------------------------------------------
+
+def test_gap_streams_returns_ids_and_context(monkeypatch):
+    proj = _make_obj("P", "gsdo_project", "p1")
+    s = _make_obj("Needs pass", "gsdo_project", "s1",
+                  props={"gsdo_parent_project": ["p1"], "gsdo_context": "old blob",
+                         "engagement": "Steady"})
+    _patch_load([], [proj, s], monkeypatch)
+    gaps = om.gap_streams("P")
+    assert len(gaps) == 1
+    assert gaps[0]["id"] == "s1"
+    assert gaps[0]["name"] == "Needs pass"
+    assert gaps[0]["context"] == "old blob"
+    assert gaps[0]["engagement"] == "Steady"
+
+def test_gap_streams_excludes_structured_and_done(monkeypatch):
+    proj = _make_obj("P", "gsdo_project", "p1")
+    ok = _make_obj("OK", "gsdo_project", "s1",
+                   props={"gsdo_parent_project": ["p1"], "gsdo_context": STRUCTURED_CTX})
+    done = _make_obj("Done", "gsdo_project", "s2",
+                     props={"gsdo_parent_project": ["p1"], "engagement": "Done"})
+    _patch_load([], [proj, ok, done], monkeypatch)
+    assert om.gap_streams("P") == []
