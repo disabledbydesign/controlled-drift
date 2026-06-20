@@ -80,7 +80,7 @@ She picks by saying any of it in her own words — she never has to use these ex
 
    **Mode 1 — read-only ("show me the structure," "where are we," "orient me"):**
 
-   **The map is deterministic.** Use `scripts/orient_map.py` — it reads stored fields and formats them the same way every time. Do not compose the map yourself; do not interpret or paraphrase the descriptions. What's stored is what's shown.
+   **The map is deterministic.** Use `scripts/orient_map.py` — it reads stored fields and formats them the same way every time. Do not compose the map yourself; do not interpret or paraphrase the descriptions. What's stored is what's shown. **Before changing the renderer or how the map displays, read `REPO/docs/map_design.md` — the authoritative map-design spec — and update it when June settles a new decision. It exists so the map stops being re-derived and drifting from decisions already made.**
 
    ```python
    import sys; sys.path.insert(0, "REPO/scripts")
