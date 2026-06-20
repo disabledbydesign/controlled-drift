@@ -96,6 +96,39 @@ def _detect_parent_project_id(folder):
     return projects[0]["id"] if projects else None
 
 
+_CLAUDE_MD_MARKER = "## Controlled Drift binding"
+
+
+def _write_claude_md(folder, project_name, goal_name=None):
+    """Write or append a Controlled Drift section to CLAUDE.md.
+    Idempotent: if the section already exists, does nothing.
+    """
+    path = os.path.join(os.path.abspath(folder), "CLAUDE.md")
+    section_lines = [
+        "",
+        _CLAUDE_MD_MARKER,
+        "",
+        f"This repo is bound to Controlled Drift → Project: {project_name}"
+        + (f" (Goal: {goal_name})" if goal_name else "") + ".",
+        f"When working here: capture any todo/commitment mentions to Anytype "
+        f"under {project_name!r} by default.",
+        "The `drift` skill is active here — June never has to name a function.",
+        "Binding: `.gsdot` in this directory.",
+        "",
+    ]
+    section = "\n".join(section_lines)
+    if os.path.isfile(path):
+        with open(path) as f:
+            content = f.read()
+        if _CLAUDE_MD_MARKER in content:
+            return  # Already present — do nothing
+        with open(path, "a") as f:
+            f.write(section)
+    else:
+        with open(path, "w") as f:
+            f.write(section.lstrip())
+
+
 def init_binding(folder, project_name, goal_id=None, goal_name=None,
                  parent_project_id=None, project_context=None, note=None):
     """Set up the Project (create if absent, idempotent) and write the marker.
@@ -146,6 +179,10 @@ def init_binding(folder, project_name, goal_id=None, goal_name=None,
         json.dump(marker, f, indent=2)
         f.write("\n")
     print(f"  [marker] {marker_path}")
+
+    # 4b. write or update CLAUDE.md at the folder root
+    _write_claude_md(folder, project_name, goal_name)
+    print(f"  [claude.md] updated at {os.path.join(os.path.abspath(folder), 'CLAUDE.md')}")
 
     # 4. confirm + ding (only now)
     notify.ding()
