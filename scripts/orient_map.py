@@ -46,19 +46,26 @@ import gsdo_anytype as g
 # Layout: "   What it is:  value" — labels left-aligned, values aligned at one column.
 # Wrapped continuation lines hang-indent to the value column so a wrap never
 # collapses the visual organization.
+#
+# _WIDTH is deliberately conservative (not the 80-col default): the script's
+# output is shown inside June's TUI, whose visible width is narrower than the
+# raw terminal. If a line exceeds that visible width, the TUI re-wraps it at
+# column 0 and the hanging indent is destroyed. 66 leaves margin for a narrow
+# window. Determinism over cleverness — a fixed width renders the same everywhere.
 _BASE = "   "
 _LABEL_W = 11          # width of the widest label ("What it is:")
 _VALUE_COL = len(_BASE) + _LABEL_W + 2   # column where values start (16)
-_WIDTH = 78            # wrap width
+_WIDTH = 66            # total line width (incl. the indent)
 
 
 def _wrap(label, value):
-    """Render 'label:  value' with continuation lines hanging under the value."""
+    """Render 'label:  value', wrapping the whole line at _WIDTH with
+    continuation lines hanging under the value column."""
+    prefix = f"{_BASE}{label:<{_LABEL_W}}  "
     cont = " " * _VALUE_COL
-    avail = max(20, _WIDTH - _VALUE_COL)
-    pieces = textwrap.wrap(value, width=avail) or [""]
-    first = f"{_BASE}{label:<{_LABEL_W}}  {pieces[0]}"
-    return [first] + [cont + p for p in pieces[1:]]
+    return textwrap.wrap(value, width=_WIDTH, initial_indent=prefix,
+                         subsequent_indent=cont, break_on_hyphens=False,
+                         break_long_words=False) or [prefix.rstrip()]
 
 
 # ---------------------------------------------------------------------------
