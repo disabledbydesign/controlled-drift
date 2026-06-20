@@ -71,8 +71,18 @@ Just as a stream breaks into ordered steps, the **project breaks into ordered st
 - **It keeps the chunk format already settled** — every stream still shows its circle + name + `What it is` (this is NOT a redesign of the chunk; only its *order* changes). Never drop `What it is`.
 - **`Stream order` field** (a number, exactly like `Step order` on tasks) sets each stream's place in the project arc. Deterministic, June-editable, no instance guesses.
 - **The circle is a separate axis from order.** Order = where a stream *sits* in the plan (trajectory). The circle (`●` active / `○` later) = what June is *in* vs. what's ahead. They differ on purpose — working out of sequence is honest ADHD behavior, not error, and the map shows it rather than flattening it.
-- **Parallel vs. sequential:** streams that **share the same `Stream order` number are parallel** (same phase, run alongside each other); different numbers are sequential. A parallel group is marked with a plain `— running alongside —` line, no cryptic symbols.
+- **Parallel vs. sequential (current/interim):** streams that **share the same `Stream order` number are parallel** (same phase, run alongside each other); different numbers are sequential. A parallel group is marked with a plain `— running alongside —` line, no cryptic symbols.
 - The active stream expands to its step-arc; later streams show name + `What it is` only. (Open a stream for its full detail.)
+
+### Refinement: hard dependency vs. soft sequence vs. parallel-default (designed 2026-06-20, NOT yet built — its own focused piece)
+
+The interim mechanism above has a real flaw June named: a single manual `Stream order` number (a) forces her to generate the order cold — backwards for a system meant to hold and propose — and (b) conflates two genuinely different kinds of ordering. The refined model:
+
+- **Parallel is the default.** Two streams with no stated relationship are parallel. Most streams are. June numbers nothing cold; doing nothing leaves everything alongside everything else, which is honest — most real work is parallel. Sequence is added only where there's a reason.
+- **Hard dependency** — Stream X genuinely *can't* start until Y is done. Factual, structural, no value judgment (e.g. the wins mirror can't exist before the visual layer it lives in). Held as an explicit link the system **enforces** — it won't order X before Y. The AI can spot candidate dependencies and propose them; many are derivable.
+- **Soft sequence** — "it *makes sense* to do X before Y." A value judgment, fully June's to override. The AI **proposes** it with reasoning; June refines. This is where human-AI collaboration belongs — not pure automation, not blank-page generation.
+
+Principle: **the AI proposes the order; June adjusts — she never assigns it cold.** Hold what's factual (dependencies), collaborate on what's situated (sequence preference). When built, this replaces "shared number = parallel" with "no relationship = parallel, dependencies enforced, soft order proposed." Until then, the interim `Stream order` mechanism stands.
 
 ## Determinism contract
 
