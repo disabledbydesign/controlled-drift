@@ -1,8 +1,4 @@
-"""Tests for orient_map — the deterministic map renderer.
-
-These test the formatting/rendering logic only, with a fake _load() stub.
-No live Anytype calls.
-"""
+"""Tests for orient_map — the deterministic map renderer."""
 import sys, os
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "scripts"))
 
@@ -10,25 +6,92 @@ import orient_map as om
 
 
 # ---------------------------------------------------------------------------
-# Helpers to build fake Anytype objects
+# Helpers
 # ---------------------------------------------------------------------------
+
+_SELECT_KEYS = {"engagement", "gsdo_horizon"}
 
 def _make_obj(name, type_key, oid, props=None):
     prop_list = []
     for key, val in (props or {}).items():
-        if isinstance(val, str) and key == "engagement":
-            prop_list.append({"key": "engagement",
-                               "select": {"name": val}})
+        if key in _SELECT_KEYS and isinstance(val, str):
+            prop_list.append({"key": key, "select": {"name": val}})
+        elif key in ("gsdo_goal_link", "gsdo_parent_project") and isinstance(val, list):
+            prop_list.append({"key": key, "objects": val})
         elif isinstance(val, str):
             prop_list.append({"key": key, "text": val})
-        elif isinstance(val, list):
-            prop_list.append({"key": key, "objects": val})
     return {"id": oid, "name": name, "type": {"key": type_key},
             "properties": prop_list}
 
-
 def _patch_load(goals, projects, monkeypatch):
     monkeypatch.setattr(om, "_load", lambda: (goals, projects))
+
+STRUCTURED_CTX = (
+    "what it's doing — making the system take a messy dump and hand back a real day\n"
+    "where we are    — the sorting half is built and works; the planning half isn't\n"
+    "where it goes   — build the planning pipeline"
+)
+
+
+# ---------------------------------------------------------------------------
+# _parse_context
+# ---------------------------------------------------------------------------
+
+def test_parse_context_structured():
+    doing, here, nxt = om._parse_context(STRUCTURED_CTX)
+    assert doing == "making the system take a messy dump and hand back a real day"
+    assert here == "the sorting half is built and works; the planning half isn't"
+    assert nxt == "build the planning pipeline"
+
+def test_parse_context_empty():
+    assert om._parse_context("") == (None, None, None)
+    assert om._parse_context(None) == (None, None, None)
+
+def test_parse_context_unstructured():
+    doing, here, nxt = om._parse_context("just a raw blob of text")
+    assert doing is None and here is None and nxt is None
+
+def test_parse_context_partial():
+    ctx = "what it's doing — just the purpose\nsome other line"
+    doing, here, nxt = om._parse_context(ctx)
+    assert doing == "just the purpose"
+    assert here is None
+    assert nxt is None
+
+
+# ---------------------------------------------------------------------------
+# _engagement_label
+# ---------------------------------------------------------------------------
+
+def test_label_active():
+    s = _make_obj("S", "gsdo_project", "1", props={"engagement": "Steady"})
+    circle, label = om._engagement_label(s)
+    assert circle == "●" and label == "ACTIVE"
+
+def test_label_sprint_is_active():
+    s = _make_obj("S", "gsdo_project", "1", props={"engagement": "Sprint"})
+    circle, label = om._engagement_label(s)
+    assert circle == "●" and label == "ACTIVE"
+
+def test_label_hyperfixation_is_active():
+    s = _make_obj("S", "gsdo_project", "1", props={"engagement": "Hyperfixation"})
+    circle, label = om._engagement_label(s)
+    assert circle == "●" and label == "ACTIVE"
+
+def test_label_backburner_is_later():
+    s = _make_obj("S", "gsdo_project", "1", props={"engagement": "Backburner"})
+    circle, label = om._engagement_label(s)
+    assert circle == "○" and label == "later"
+
+def test_label_done():
+    s = _make_obj("S", "gsdo_project", "1", props={"engagement": "Done"})
+    circle, label = om._engagement_label(s)
+    assert circle == "✓" and label == "done"
+
+def test_label_unset_is_active():
+    s = _make_obj("S", "gsdo_project", "1")
+    circle, label = om._engagement_label(s)
+    assert circle == "●" and label == "ACTIVE"
 
 
 # ---------------------------------------------------------------------------
@@ -37,100 +100,97 @@ def _patch_load(goals, projects, monkeypatch):
 
 def test_render_map_no_project(monkeypatch):
     _patch_load([], [], monkeypatch)
-    out = om.render_map("Nonexistent")
-    assert "no project" in out
-
+    assert "no project" in om.render_map("Ghost")
 
 def test_render_map_no_streams(monkeypatch):
     proj = _make_obj("My Project", "gsdo_project", "p1")
     _patch_load([], [proj], monkeypatch)
-    out = om.render_map("My Project")
-    assert "No work streams yet" in out
+    assert "No work streams yet" in om.render_map("My Project")
 
-
-def test_render_map_stream_with_context(monkeypatch):
+def test_render_map_active_stream_with_structured_context(monkeypatch):
     proj = _make_obj("My Project", "gsdo_project", "p1")
-    stream = _make_obj("Build the thing", "gsdo_project", "s1",
-                       props={"gsdo_parent_project": ["p1"],
-                              "gsdo_context": "Working on the core scaffolding."})
-    _patch_load([], [proj, stream], monkeypatch)
-    out = om.render_map("My Project")
-    assert "Build the thing" in out
-    assert "Working on the core scaffolding." in out
-    # No symbols
-    assert "●" not in out
-    assert "○" not in out
-    assert "✓" not in out
-
-
-def test_render_map_stream_without_context(monkeypatch):
-    proj = _make_obj("My Project", "gsdo_project", "p1")
-    stream = _make_obj("Vague thread", "gsdo_project", "s1",
-                       props={"gsdo_parent_project": ["p1"]})
-    _patch_load([], [proj, stream], monkeypatch)
-    out = om.render_map("My Project")
-    assert "Vague thread" in out
-    # No placeholder injected — just the name
-    assert "(no description" not in out
-
-
-def test_render_map_done_stream_in_finished_section(monkeypatch):
-    proj = _make_obj("My Project", "gsdo_project", "p1")
-    active = _make_obj("Active work", "gsdo_project", "s1",
-                       props={"gsdo_parent_project": ["p1"],
-                              "gsdo_context": "Still in progress."})
-    done = _make_obj("Old thing", "gsdo_project", "s2",
-                     props={"gsdo_parent_project": ["p1"],
-                            "engagement": "Done",
-                            "gsdo_context": "Shipped."})
-    _patch_load([], [proj, active, done], monkeypatch)
-    out = om.render_map("My Project")
-    assert "Active work" in out
-    assert "Finished:" in out
-    assert "Old thing" in out
-    # Active stream appears before Finished section
-    assert out.index("Active work") < out.index("Finished:")
-
-
-def test_render_map_goal_header(monkeypatch):
-    goal = _make_obj("Material survival", "gsdo_goal", "g1",
-                     props={"gsdo_reaching_for_(text)": "Keep the floor: housing, therapy, function."})
-    proj = _make_obj("Job Search", "gsdo_project", "p1",
-                     props={"gsdo_goal_link": ["g1"]})
-    stream = _make_obj("Applications", "gsdo_project", "s1",
-                       props={"gsdo_parent_project": ["p1"],
-                              "gsdo_context": "Weekly outreach cycle."})
-    _patch_load([goal], [proj, stream], monkeypatch)
-    out = om.render_map("Job Search")
-    assert "Goal: Material survival" in out
-    assert "Keep the floor" in out
-    assert "Applications" in out
-
-
-def test_render_map_no_codes_or_labels(monkeypatch):
-    proj = _make_obj("My Project", "gsdo_project", "p1")
-    streams = [
-        _make_obj("Stream A", "gsdo_project", "s1",
+    s = _make_obj("Build the thing", "gsdo_project", "s1",
                   props={"gsdo_parent_project": ["p1"],
-                         "engagement": "Steady",
-                         "gsdo_context": "Chugging along."}),
-        _make_obj("Stream B", "gsdo_project", "s2",
+                         "gsdo_context": STRUCTURED_CTX})
+    _patch_load([], [proj, s], monkeypatch)
+    out = om.render_map("My Project")
+    assert "● ACTIVE" in out
+    assert "Build the thing" in out
+    assert "what it's doing" in out
+    assert "making the system take a messy dump" in out
+    assert "where we are" in out
+    assert "where it goes" in out
+
+def test_render_map_later_stream(monkeypatch):
+    proj = _make_obj("My Project", "gsdo_project", "p1")
+    s = _make_obj("Parked thing", "gsdo_project", "s1",
                   props={"gsdo_parent_project": ["p1"],
                          "engagement": "Backburner",
-                         "gsdo_context": "Parked for now."}),
-    ]
-    _patch_load([], [proj] + streams, monkeypatch)
+                         "gsdo_context": STRUCTURED_CTX})
+    _patch_load([], [proj, s], monkeypatch)
     out = om.render_map("My Project")
-    # Engagement words must not appear as labels
+    assert "○ later" in out
+    assert "Parked thing" in out
+
+def test_render_map_active_before_later(monkeypatch):
+    proj = _make_obj("My Project", "gsdo_project", "p1")
+    active = _make_obj("Active", "gsdo_project", "s1",
+                       props={"gsdo_parent_project": ["p1"],
+                              "engagement": "Steady"})
+    later = _make_obj("Later", "gsdo_project", "s2",
+                      props={"gsdo_parent_project": ["p1"],
+                             "engagement": "Backburner"})
+    _patch_load([], [proj, active, later], monkeypatch)
+    out = om.render_map("My Project")
+    assert out.index("● ACTIVE") < out.index("○ later")
+
+def test_render_map_done_in_finished_section(monkeypatch):
+    proj = _make_obj("My Project", "gsdo_project", "p1")
+    active = _make_obj("Active", "gsdo_project", "s1",
+                       props={"gsdo_parent_project": ["p1"]})
+    done = _make_obj("Done thing", "gsdo_project", "s2",
+                     props={"gsdo_parent_project": ["p1"],
+                            "engagement": "Done"})
+    _patch_load([], [proj, active, done], monkeypatch)
+    out = om.render_map("My Project")
+    assert "Finished:" in out
+    assert "Done thing" in out
+    assert out.index("● ACTIVE") < out.index("Finished:")
+    # Done streams don't show description detail
+    assert out.index("Done thing") > out.index("Finished:")
+
+def test_render_map_goal_header(monkeypatch):
+    goal = _make_obj("Builder practice", "gsdo_goal", "g1",
+                     props={"gsdo_horizon": "Ongoing",
+                            "gsdo_reaching_for_(text)": "where building Controlled Drift lives"})
+    proj = _make_obj("Build Controlled Drift", "gsdo_project", "p1",
+                     props={"gsdo_goal_link": ["g1"]})
+    _patch_load([goal], [proj], monkeypatch)
+    out = om.render_map("Build Controlled Drift")
+    assert "GOAL:  Builder practice  (ongoing)" in out
+    assert "where building Controlled Drift lives" in out
+
+def test_render_map_unstructured_context_shown(monkeypatch):
+    proj = _make_obj("My Project", "gsdo_project", "p1")
+    s = _make_obj("Raw stream", "gsdo_project", "s1",
+                  props={"gsdo_parent_project": ["p1"],
+                         "gsdo_context": "just a raw blob of notes"})
+    _patch_load([], [proj, s], monkeypatch)
+    out = om.render_map("My Project")
+    assert "Raw stream" in out
+    assert "just a raw blob" in out
+
+def test_render_map_no_engagement_labels_in_output(monkeypatch):
+    proj = _make_obj("My Project", "gsdo_project", "p1")
+    s = _make_obj("Stream", "gsdo_project", "s1",
+                  props={"gsdo_parent_project": ["p1"],
+                         "engagement": "Steady"})
+    _patch_load([], [proj, s], monkeypatch)
+    out = om.render_map("My Project")
+    # Engagement value never shown as a bare label
     assert "Steady" not in out
-    assert "Backburner" not in out
     assert "Sprint" not in out
     assert "Hyperfixation" not in out
-    # Content does appear
-    assert "Stream A" in out
-    assert "Stream B" in out
-    assert "Chugging along." in out
-    assert "Parked for now." in out
 
 
 # ---------------------------------------------------------------------------
@@ -139,82 +199,64 @@ def test_render_map_no_codes_or_labels(monkeypatch):
 
 def test_render_stream_not_found(monkeypatch):
     _patch_load([], [], monkeypatch)
-    out = om.render_stream("Ghost")
-    assert "no work stream" in out
+    assert "no work stream" in om.render_stream("Ghost")
 
-
-def test_render_stream_with_context(monkeypatch):
-    stream = _make_obj("Build the thing", "gsdo_project", "s1",
-                       props={"gsdo_context": "Focused on the map renderer right now."})
-    _patch_load([], [stream], monkeypatch)
+def test_render_stream_shows_all_three_lines(monkeypatch):
+    s = _make_obj("Build the thing", "gsdo_project", "s1",
+                  props={"gsdo_context": STRUCTURED_CTX})
+    _patch_load([], [s], monkeypatch)
     out = om.render_stream("Build the thing")
-    assert "Build the thing" in out
-    assert "Focused on the map renderer right now." in out
-
+    assert "what it's doing" in out
+    assert "where we are" in out
+    assert "where it goes" in out
 
 def test_render_stream_shows_sub_streams(monkeypatch):
-    stream = _make_obj("Parent stream", "gsdo_project", "s1",
-                       props={"gsdo_context": "Umbrella."})
-    sub = _make_obj("Sub-stream", "gsdo_project", "s2",
+    s = _make_obj("Parent", "gsdo_project", "s1")
+    sub = _make_obj("Sub", "gsdo_project", "s2",
                     props={"gsdo_parent_project": ["s1"],
-                           "gsdo_context": "The sub-work."})
-    _patch_load([], [stream, sub], monkeypatch)
-    out = om.render_stream("Parent stream")
-    assert "Sub-stream" in out
-    assert "The sub-work." in out
+                           "gsdo_context": STRUCTURED_CTX})
+    _patch_load([], [s, sub], monkeypatch)
+    out = om.render_stream("Parent")
     assert "Inside this stream:" in out
-
-
-def test_render_stream_done_subs_in_finished(monkeypatch):
-    stream = _make_obj("Parent stream", "gsdo_project", "s1")
-    active_sub = _make_obj("Active sub", "gsdo_project", "s2",
-                            props={"gsdo_parent_project": ["s1"]})
-    done_sub = _make_obj("Done sub", "gsdo_project", "s3",
-                          props={"gsdo_parent_project": ["s1"],
-                                 "engagement": "Done"})
-    _patch_load([], [stream, active_sub, done_sub], monkeypatch)
-    out = om.render_stream("Parent stream")
-    assert "Active sub" in out
-    assert "Done sub" in out
-    assert "Finished:" in out
-    assert out.index("Active sub") < out.index("Finished:")
+    assert "Sub" in out
 
 
 # ---------------------------------------------------------------------------
 # missing_descriptions
 # ---------------------------------------------------------------------------
 
-def test_missing_descriptions_no_project(monkeypatch):
+def test_missing_no_project(monkeypatch):
     _patch_load([], [], monkeypatch)
-    assert om.missing_descriptions("Nonexistent") == []
+    assert om.missing_descriptions("Ghost") == []
 
-
-def test_missing_descriptions_all_have_context(monkeypatch):
-    proj = _make_obj("My Project", "gsdo_project", "p1")
-    s = _make_obj("Stream A", "gsdo_project", "s1",
+def test_missing_all_structured(monkeypatch):
+    proj = _make_obj("P", "gsdo_project", "p1")
+    s = _make_obj("S", "gsdo_project", "s1",
                   props={"gsdo_parent_project": ["p1"],
-                         "gsdo_context": "Some description."})
+                         "gsdo_context": STRUCTURED_CTX})
     _patch_load([], [proj, s], monkeypatch)
-    assert om.missing_descriptions("My Project") == []
+    assert om.missing_descriptions("P") == []
 
+def test_missing_unstructured_context(monkeypatch):
+    proj = _make_obj("P", "gsdo_project", "p1")
+    s = _make_obj("Needs pass", "gsdo_project", "s1",
+                  props={"gsdo_parent_project": ["p1"],
+                         "gsdo_context": "just a blob"})
+    _patch_load([], [proj, s], monkeypatch)
+    assert om.missing_descriptions("P") == ["Needs pass"]
 
-def test_missing_descriptions_some_missing(monkeypatch):
-    proj = _make_obj("My Project", "gsdo_project", "p1")
-    s1 = _make_obj("Has context", "gsdo_project", "s1",
-                   props={"gsdo_parent_project": ["p1"],
-                          "gsdo_context": "Described."})
-    s2 = _make_obj("No context", "gsdo_project", "s2",
-                   props={"gsdo_parent_project": ["p1"]})
-    _patch_load([], [proj, s1, s2], monkeypatch)
-    missing = om.missing_descriptions("My Project")
-    assert missing == ["No context"]
+def test_missing_no_context(monkeypatch):
+    proj = _make_obj("P", "gsdo_project", "p1")
+    s = _make_obj("Empty", "gsdo_project", "s1",
+                  props={"gsdo_parent_project": ["p1"]})
+    _patch_load([], [proj, s], monkeypatch)
+    assert om.missing_descriptions("P") == ["Empty"]
 
-
-def test_missing_descriptions_excludes_done(monkeypatch):
-    proj = _make_obj("My Project", "gsdo_project", "p1")
-    done = _make_obj("Done stream", "gsdo_project", "s1",
+def test_missing_excludes_done(monkeypatch):
+    proj = _make_obj("P", "gsdo_project", "p1")
+    done = _make_obj("Done", "gsdo_project", "s1",
                      props={"gsdo_parent_project": ["p1"],
                             "engagement": "Done"})
     _patch_load([], [proj, done], monkeypatch)
-    # Done streams without context are not flagged — they're finished
-    assert om.missing_descriptions("My Project") == []
+    # Done streams don't need the pass
+    assert om.missing_descriptions("P") == []

@@ -82,7 +82,15 @@ If stale (no `last_sweep` in `.gsdot`, or > 7 days old), offer once: *"I haven't
    - Load the full space and render each top-level Goal cluster as a group. For each cluster's parent project, run `render_map(project_name)`.
 
    **After rendering — if `gaps` is non-empty:**
-   Name the streams that have no description yet. Offer once, plainly: *"[N] work streams don't have descriptions yet: [names]. Want me to help write them?"* If she says yes, go one stream at a time: ask a few questions or read what's in the repo about it, draft a plain-language description (what this stream is for, where it stands), and propose it for her to confirm or edit. Once she confirms, update the object in Anytype:
+   Name the streams that need the structured description pass. Offer once, plainly: *"[N] work streams don't have structured descriptions yet: [names]. Want me to help write them?"* If she says yes, go one stream at a time. For each, draft three lines — read what's in the repo about it if needed — and propose them for her to confirm or edit:
+
+   ```
+   what it's doing — [the purpose of this stream, plain words]
+   where we are    — [current status — what's built, what's not, where you are in it]
+   where it goes   — [next direction — what the next move is]
+   ```
+
+   Once she confirms, write those three lines as the full value of `gsdo_context` and update the object in Anytype:
 
    ```python
    from anytype_test import call
