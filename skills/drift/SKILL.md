@@ -17,23 +17,30 @@ If Anytype isn't running (connection refused on 31009), tell June to open the An
 
 ---
 
-## On startup: check for a directory binding
+## On startup: check directory binding, CLAUDE.md, and sweep staleness
 
-Before anything else, check whether the current working directory is bound to a slice of June's Anytype graph.
+**Step 1 — Read CLAUDE.md (always, before anything else):**
+If `CLAUDE.md` exists at the current working directory, read it now. Agents leave todos there. This is fast and happens regardless of whether a binding or sweep is active.
 
+**Step 2 — Check for a directory binding:**
 ```python
 import sys; sys.path.insert(0, "REPO/scripts")
 from gsdt_bind import load_context
 ctx = load_context()   # walks up from cwd to find nearest .gsdot
 ```
 
-**Three cases:**
+Three cases:
+1. **`.gsdot` found here** → surface the offer once: *"This folder is connected to [Project name]. Work from that context, or general session?"* If she says context (or just keeps going), load the bound Goal and Projects as working scope.
+2. **No `.gsdot` here, but parent has one** → offer: *"This folder doesn't have a binding. Should I work from [parent project]'s context, create a new project or subproject for this folder, or general session?"* If she wants a new project here, run the binding creation flow (see below).
+3. **Nothing found** → no offer; proceed with the full Anytype space in context.
 
-1. **`.gsdot` found here** → surface the offer once: *"This folder is connected to [Project name]. Work from that context, or general session?"* If she says context (or just keeps going without responding), load the bound Goal and Projects and use them as the working scope — weeding alignment starts there, capture pre-links there, Orient shows that slice first.
-
-2. **No `.gsdot` here, but parent has one** (the walk-up found it) → offer: *"This folder doesn't have a binding. Should I work from [parent project]'s context, create a new project for this folder, or general session?"* If she wants a new project here, run the binding creation flow (see below).
-
-3. **Nothing found** → no offer; proceed exactly as today, with the full Anytype space in context.
+**Step 3 — Check sweep staleness (only if bound):**
+```python
+from sweep import is_sweep_stale
+if is_sweep_stale("."):
+    # Surface a one-time offer — do not repeat
+```
+If stale (no `last_sweep` in `.gsdot`, or > 7 days old), offer once: *"I haven't read through this project's files in a while — want me to check what's here and catch anything not yet in Anytype?"* She can decline. If she accepts, run Mode 2. Do not re-offer in the same session.
 
 **Binding is a suggestion, not a mandate.** She can always route differently mid-session. Silent after the startup offer — no redundant banners.
 
@@ -42,6 +49,7 @@ ctx = load_context()   # walks up from cwd to find nearest .gsdot
 2. Ask which Goal it belongs to (show existing Goals to pick from)
 3. Parent `.gsdot` detected automatically — `init_binding()` auto-sets `parent_project`
 4. Call `init_binding(folder, project_name, goal_id, goal_name)` → read-back → ding
+5. Immediately run a Mode 2 sweep for the new binding — this is the initial sweep that catches everything already in the repo. No separate offer needed; the binding creation implies it.
 
 ---
 
@@ -60,8 +68,47 @@ ctx = load_context()   # walks up from cwd to find nearest .gsdot
    **Mode 1 — read-only ("show me the structure," "where are we," "orient me"):**
    Load Anytype only. If a binding is active, load that Goal/Project cluster + its sub-projects and tasks. If no binding, load the full space. Render as named routes or streams — **never a flat list**. A flat list of 50 todos is cognitively inaccessible; the same 50 grouped into 4 named streams is navigable. Group by what belongs together, not by type or category. Discuss freely; nothing changes in Anytype.
 
-   **Mode 2 — additive sweep ("sweep this," "I've lost the thread," "what's in this repo"):**
-   Read the repo *and* load Anytype. Repo read: `ROADMAP.md`, planning docs, any `TODO` or task-signal files, `.md` files in the root. Anytype read: bound project cluster (or full space if unbound). Group new findings — things in the repo not yet captured in Anytype — into named routes/streams *against the existing Anytype structure*. Additive: builds on what's there, never replaces it. Present the proposed additions grouped by route. **Gate before writing**: June sees the full proposed structure and confirms. After confirmation: create new sub-projects and tasks via `gsdo_objects.create()`, read-back, ding.
+   **Mode 2 — additive sweep ("catch me up," "what am I missing," stale trigger, or new binding):**
+
+   **Step 1 — File inventory (deterministic):**
+   ```python
+   from sweep import select_files, total_readable_count, SMALL_REPO_THRESHOLD
+   files = select_files(".")
+   count = total_readable_count(files)
+   ```
+
+   **Step 2 — Read files:**
+   - If `count < SMALL_REPO_THRESHOLD` (15): lead agent reads files directly — no subagents.
+   - If `count >= SMALL_REPO_THRESHOLD`: dispatch Haiku subagents in parallel, one per category:
+     - Agent A: files in `files["planning"]`
+     - Agent B: files in `files["code"]` — run `python3 REPO/scripts/sweep.py signals <filepath>` per file; do not read full code content
+     - Agent C: files in `files["docs"]`
+     Each returns a list of `{source_file, source_excerpt, signal_type, signal_text}` dicts. Maximum 4 subagents.
+   - Also call `sweep_log.read_log(".")` and read the result before synthesizing — prior sweep notes inform the current pass.
+
+   **Step 3 — Load Anytype context:**
+   Load the bound project's Goal, Projects (including sub-projects), and Tasks from Anytype. This is the reference structure — everything gets positioned against it.
+
+   **Step 4 — Synthesize (lead agent):**
+   - For each finding: does it map to an existing sub-project or work stream? If yes → task under that stream (check if already captured). If no → new work stream candidate.
+   - Code comparison: for findings that look open in planning docs, quickly check whether code evidence shows the work was already done. Flag uncertain cases as "might already be complete — verify before adding."
+   - Group all surviving findings into named work streams — **never a flat list**. Subdirectory organization is a hint, not authoritative.
+   - Format as a grouped proposal with sources for every item (see `docs/sweep_design.md` for full format).
+
+   **Step 5 — Gate:**
+   Present the full grouped proposal. June confirms/edits/rejects. Only after confirmation:
+   - Create confirmed items via `gsdo_objects.create()`
+   - Read-back each created object
+   - Call `python3 REPO/scripts/sweep.py update . --items '[...]'` with confirmed item names
+   - Ding once for the batch
+
+   **Step 6 — Log (genuine signal only):**
+   ```python
+   from sweep_log import write_log_entry
+   # Call ONLY if something unexpected happened, worked particularly well,
+   # or a problem came up and was resolved. NOT on routine sweeps with no surprises.
+   # write_log_entry(".", "What worked: ... What went wrong: ... Resolution: ...")
+   ```
 
    *The sweep does NOT re-surface things already in Anytype as "new." Mode 1 shows what's in Anytype. Mode 2 finds what's in the repo not yet captured. These are distinct.*
 
