@@ -56,6 +56,7 @@ _BASE = "   "
 _LABEL_W = 11          # width of the widest label ("What it is:")
 _VALUE_COL = len(_BASE) + _LABEL_W + 2   # column where values start (16)
 _WIDTH = 66            # total line width (incl. the indent)
+_FINISHED_INLINE_MAX = 5   # list finished stream names up to this many, then collapse to a count
 
 
 def _wrap(label, value):
@@ -105,7 +106,7 @@ def _engagement_label(stream):
     elif eng == "Backburner":
         return "○", "later"
     else:
-        return "●", "ACTIVE"
+        return "●", "active"
 
 def _is_done(stream):
     return _sel(_props(stream), "engagement") == "Done"
@@ -158,28 +159,46 @@ def _header(stream):
     return f"{circle} {label:<6}  {stream['name']}"
 
 def _detail_lines(stream, tasks):
-    """The indented What it is / The arc / Next step / Tasks block for an active stream."""
-    lines = []
-    ctx = _txt(_props(stream), "gsdo_context")
-    what_it_is, the_arc, next_step = _parse_context(ctx)
+    """What it is (one line) + the arc (computed from ordered steps).
 
+    No separate Next step line: the arc's → already points to where we are.
+    See docs/map_design.md.
+    """
+    lines = []
+    what_it_is, _arc_ignored, _next_ignored = _parse_context(_txt(_props(stream), "gsdo_context"))
     if what_it_is:
         lines += _wrap("What it is:", what_it_is)
-    if the_arc:
-        lines += _wrap("The arc:", the_arc)
-    if next_step:
-        lines += _wrap("Next step:", next_step)
-
-    stream_tasks = _tasks_for(stream["name"], tasks)
-    if stream_tasks:
-        if lines:
-            lines.append("")
-        lines.append("   Tasks:")
-        for t in stream_tasks:
-            flag = "  (needs clarifying)" if t["status"] == "Needs Clarifying" else ""
-            lines.append(f"     · {t['name']}{flag}")
-
+    lines += _arc_lines(stream, tasks)
     return lines
+
+
+# Step icons — uniform marker on every step of the arc.
+_ICON_DONE = "✓"     # finished step
+_ICON_HERE = "→"     # the step we're on now (also the "next" — no separate field)
+_ICON_TODO = "☐"     # future step, not started
+
+def _arc_lines(stream, tasks):
+    """The arc: the stream's ordered steps, each marked done / here / todo.
+
+    'Here' is the first not-done step; everything after it is todo. This is the
+    deterministic 'where are we in it, what's left' view. Reads real step data —
+    never hand-composed.
+    """
+    steps = _steps_for(stream["id"], tasks)
+    if not steps:
+        return []
+    out = ["   The arc:"]
+    here_marked = False
+    for s in steps:
+        if s["done"]:
+            icon = _ICON_DONE
+        elif not here_marked:
+            icon = _ICON_HERE
+            here_marked = True
+        else:
+            icon = _ICON_TODO
+        out.append(f"      {icon} {s['name']}")
+    return out
 
 
 # ---------------------------------------------------------------------------
@@ -196,24 +215,44 @@ def _load():
         if _tkey(o) != "task":
             continue
         props = {p.get("key"): p for p in o.get("properties", [])}
-        status_sel = (props.get("status") or {}).get("select") or {}
+        by_name = {p.get("name"): p for p in o.get("properties", [])}
+        # Task status lives under "Task status" (key gsdo_task_status), not "status".
+        status_sel = (by_name.get("Task status") or {}).get("select") or {}
         status = status_sel.get("name") if isinstance(status_sel, dict) else None
-        if status not in (None, "Active", "Needs Clarifying"):
-            continue
-        if (props.get("done") or {}).get("checkbox"):
-            continue
-        # linked_projects uses "object" (singular) — returns list of {id, name} dicts
-        linked_raw = (props.get("linked_projects") or {}).get("object") or []
-        linked = [lp.get("name") for lp in linked_raw
-                  if isinstance(lp, dict) and lp.get("name")]
-        tasks.append({"id": o["id"], "name": o.get("name", ""), "linked": linked,
-                      "status": status})
+        # The arc needs DONE steps too (to show ✓), so we keep done tasks here —
+        # unlike the daily plan, which filters them out.
+        done = (status == "Done") or bool((props.get("done") or {}).get("checkbox"))
+        # linked_projects format is "objects" (plural); entries are object IDs
+        # (sometimes dicts) — match streams by ID, not name.
+        linked_ids = _id_list((props.get("linked_projects") or {}).get("objects"))
+        # Step order read by NAME ("Step order") — its key is auto-generated.
+        order = (by_name.get("Step order") or {}).get("number")
+        tasks.append({"id": o["id"], "name": o.get("name", ""), "linked_ids": linked_ids,
+                      "status": status, "done": done, "order": order})
     return goals, projects, tasks
 
 
-def _tasks_for(stream_name, tasks):
-    """Return tasks whose linked_projects includes this stream's name."""
-    return [t for t in tasks if stream_name in t["linked"]]
+def _id_list(raw):
+    """Normalize an objects-relation value to a list of id strings."""
+    out = []
+    for x in raw or []:
+        if isinstance(x, str):
+            out.append(x)
+        elif isinstance(x, dict) and x.get("id"):
+            out.append(x["id"])
+    return out
+
+
+def _steps_for(stream_id, tasks):
+    """The stream's steps (tasks linked to it by id), ordered by Step order then name.
+
+    Tasks with no Step order sort last (kept stable by name) so a stream that
+    hasn't been ordered yet still renders sensibly.
+    """
+    steps = [t for t in tasks if stream_id in t["linked_ids"]]
+    steps.sort(key=lambda t: (t["order"] is None, t["order"] if t["order"] is not None else 0,
+                              t["name"]))
+    return steps
 
 
 # ---------------------------------------------------------------------------
@@ -277,11 +316,16 @@ def render_map(project_name):
             lines += _wrap("What it is:", what_it_is)
         lines.append("")
 
-    # Finished — name only
+    # Finished — granularity that scales: list names while few, collapse to a
+    # count once they accumulate so the live map stays the focus. (Destination:
+    # the project wins mirror — see docs/map_and_arc.md.)
     if done:
-        lines.append("Finished:")
-        for s in done:
-            lines.append(f"   {s['name']}")
+        if len(done) <= _FINISHED_INLINE_MAX:
+            lines.append("Finished:")
+            for s in done:
+                lines.append(f"   ✓ {s['name']}")
+        else:
+            lines.append(f"Finished:  ✓ {len(done)} streams done  (open to see them)")
 
     return "\n".join(lines).rstrip()
 

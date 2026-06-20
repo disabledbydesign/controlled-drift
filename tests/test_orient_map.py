@@ -76,15 +76,15 @@ def test_parse_context_partial():
 
 def test_label_active():
     s = _make_obj("S", "gsdo_project", "1", props={"engagement": "Steady"})
-    assert om._engagement_label(s) == ("●", "ACTIVE")
+    assert om._engagement_label(s) == ("●", "active")
 
 def test_label_sprint_is_active():
     s = _make_obj("S", "gsdo_project", "1", props={"engagement": "Sprint"})
-    assert om._engagement_label(s) == ("●", "ACTIVE")
+    assert om._engagement_label(s) == ("●", "active")
 
 def test_label_hyperfixation_is_active():
     s = _make_obj("S", "gsdo_project", "1", props={"engagement": "Hyperfixation"})
-    assert om._engagement_label(s) == ("●", "ACTIVE")
+    assert om._engagement_label(s) == ("●", "active")
 
 def test_label_backburner_is_later():
     s = _make_obj("S", "gsdo_project", "1", props={"engagement": "Backburner"})
@@ -96,7 +96,7 @@ def test_label_done():
 
 def test_label_unset_is_active():
     s = _make_obj("S", "gsdo_project", "1")
-    assert om._engagement_label(s) == ("●", "ACTIVE")
+    assert om._engagement_label(s) == ("●", "active")
 
 
 # ---------------------------------------------------------------------------
@@ -112,29 +112,16 @@ def test_render_map_no_streams(monkeypatch):
     _patch_load([], [proj], monkeypatch)
     assert "No work streams yet" in om.render_map("My Project")
 
-def test_render_map_active_stream_full_detail(monkeypatch):
+def test_render_map_active_stream_shows_what_it_is(monkeypatch):
     proj = _make_obj("My Project", "gsdo_project", "p1")
     s = _make_obj("Finish the pipeline", "gsdo_project", "s1",
                   props={"gsdo_parent_project": ["p1"], "gsdo_context": STRUCTURED_CTX})
     _patch_load([], [proj, s], monkeypatch)
     out = om.render_map("My Project")
-    assert "● ACTIVE  Finish the pipeline" in out
+    assert "● active  Finish the pipeline" in out
     assert "What it is:  takes a messy brain-dump" in out
-    assert "Next step:   build the planning half" in out
-
-def test_render_map_active_shows_arc(monkeypatch):
-    proj = _make_obj("My Project", "gsdo_project", "p1")
-    ctx = ("what it is — the purpose\n"
-           "the arc — the through-line of where this sits\n"
-           "next step — the move")
-    s = _make_obj("Stream", "gsdo_project", "s1",
-                  props={"gsdo_parent_project": ["p1"], "gsdo_context": ctx})
-    _patch_load([], [proj, s], monkeypatch)
-    out = om.render_map("My Project")
-    assert "The arc:" in out
-    assert "the through-line of where this sits" in out
-    # order: What it is, then The arc, then Next step
-    assert out.index("What it is:") < out.index("The arc:") < out.index("Next step:")
+    # No separate Next step line — the arc's → carries that
+    assert "Next step:" not in out
 
 def test_wrap_hanging_indent():
     """A long value wraps with continuation lines aligned under the value column."""
@@ -167,7 +154,7 @@ def test_render_map_active_before_later(monkeypatch):
                       props={"gsdo_parent_project": ["p1"], "engagement": "Backburner"})
     _patch_load([], [proj, active, later], monkeypatch)
     out = om.render_map("My Project")
-    assert out.index("● ACTIVE") < out.index("○ later")
+    assert out.index("● active") < out.index("○ later")
 
 def test_render_map_done_in_finished_section(monkeypatch):
     proj = _make_obj("My Project", "gsdo_project", "p1")
@@ -179,7 +166,26 @@ def test_render_map_done_in_finished_section(monkeypatch):
     out = om.render_map("My Project")
     assert "Finished:" in out
     assert "Done thing" in out
-    assert out.index("● ACTIVE") < out.index("Finished:")
+    assert out.index("● active") < out.index("Finished:")
+
+def test_finished_collapses_when_many(monkeypatch):
+    proj = _make_obj("My Project", "gsdo_project", "p1")
+    streams = [proj]
+    for i in range(7):
+        streams.append(_make_obj(f"Done {i}", "gsdo_project", f"d{i}",
+                                 props={"gsdo_parent_project": ["p1"], "engagement": "Done"}))
+    _patch_load([], streams, monkeypatch)
+    out = om.render_map("My Project")
+    assert "7 streams done" in out          # collapsed to a count
+    assert "Done 0" not in out              # individual names not listed
+
+def test_finished_lists_names_when_few(monkeypatch):
+    proj = _make_obj("My Project", "gsdo_project", "p1")
+    done = _make_obj("Just one", "gsdo_project", "d1",
+                     props={"gsdo_parent_project": ["p1"], "engagement": "Done"})
+    _patch_load([], [proj, done], monkeypatch)
+    out = om.render_map("My Project")
+    assert "✓ Just one" in out
 
 def test_render_map_goal_header(monkeypatch):
     goal = _make_obj("Builder practice", "gsdo_goal", "g1",
@@ -192,35 +198,58 @@ def test_render_map_goal_header(monkeypatch):
     assert "GOAL:  Builder practice  (ongoing)" in out
     assert "where building Controlled Drift lives" in out
 
-def test_render_map_shows_tasks_under_active_stream(monkeypatch):
+def _step(tid, name, stream_id, order, done=False):
+    return {"id": tid, "name": name, "linked_ids": [stream_id], "status": "Done" if done else "Active",
+            "done": done, "order": order}
+
+def test_render_map_arc_under_active_stream(monkeypatch):
     proj = _make_obj("My Project", "gsdo_project", "p1")
     s = _make_obj("Active stream", "gsdo_project", "s1",
                   props={"gsdo_parent_project": ["p1"], "gsdo_context": STRUCTURED_CTX})
-    tasks = [{"id": "t1", "name": "Write the thing", "linked": ["Active stream"], "status": "Active"},
-             {"id": "t2", "name": "Review it", "linked": ["Active stream"], "status": "Active"}]
+    tasks = [_step("t1", "first step", "s1", 1, done=True),
+             _step("t2", "second step", "s1", 2, done=False),
+             _step("t3", "third step", "s1", 3, done=False)]
     _patch_load([], [proj, s], monkeypatch, tasks=tasks)
     out = om.render_map("My Project")
-    assert "Tasks:" in out
-    assert "· Write the thing" in out
-    assert "· Review it" in out
+    assert "The arc:" in out
+    assert "✓ first step" in out      # done
+    assert "→ second step" in out     # first not-done = where we are
+    assert "☐ third step" in out      # future
 
-def test_render_map_needs_clarifying_flagged(monkeypatch):
+def test_arc_orders_by_step_order(monkeypatch):
     proj = _make_obj("My Project", "gsdo_project", "p1")
     s = _make_obj("Active stream", "gsdo_project", "s1",
-                  props={"gsdo_parent_project": ["p1"], "gsdo_context": STRUCTURED_CTX})
-    tasks = [{"id": "t1", "name": "Fuzzy task", "linked": ["Active stream"], "status": "Needs Clarifying"}]
+                  props={"gsdo_parent_project": ["p1"]})
+    # supplied out of order; should render 1,2,3
+    tasks = [_step("t3", "third", "s1", 3), _step("t1", "first", "s1", 1), _step("t2", "second", "s1", 2)]
     _patch_load([], [proj, s], monkeypatch, tasks=tasks)
     out = om.render_map("My Project")
-    assert "Fuzzy task  (needs clarifying)" in out
+    assert out.index("first") < out.index("second") < out.index("third")
 
-def test_render_map_no_tasks_under_later_stream(monkeypatch):
+def test_arc_only_one_here_marker(monkeypatch):
+    proj = _make_obj("My Project", "gsdo_project", "p1")
+    s = _make_obj("Active stream", "gsdo_project", "s1",
+                  props={"gsdo_parent_project": ["p1"]})
+    tasks = [_step("t1", "a", "s1", 1, done=False), _step("t2", "b", "s1", 2, done=False)]
+    _patch_load([], [proj, s], monkeypatch, tasks=tasks)
+    out = om.render_map("My Project")
+    assert out.count("→") == 1   # only the first not-done step gets the pointer
+    assert "→ a" in out
+    assert "☐ b" in out
+
+def test_render_map_no_arc_under_later_stream(monkeypatch):
     proj = _make_obj("My Project", "gsdo_project", "p1")
     s = _make_obj("Later stream", "gsdo_project", "s1",
                   props={"gsdo_parent_project": ["p1"], "engagement": "Backburner"})
-    tasks = [{"id": "t1", "name": "Some task", "linked": ["Later stream"], "status": "Active"}]
+    tasks = [_step("t1", "some step", "s1", 1)]
     _patch_load([], [proj, s], monkeypatch, tasks=tasks)
     out = om.render_map("My Project")
-    assert "Some task" not in out
+    assert "some step" not in out
+    assert "The arc:" not in out
+
+def test_id_list_normalizes_strings_and_dicts():
+    assert om._id_list(["a", {"id": "b"}, {"no": "id"}, None]) == ["a", "b"]
+    assert om._id_list(None) == []
 
 def test_render_map_no_engagement_labels_in_output(monkeypatch):
     proj = _make_obj("My Project", "gsdo_project", "p1")
@@ -247,7 +276,6 @@ def test_render_stream_shows_detail(monkeypatch):
     _patch_load([], [s], monkeypatch)
     out = om.render_stream("Finish the pipeline")
     assert "What it is:" in out
-    assert "Next step:" in out
 
 def test_render_stream_shows_sub_streams(monkeypatch):
     s = _make_obj("Parent", "gsdo_project", "s1")
