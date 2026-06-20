@@ -109,3 +109,39 @@ def test_is_sweep_stale_old(tmp_path):
         json.dump(gsdot, f)
     from sweep import is_sweep_stale
     assert is_sweep_stale(str(tmp_path)) == True
+
+def test_extract_signals_todo(tmp_path):
+    f = tmp_path / "app.py"
+    f.write_text("x = 1\n# TODO: fix the edge case\ny = 2\n")
+    from sweep import extract_code_signals
+    sigs = extract_code_signals(str(f))
+    assert len(sigs) == 1
+    assert sigs[0]["signal_type"] == "todo"
+    assert "fix the edge case" in sigs[0]["source_excerpt"]
+
+def test_extract_signals_fixme(tmp_path):
+    f = tmp_path / "app.py"
+    f.write_text("# FIXME: broken on windows\npass\n")
+    from sweep import extract_code_signals
+    sigs = extract_code_signals(str(f))
+    assert any(s["signal_type"] == "fixme" for s in sigs)
+
+def test_extract_signals_stub(tmp_path):
+    f = tmp_path / "app.py"
+    f.write_text("def foo():\n    raise NotImplementedError\n")
+    from sweep import extract_code_signals
+    sigs = extract_code_signals(str(f))
+    assert any(s["signal_type"] == "stub" for s in sigs)
+
+def test_extract_signals_empty_file(tmp_path):
+    f = tmp_path / "clean.py"
+    f.write_text("def foo():\n    return 42\n")
+    from sweep import extract_code_signals
+    assert extract_code_signals(str(f)) == []
+
+def test_extract_signals_includes_source_file(tmp_path):
+    f = tmp_path / "util.py"
+    f.write_text("# TODO: add validation\n")
+    from sweep import extract_code_signals
+    sigs = extract_code_signals(str(f))
+    assert sigs[0]["source_file"] == str(f)

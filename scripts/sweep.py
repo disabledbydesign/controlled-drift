@@ -13,7 +13,7 @@ Usage:
   python3 scripts/sweep.py signals <file>     → JSON list of signals
   python3 scripts/sweep.py update [folder] --items '[...]'
 """
-import os, sys, json, datetime
+import os, sys, json, datetime, re
 sys.path.insert(0, os.path.dirname(__file__))
 from gsdt_bind import read_binding, find_marker
 
@@ -161,6 +161,40 @@ def get_last_sweep_info(folder):
     }
 
 
+_SIGNAL_PATTERNS = [
+    (r"#\s*TODO[:\s]+(.*)", "todo"),
+    (r"#\s*FIXME[:\s]+(.*)", "fixme"),
+    (r"#\s*HACK[:\s]+(.*)", "hack"),
+    (r"raise\s+NotImplementedError(\([^)]*\))?", "stub"),
+]
+
+def extract_code_signals(filepath):
+    """Extract TODO/FIXME/stub signals from a code file.
+    Returns list of {source_file, source_excerpt, signal_type, signal_text}.
+    """
+    results = []
+    try:
+        with open(filepath, encoding="utf-8", errors="ignore") as f:
+            lines = f.readlines()
+    except Exception:
+        return []
+    for i, line in enumerate(lines, 1):
+        stripped = line.strip()
+        for pattern, sig_type in _SIGNAL_PATTERNS:
+            m = re.search(pattern, stripped, re.IGNORECASE)
+            if m:
+                signal_text = m.group(1).strip() if m.lastindex and m.group(1) else stripped
+                results.append({
+                    "source_file": filepath,
+                    "source_excerpt": stripped,
+                    "signal_type": sig_type,
+                    "signal_text": signal_text,
+                    "line": i,
+                })
+                break  # one signal per line
+    return results
+
+
 # --- CLI ---------------------------------------------------------------------
 
 if __name__ == "__main__":
@@ -175,6 +209,9 @@ if __name__ == "__main__":
     p_stale.add_argument("folder", nargs="?", default=".")
     p_stale.add_argument("--days", type=int, default=7)
 
+    p_sig = sub.add_parser("signals", help="extract task signals from a code file")
+    p_sig.add_argument("filepath")
+
     args = ap.parse_args()
 
     if args.cmd == "select":
@@ -182,5 +219,7 @@ if __name__ == "__main__":
         print(json.dumps(result, indent=2))
     elif args.cmd == "stale":
         print("true" if is_sweep_stale(args.folder, args.days) else "false")
+    elif args.cmd == "signals":
+        print(json.dumps(extract_code_signals(args.filepath), indent=2))
     else:
         ap.print_help()
