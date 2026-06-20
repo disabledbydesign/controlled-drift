@@ -146,6 +146,19 @@ def test_extract_signals_includes_source_file(tmp_path):
     sigs = extract_code_signals(str(f))
     assert sigs[0]["source_file"] == str(f)
 
+def test_select_excludes_dot_files(tmp_path):
+    make_tree(str(tmp_path), {
+        ".gsdot-log.md": "## 2026-06-19\n\nSomething went well.",
+        ".gsdot": '{"system": "Controlled Drift"}',
+        "ROADMAP.md": "open item",
+    })
+    from sweep import select_files
+    files = select_files(str(tmp_path))
+    names = [os.path.basename(p) for p in files["planning"] + files["code"] + files["docs"]]
+    assert ".gsdot-log.md" not in names
+    assert ".gsdot" not in names
+    assert "ROADMAP.md" in names
+
 def test_update_last_sweep_stale_becomes_fresh(tmp_path):
     import json, datetime
     old = (datetime.date.today() - datetime.timedelta(days=10)).isoformat()

@@ -89,6 +89,8 @@ def select_files(folder):
         path = os.path.join(folder, name)
         if not os.path.isfile(path):
             continue
+        if name.startswith("."):
+            continue
         if _is_archive(path) or _is_binary(path):
             continue
         low = name.lower()

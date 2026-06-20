@@ -84,7 +84,11 @@ If stale (no `last_sweep` in `.gsdot`, or > 7 days old), offer once: *"I haven't
      - Agent B: files in `files["code"]` — run `python3 REPO/scripts/sweep.py signals <filepath>` per file; do not read full code content
      - Agent C: files in `files["docs"]`
      Each returns a list of `{source_file, source_excerpt, signal_type, signal_text}` dicts. Maximum 4 subagents.
-   - Also call `sweep_log.read_log(".")` and read the result before synthesizing — prior sweep notes inform the current pass.
+   - Also read prior sweep notes before synthesizing:
+     ```python
+     from sweep_log import read_log
+     prior_notes = read_log(".")  # returns "" if no log exists yet
+     ```
 
    **Step 3 — Load Anytype context:**
    Load the bound project's Goal, Projects (including sub-projects), and Tasks from Anytype. This is the reference structure — everything gets positioned against it.
