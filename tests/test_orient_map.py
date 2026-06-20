@@ -18,6 +18,8 @@ def _make_obj(name, type_key, oid, props=None):
             prop_list.append({"key": key, "select": {"name": val}})
         elif key in ("gsdo_goal_link", "gsdo_parent_project") and isinstance(val, list):
             prop_list.append({"key": key, "objects": val})
+        elif key == "Stream order":
+            prop_list.append({"key": "stream_order", "name": "Stream order", "number": val})
         elif isinstance(val, str):
             prop_list.append({"key": key, "text": val})
     return {"id": oid, "name": name, "type": {"key": type_key},
@@ -146,46 +148,54 @@ def test_render_map_later_stream_what_it_is_only(monkeypatch):
     # Later streams don't show the next step
     assert "Next step:" not in out
 
-def test_render_map_active_before_later(monkeypatch):
+def test_streams_ordered_by_stream_order(monkeypatch):
     proj = _make_obj("My Project", "gsdo_project", "p1")
-    active = _make_obj("Active", "gsdo_project", "s1",
-                       props={"gsdo_parent_project": ["p1"]})
-    later = _make_obj("Later", "gsdo_project", "s2",
-                      props={"gsdo_parent_project": ["p1"], "engagement": "Backburner"})
-    _patch_load([], [proj, active, later], monkeypatch)
+    # names are alphabetically reversed vs. desired order, so only Stream order can drive it
+    a = _make_obj("Zebra", "gsdo_project", "s1",
+                  props={"gsdo_parent_project": ["p1"], "Stream order": 1,
+                         "engagement": "Backburner"})
+    b = _make_obj("Apple", "gsdo_project", "s2",
+                  props={"gsdo_parent_project": ["p1"], "Stream order": 2,
+                         "engagement": "Backburner"})
+    _patch_load([], [proj, a, b], monkeypatch)
     out = om.render_map("My Project")
-    assert out.index("● active") < out.index("○ later")
+    assert out.index("Zebra") < out.index("Apple")   # order 1 before order 2
 
-def test_render_map_done_in_finished_section(monkeypatch):
+def test_parallel_streams_get_running_alongside_note(monkeypatch):
     proj = _make_obj("My Project", "gsdo_project", "p1")
-    active = _make_obj("Active", "gsdo_project", "s1",
+    a = _make_obj("Stream A", "gsdo_project", "s1",
+                  props={"gsdo_parent_project": ["p1"], "Stream order": 3,
+                         "engagement": "Backburner"})
+    b = _make_obj("Stream B", "gsdo_project", "s2",
+                  props={"gsdo_parent_project": ["p1"], "Stream order": 3,
+                         "engagement": "Backburner"})
+    _patch_load([], [proj, a, b], monkeypatch)
+    out = om.render_map("My Project")
+    assert "running alongside" in out
+
+def test_sequential_streams_no_alongside_note(monkeypatch):
+    proj = _make_obj("My Project", "gsdo_project", "p1")
+    a = _make_obj("Stream A", "gsdo_project", "s1",
+                  props={"gsdo_parent_project": ["p1"], "Stream order": 1,
+                         "engagement": "Backburner"})
+    b = _make_obj("Stream B", "gsdo_project", "s2",
+                  props={"gsdo_parent_project": ["p1"], "Stream order": 2,
+                         "engagement": "Backburner"})
+    _patch_load([], [proj, a, b], monkeypatch)
+    out = om.render_map("My Project")
+    assert "running alongside" not in out
+
+def test_done_stream_not_shown_on_map(monkeypatch):
+    proj = _make_obj("My Project", "gsdo_project", "p1")
+    active = _make_obj("Active thing", "gsdo_project", "s1",
                        props={"gsdo_parent_project": ["p1"]})
     done = _make_obj("Done thing", "gsdo_project", "s2",
                      props={"gsdo_parent_project": ["p1"], "engagement": "Done"})
     _patch_load([], [proj, active, done], monkeypatch)
     out = om.render_map("My Project")
-    assert "Finished:" in out
-    assert "Done thing" in out
-    assert out.index("● active") < out.index("Finished:")
-
-def test_finished_collapses_when_many(monkeypatch):
-    proj = _make_obj("My Project", "gsdo_project", "p1")
-    streams = [proj]
-    for i in range(7):
-        streams.append(_make_obj(f"Done {i}", "gsdo_project", f"d{i}",
-                                 props={"gsdo_parent_project": ["p1"], "engagement": "Done"}))
-    _patch_load([], streams, monkeypatch)
-    out = om.render_map("My Project")
-    assert "7 streams done" in out          # collapsed to a count
-    assert "Done 0" not in out              # individual names not listed
-
-def test_finished_lists_names_when_few(monkeypatch):
-    proj = _make_obj("My Project", "gsdo_project", "p1")
-    done = _make_obj("Just one", "gsdo_project", "d1",
-                     props={"gsdo_parent_project": ["p1"], "engagement": "Done"})
-    _patch_load([], [proj, done], monkeypatch)
-    out = om.render_map("My Project")
-    assert "✓ Just one" in out
+    assert "Active thing" in out
+    assert "Done thing" not in out      # finished work is off the map
+    assert "Finished" not in out
 
 def test_render_map_goal_header(monkeypatch):
     goal = _make_obj("Builder practice", "gsdo_goal", "g1",

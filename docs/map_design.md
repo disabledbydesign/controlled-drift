@@ -22,25 +22,29 @@ A **deterministic read of stored fields** that lets June see the whole picture a
 GOAL:  <goal name>  (<horizon>)
        <goal description, wrapped>
 
-WORK STREAMS — <project>:
+THE ARC — <project>:        (streams in trajectory order — the project's own arc)
 
   ● active   <stream name>
              What it is:  <one short line>
              The arc:
                 ✓ <done step>
-                ✓ <done step>
                 → <the step we're on>        (this is the "next" — no separate field)
                 ☐ <future step>
-                ☐ <future step>
 
+  ○ later    <stream name>
+             What it is:  <one short line>
+
+  — running alongside —
+  ○ later    <stream name>
+             What it is:  <one short line>
   ○ later    <stream name>
              What it is:  <one short line>
 
   ○ later    <stream name>
              What it is:  <one short line>
-
-  ✓ <N> finished — <names while few; collapses to a count when many>
 ```
+
+The whole map is one ordered list — the project arc (see "the meta-arc" below). Finished streams are **not** shown here (see "Finished").
 
 ## The arc (replaces the flat task list)
 
@@ -54,17 +58,21 @@ Steps **are** the stream's tasks, ordered. "Where we are" = the first not-done s
 
 The arc shows on the map **only for the active stream** (what June is in). For other streams it shows when the stream is opened.
 
-## Finished — granularity that scales
+## Finished — not on the map (settled 2026-06-20)
 
-On a long project, an enumerated Finished list grows longer than the live map and defeats "see the whole picture." So:
+Finished streams are **not shown on the map.** Rationale, June's call: a collapsed count can't reach the bigger picture (the map is static text — there's no drill-down from a count to the actual finished work), and listing everything breaks on a long project (imagine 300 finished pieces). A thing that can't get from the count to the bigger picture isn't helpful, so it's removed rather than half-built.
 
-- While **few**, show finished stream names.
-- As they **accumulate**, collapse to a count (`✓ 6 finished`), expandable on request.
-- Destination: finished streams belong in the **project wins mirror** (see `map_and_arc.md`) — celebrated, held, off the live map. Until that's built, the collapsing count is the interim.
+The real home for finished work is the **project wins mirror** (see `map_and_arc.md`) — a proper surface to be designed later, where finished streams are celebrated and held. Until then, finished work simply doesn't appear on the live map (its done-ness is still recorded in the Engagement field). Do not re-add a finished section or count to the map; design the wins mirror instead.
 
-## The meta-arc (streams have their own larger arc)
+## The meta-arc — the whole map is one ordered arc (settled 2026-06-20)
 
-Just as a stream has an arc (its steps), the **project has an arc** — its streams in a meaningful order (foundational → later), not arbitrary. The map orders streams to show that trajectory, so June sees where the whole project is, not just where each stream is. Mechanism: an explicit per-stream order reflecting the project arc (set with June, not guessed). *(Ordering mechanism is the one open implementation detail; the principle is settled.)*
+Just as a stream breaks into ordered steps, the **project breaks into ordered streams.** The map *is* the project arc: one ordered list of streams, in trajectory order, with the active stream opening to show its own internal arc. Same shape at both levels.
+
+- **It keeps the chunk format already settled** — every stream still shows its circle + name + `What it is` (this is NOT a redesign of the chunk; only its *order* changes). Never drop `What it is`.
+- **`Stream order` field** (a number, exactly like `Step order` on tasks) sets each stream's place in the project arc. Deterministic, June-editable, no instance guesses.
+- **The circle is a separate axis from order.** Order = where a stream *sits* in the plan (trajectory). The circle (`●` active / `○` later) = what June is *in* vs. what's ahead. They differ on purpose — working out of sequence is honest ADHD behavior, not error, and the map shows it rather than flattening it.
+- **Parallel vs. sequential:** streams that **share the same `Stream order` number are parallel** (same phase, run alongside each other); different numbers are sequential. A parallel group is marked with a plain `— running alongside —` line, no cryptic symbols.
+- The active stream expands to its step-arc; later streams show name + `What it is` only. (Open a stream for its full detail.)
 
 ## Determinism contract
 

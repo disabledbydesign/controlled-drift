@@ -56,7 +56,6 @@ _BASE = "   "
 _LABEL_W = 11          # width of the widest label ("What it is:")
 _VALUE_COL = len(_BASE) + _LABEL_W + 2   # column where values start (16)
 _WIDTH = 66            # total line width (incl. the indent)
-_FINISHED_INLINE_MAX = 5   # list finished stream names up to this many, then collapse to a count
 
 
 def _wrap(label, value):
@@ -113,6 +112,12 @@ def _is_done(stream):
 
 def _is_later(stream):
     return _sel(_props(stream), "engagement") == "Backburner"
+
+def _stream_order(stream):
+    """The stream's place in the project arc (the meta-arc). Read by NAME —
+    'Stream order' key is auto-generated. Streams sharing a number are parallel."""
+    by_name = {p.get("name"): p for p in stream.get("properties", [])}
+    return (by_name.get("Stream order") or {}).get("number")
 
 
 # ---------------------------------------------------------------------------
@@ -271,12 +276,13 @@ def render_map(project_name):
     goal_ids = _objs(pprops, "gsdo_goal_link")
     goal = next((o for o in goals if o["id"] in goal_ids), None)
 
+    # The map is ONE ordered arc — streams in trajectory order (the meta-arc).
+    # Finished streams are NOT shown (a dead-end count can't reach the bigger
+    # picture, and listing all of it breaks long projects — see docs/map_design.md;
+    # finished work belongs in the project wins mirror, to be designed).
     streams = [o for o in projects
-               if pid in _objs(_props(o), "gsdo_parent_project")]
-
-    active = [s for s in streams if not _is_done(s) and not _is_later(s)]
-    later = [s for s in streams if _is_later(s)]
-    done = [s for s in streams if _is_done(s)]
+               if pid in _objs(_props(o), "gsdo_parent_project") and not _is_done(o)]
+    streams.sort(key=lambda s: (_stream_order(s) is None, _stream_order(s) or 0, s["name"]))
 
     lines = []
 
@@ -292,40 +298,38 @@ def render_map(project_name):
                 lines.append(f"       {piece}")
         lines.append("")
 
-    lines.append(f"WORK STREAMS — {proj['name']}:")
+    lines.append(f"THE ARC — {proj['name']}:")
     lines.append("")
 
     if not streams:
         lines.append("  No work streams yet.")
         return "\n".join(lines).rstrip()
 
-    # Active streams — full detail + tasks
-    for s in active:
-        lines.append(_header(s))
-        detail = _detail_lines(s, tasks)
-        if detail:
+    # Walk the ordered streams; streams sharing a Stream order number are parallel.
+    i, n = 0, len(streams)
+    while i < n:
+        order = _stream_order(streams[i])
+        j = i + 1
+        while j < n and _stream_order(streams[j]) == order:
+            j += 1
+        group = streams[i:j]
+        if order is not None and len(group) > 1:
+            lines.append("  — running alongside —")
+        for s in group:
+            lines.append(_header(s))
+            if _is_later(s):
+                # later stream — name + What it is only
+                what_it_is, _, _ = _parse_context(_txt(_props(s), "gsdo_context"))
+                if what_it_is:
+                    lines += _wrap("What it is:", what_it_is)
+            else:
+                # active stream — What it is + its step-arc
+                detail = _detail_lines(s, tasks)
+                if detail:
+                    lines.append("")
+                    lines.extend(detail)
             lines.append("")
-            lines.extend(detail)
-        lines.append("")
-
-    # Later streams — name + a short What it is only
-    for s in later:
-        lines.append(_header(s))
-        what_it_is, _, _ = _parse_context(_txt(_props(s), "gsdo_context"))
-        if what_it_is:
-            lines += _wrap("What it is:", what_it_is)
-        lines.append("")
-
-    # Finished — granularity that scales: list names while few, collapse to a
-    # count once they accumulate so the live map stays the focus. (Destination:
-    # the project wins mirror — see docs/map_and_arc.md.)
-    if done:
-        if len(done) <= _FINISHED_INLINE_MAX:
-            lines.append("Finished:")
-            for s in done:
-                lines.append(f"   ✓ {s['name']}")
-        else:
-            lines.append(f"Finished:  ✓ {len(done)} streams done  (open to see them)")
+        i = j
 
     return "\n".join(lines).rstrip()
 
