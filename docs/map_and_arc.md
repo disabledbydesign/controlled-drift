@@ -36,6 +36,18 @@ The UI need is a **map** — some structured surface where June can see the stre
 
 The weeding / brain-dump pipeline **works** — it was tested and validated. Treating it as the blocking next step, and surfacing "you need to do a brain-dump" repeatedly, *became a stressor that made the system harder to use*. That is the system manufacturing urgency on something already done — exactly what it must not do. The brain-dump is not owed. The actual missing piece was the map. Future instances: do not re-surface the brain-dump as a gate.
 
+## Parked: work-stream breakdown (later addition)
+
+When June opens a work stream, the system should not only show her the steps that exist — it should help build them out if they don't. This is a focused breakdown conversation: "what would it take to complete this work stream?" The output is an ordered list of Tasks in Anytype, linked to that Project. She confirms before anything is created.
+
+This is distinct from the weeding gate (which sorts a whole brain dump across all work streams). The breakdown is scoped to one stream and is directional — what are the pieces, in what order, to finish this.
+
+Lives as an extension of Orient, triggered when she opens a stream with no tasks yet, or asks "what would it take to complete this?" or "what are the steps here?" The LLM leads the breakdown conversation; she confirms; Tasks are created with read-back + ding.
+
+Not built yet. Park until the Orient gap (sparse/undescribed streams) is resolved first.
+
+---
+
 ## Methodology note (for reassurance against "did we design wrong")
 
 This framing arrived by *building first to have a surface to raise friction off of*, then raising the friction in live use. That is the intended process working, not a failure of upfront design. The build was the instrument that made this insight visible. Redesigning some things in light of it is the method succeeding.

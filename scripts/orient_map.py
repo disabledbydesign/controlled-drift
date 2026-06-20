@@ -1,53 +1,28 @@
 #!/usr/bin/env python3
-"""SUPERSEDED FIRST CUT — do not treat this as the design.
-See docs/map_and_arc.md ("What the map is", settled 2026-06-20).
+"""Deterministic Orient map renderer.
 
-June tested this live and it was the wrong approach, for two reasons:
-  1. It ENCODES instead of DESCRIBES — it shows filled/empty symbols and
-     one-word codes (now / held / done) that June then has to decode. The map
-     must instead say, in plain words, what each work stream is and where it
-     stands. She reads it; she never decodes it.
-  2. It LOCKS the map to a fixed, closed list of states (the five-value
-     Engagement field). That is a brittle bet that will fight the system once
-     it is actually running. The map must read from open, flexible structure —
-     a stored, plain-language description per stream.
-Rebuild this to read and show stored plain-language descriptions, on open
-structure. The notes below describe the superseded approach, kept for the
-record of what was tried and why it was wrong.
+Reads stored fields from Anytype and formats them — no LLM, no interpretation.
+The map is stable because the data is stable, not because an instance nailed the
+register.
 
----
+What the map shows:
+  - Goal header (name + reaching_for)
+  - All work streams under the parent project, each with its stored context
+    (gsdo_context field) as the description
+  - Non-finished streams first; streams marked Done in a plain "Finished:" section
 
-Deterministic Orient map renderer.
+What the map does NOT do:
+  - Encode status as symbols or one-word codes
+  - Filter based on an Engagement value (Done is the only structural distinction)
+  - Compose or interpret anything — it shows what is stored
 
-The map is NOT composed by the LLM. It is a deterministic read of Anytype
-fields, so it renders the same way every time and no session can re-improvise
-it (or re-spotlight something you're avoiding):
+If a stream has no context yet, it shows just the name. That is a signal for the
+Orient function to offer to help write the description — not a display problem to
+pad over.
 
-  ● now / ○ held / ✓ done  <-  Engagement field
-                               (Backburner -> ○ held;  Done -> ✓;  else -> ● now)
-  work-stream name         <-  object name
-  goal frame               <-  Goal name + Horizon + Reaching for
-
-NOTE — one field, two jobs (documented coupling). The Engagement field
-(Steady / Sprint / Hyperfixation / Backburner / Done) is the SINGLE source
-that drives the now/held/done circle. The map shows the plain words
-(now / held / done), never the word "Engagement" — so there is no metaphor to
-decode. Engagement's five values map APPROXIMATELY, not exactly, onto three
-circles; that approximation is the only fuzziness. If the circle and the
-engagement signal ever need to say different things, the clean split is to
-give the circle its own now/held/done field and leave Engagement alone. Until
-then, this is the documented mapping.
-
-The map view is names + circles only — calm and scannable. The detail for a
-work stream (what it's doing, where you are in it) lives in that stream's own
-fields and is shown only when you open it (`detail` below), never crammed into
-the map.
-
-Change what's "active" by changing a stream's Engagement field. The field
-decides — not the model.
-
+Usage:
   python3 scripts/orient_map.py "Build Controlled Drift"
-  python3 scripts/orient_map.py "Build Controlled Drift" --detail "Seeing your time, and seeing what you actually did"
+  python3 scripts/orient_map.py "Build Controlled Drift" --stream "a stream name"
 """
 import sys, os
 sys.path.insert(0, os.path.dirname(__file__))
@@ -74,18 +49,8 @@ def _tkey(o):
     t = o.get("type")
     return t.get("key") if isinstance(t, dict) else t
 
-# Engagement -> circle glyph. Anything not held/done reads as "now" (you're in it).
-_HELD = {"Backburner": "○", "Done": "✓"}
-def circle_for(engagement):
-    return _HELD.get(engagement, "●")
-
-# active first, then held, then done — a stable, field-driven order
-def _rank(engagement):
-    if engagement == "Done":
-        return 2
-    if engagement == "Backburner":
-        return 1
-    return 0
+def _is_done(stream):
+    return _sel(_props(stream), "engagement") == "Done"
 
 
 def _load():
@@ -97,6 +62,7 @@ def _load():
 
 
 def render_map(project_name):
+    """Render the full map for a parent project — all work streams with descriptions."""
     goals, projects = _load()
     proj = next((o for o in projects if o.get("name") == project_name), None)
     if proj is None:
@@ -108,57 +74,120 @@ def render_map(project_name):
 
     streams = [o for o in projects
                if pid in _objs(_props(o), "gsdo_parent_project")]
-    streams.sort(key=lambda o: _rank(_sel(_props(o), "engagement")))
+
+    current = [s for s in streams if not _is_done(s)]
+    finished = [s for s in streams if _is_done(s)]
 
     lines = []
+
     if goal:
         gp = _props(goal)
-        hz = _sel(gp, "gsdo_horizon")
         rf = _txt(gp, "gsdo_reaching_for_(text)")
-        lines.append(f"GOAL:  {goal['name']}" + (f"  ({hz.lower()})" if hz else ""))
+        lines.append(f"Goal: {goal['name']}")
         if rf:
-            lines.append(f"       {rf}")
+            lines.append(f"  {rf}")
         lines.append("")
 
-    lines.append(f"WORK STREAMS — the work of {proj['name']}:")
-    lines.append("(● now · ○ held · ✓ done)")
+    lines.append(f"Work streams — {proj['name']}:")
     lines.append("")
+
     if not streams:
-        lines.append("  (none yet)")
-    for s in streams:
-        eng = _sel(_props(s), "engagement")
-        lines.append(f"  {circle_for(eng)} {s['name']}")
+        lines.append("  No work streams yet.")
+    else:
+        for s in current:
+            sp = _props(s)
+            ctx = _txt(sp, "gsdo_context")
+            lines.append(s["name"])
+            if ctx:
+                lines.append(f"  {ctx}")
+            lines.append("")
 
-    other = max(0, len(goals) - (1 if goal else 0))
-    if other:
-        lines.append("")
-        lines.append(f"{other} other goals — say the word.")
-    return "\n".join(lines)
+        if finished:
+            lines.append("Finished:")
+            for s in finished:
+                sp = _props(s)
+                ctx = _txt(sp, "gsdo_context")
+                lines.append(f"  {s['name']}")
+                if ctx:
+                    lines.append(f"    {ctx}")
+            lines.append("")
+
+    return "\n".join(lines).strip()
 
 
-def render_detail(project_name, stream_name):
-    """What you see when you OPEN one work stream — its own fields, nothing else."""
-    _, projects = _load()
+def render_stream(stream_name):
+    """Show one work stream in full — its description plus any sub-streams."""
+    goals, projects = _load()
     s = next((o for o in projects if o.get("name") == stream_name), None)
     if s is None:
         return f"(no work stream named {stream_name!r} found)"
+
     sp = _props(s)
-    eng = _sel(sp, "engagement") or "—"
     ctx = _txt(sp, "gsdo_context")
-    lines = [f"{circle_for(_sel(sp, 'engagement'))} {s['name']}  [{eng}]"]
+    sid_val = s["id"]
+
+    sub = [o for o in projects
+           if sid_val in _objs(_props(o), "gsdo_parent_project")]
+    sub_current = [x for x in sub if not _is_done(x)]
+    sub_finished = [x for x in sub if _is_done(x)]
+
+    lines = [s["name"]]
     if ctx:
         lines.append("")
         lines.append(ctx)
+
+    if sub_current:
+        lines.append("")
+        lines.append("Inside this stream:")
+        for x in sub_current:
+            xp = _props(x)
+            xctx = _txt(xp, "gsdo_context")
+            lines.append(f"  {x['name']}")
+            if xctx:
+                lines.append(f"    {xctx}")
+
+    if sub_finished:
+        lines.append("")
+        lines.append("Finished:")
+        for x in sub_finished:
+            lines.append(f"  {x['name']}")
+
     return "\n".join(lines)
+
+
+def missing_descriptions(project_name):
+    """Return names of work streams that have no stored context — signals for the
+    Orient function to offer to help write them."""
+    _, projects = _load()
+    proj = next((o for o in projects if o.get("name") == project_name), None)
+    if proj is None:
+        return []
+    pid = proj["id"]
+    streams = [o for o in projects
+               if pid in _objs(_props(o), "gsdo_parent_project")
+               and not _is_done(o)]
+    return [s["name"] for s in streams
+            if not _txt(_props(s), "gsdo_context")]
 
 
 if __name__ == "__main__":
     import argparse
-    ap = argparse.ArgumentParser(description="Deterministic Orient map")
+    ap = argparse.ArgumentParser(description="Deterministic Orient map renderer")
     ap.add_argument("project", nargs="?", default="Build Controlled Drift")
-    ap.add_argument("--detail", default=None, help="open one work stream by name")
+    ap.add_argument("--stream", default=None, help="open one work stream by name")
+    ap.add_argument("--missing", action="store_true",
+                    help="list streams with no stored description")
     args = ap.parse_args()
-    if args.detail:
-        print(render_detail(args.project, args.detail))
+
+    if args.missing:
+        names = missing_descriptions(args.project)
+        if names:
+            print(f"Work streams with no description yet ({args.project!r}):")
+            for n in names:
+                print(f"  {n}")
+        else:
+            print("All work streams have descriptions.")
+    elif args.stream:
+        print(render_stream(args.stream))
     else:
         print(render_map(args.project))

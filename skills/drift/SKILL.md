@@ -66,7 +66,38 @@ If stale (no `last_sweep` in `.gsdot`, or > 7 days old), offer once: *"I haven't
 5. **Orient** — she asks where things stand, what the structure is, what threads exist. Show the picture she can't hold internally. Two modes (infer from what she says; she never names a mode):
 
    **Mode 1 — read-only ("show me the structure," "where are we," "orient me"):**
-   Load Anytype only. If a binding is active, load that Goal/Project cluster + its sub-projects and tasks. If no binding, load the full space. Render as named routes or streams — **never a flat list**. A flat list of 50 todos is cognitively inaccessible; the same 50 grouped into 4 named streams is navigable. Group by what belongs together, not by type or category. Discuss freely; nothing changes in Anytype.
+
+   **The map is deterministic.** Use `scripts/orient_map.py` — it reads stored fields and formats them the same way every time. Do not compose the map yourself; do not interpret or paraphrase the descriptions. What's stored is what's shown.
+
+   ```python
+   import sys; sys.path.insert(0, "REPO/scripts")
+   from orient_map import render_map, missing_descriptions
+   ```
+
+   If a binding is active:
+   - Run `render_map(bound_project_name)` and show the output as-is.
+   - Then check: `gaps = missing_descriptions(bound_project_name)`
+
+   If no binding:
+   - Load the full space and render each top-level Goal cluster as a group. For each cluster's parent project, run `render_map(project_name)`.
+
+   **After rendering — if `gaps` is non-empty:**
+   Name the streams that have no description yet. Offer once, plainly: *"[N] work streams don't have descriptions yet: [names]. Want me to help write them?"* If she says yes, go one stream at a time: ask a few questions or read what's in the repo about it, draft a plain-language description (what this stream is for, where it stands), and propose it for her to confirm or edit. Once she confirms, update the object in Anytype:
+
+   ```python
+   from anytype_test import call
+   import gsdo_anytype as g
+   sid = g.get_space_id()
+   call("PATCH", f"/spaces/{sid}/objects/{stream_id}",
+        json={"fields": {"gsdo_context": confirmed_description}})
+   ```
+
+   Read it back to confirm it saved, then ding. After all gaps are filled, re-run `render_map()` and show the updated map.
+
+   **After rendering — if streams exist but there are no work streams at all under the bound project:**
+   The structure doesn't exist yet. Offer once: *"There are no work streams under [project name] yet. Want me to help build out the structure?"* If she says yes, read the repo (or ask her a few questions), propose an initial set of named work streams with descriptions, and create them via `gsdo_objects.create("Project", name, properties={...})` after she confirms. These are sub-projects of the bound project.
+
+   Discuss freely after rendering; nothing else changes in Anytype.
 
    **Mode 2 — additive sweep ("catch me up," "what am I missing," stale trigger, or new binding):**
 

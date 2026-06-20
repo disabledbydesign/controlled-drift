@@ -16,6 +16,8 @@
 
 **Anytype state right now:** 6 work streams exist under "Build Controlled Drift" with provisional (marketing-register) names + context blobs — names and descriptions still need the plain-language pass. `scripts/orient_map.py` is a **superseded first cut** (it used filled/empty symbols driven by the fixed Engagement field) — rebuild it to show stored plain-language descriptions on open structure. Propagating the arc/map framing back through Orient / daily plan / rendering is the next high-leverage pass.
 
+**Design principle — Orient is deterministic:** `orient_map.py` reads stored fields and formats them the same way every time. The map does not depend on any instance composing or interpreting it. Instances help CREATE the stored descriptions (when streams are sparse or undescribed); after that the renderer just shows what's there. This is the reliability guarantee: the map is stable because the data is stable, not because an instance nailed the register.
+
 **Correction — the brain-dump is NOT the blocking next step.** The weeding/brain-dump pipeline works and is not owed. Surfacing it repeatedly became a stressor (see `the-map-and-the-arc` + `brain-dump-repetition-stress` memories). The "what do I do now" / brain-dump prompts lower in this doc are superseded — do not re-raise the brain-dump as a gate.
 
 ---
