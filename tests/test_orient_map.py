@@ -170,15 +170,16 @@ def test_render_map_goal_header(monkeypatch):
     assert "GOAL:  Builder practice  (ongoing)" in out
     assert "where building Controlled Drift lives" in out
 
-def test_render_map_unstructured_context_shown(monkeypatch):
+def test_render_map_unstructured_context_not_shown(monkeypatch):
+    """Raw unstructured context is suppressed — it's noise until the structured pass runs."""
     proj = _make_obj("My Project", "gsdo_project", "p1")
     s = _make_obj("Raw stream", "gsdo_project", "s1",
                   props={"gsdo_parent_project": ["p1"],
                          "gsdo_context": "just a raw blob of notes"})
     _patch_load([], [proj, s], monkeypatch)
     out = om.render_map("My Project")
-    assert "Raw stream" in out
-    assert "just a raw blob" in out
+    assert "Raw stream" in out          # name still shows
+    assert "just a raw blob" not in out  # blob suppressed
 
 def test_render_map_no_engagement_labels_in_output(monkeypatch):
     proj = _make_obj("My Project", "gsdo_project", "p1")

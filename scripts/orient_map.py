@@ -154,10 +154,8 @@ def _stream_block(stream, show_detail=True):
             lines.append(f"{desc_indent}where we are    — {here}")
         if nxt:
             lines.append(f"{desc_indent}where it goes   — {nxt}")
-    elif ctx:
-        # Unstructured context — show it, indented
-        for raw_line in ctx.splitlines():
-            lines.append(f"{desc_indent}{raw_line}")
+    # Unstructured context is not shown in the map — it's noise until the
+    # structured pass runs. missing_descriptions() will flag it.
 
     return lines
 
