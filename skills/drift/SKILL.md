@@ -46,11 +46,11 @@ If stale (no `last_sweep` in `.gsdot`, or > 7 days old), offer once: *"I haven't
 
 ```
 What would you like to do?
-  — See the map (where your work streams are and what's going on in them)
-  — Add something (a task, idea, or commitment)
-  — Sort out a pile (dump what's on your mind → organized into the right streams)
-  — Plan today (what to actually work on given your capacity right now)
-  — I'm stuck (think through something together)
+  Map        — see where your work streams are and what's going on in them
+  Capture    — add a task, idea, or commitment
+  Brain dump — get what's on your mind sorted into the right streams
+  Plan       — figure out what to actually work on given your capacity right now
+  Stuck      — think something through together
 ```
 
 She picks by saying any of it in her own words — she never has to use these exact phrases. If it's already clear from context what she wants (she said it before startup finished), skip the menu and proceed.
