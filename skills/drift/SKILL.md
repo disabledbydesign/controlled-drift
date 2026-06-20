@@ -97,19 +97,23 @@ She picks by saying any of it in her own words — she never has to use these ex
    **After rendering — if `gaps` is non-empty:**
    Name the streams that need the structured description pass. Offer once, plainly: *"[N] work streams need descriptions. Want me to help write them? I'll go one at a time."* If she says yes, go one stream at a time. For each stream, read what's in the repo about it and propose:
 
-   1. **A revised name** — concrete and action-oriented, not marketing-register. Like "Finish the pipeline: brain-dump → scheduled plan" rather than "Getting your thoughts in, and a usable daily plan out." Keep it short enough to read at a glance.
-   2. **Three description lines** — for ● ACTIVE streams, all three; for ○ later streams, at minimum "what it's doing":
+   1. **A revised name** — names a body of BUILD WORK, not a feature or end-state experience.
+      - RIGHT: "Finish the daily plan pipeline" — describes what's being built
+      - WRONG: "Getting your thoughts in, and a usable daily plan out" — describes what the finished system does
+      - RIGHT: "Build the visual layer: spatial time + wins mirror" — names the build work
+      - WRONG: "Seeing your time, and seeing what you actually did" — describes an experience
+      A work stream name answers "what are we building?" not "what will it feel like to use?"
+      Keep it short — 4–8 words — so it's scannable at a glance.
+
+   2. **Three description lines** for the stream's content. For ● ACTIVE streams, all three. For ○ later streams, "what it's doing" is enough:
 
    ```
-   what it's doing — [the purpose of this stream, plain words — what does it exist to do?]
-   where we are    — [current status — what's built, what's not, where you are in it right now]
-   where it goes   — [next direction — what the actual next move is]
+   what it's doing — [what body of work this is — what gets built here, concretely]
+   where we are    — [what's already done, what's not, where you are in it right now]
+   where it goes   — [the actual next move — specific, not vague]
    ```
 
-   For ○ later streams with nothing actively happening, one line is enough:
-   ```
-   what it's doing — [what it is + where it stands: "not built; needs real data first"]
-   ```
+   If a stream's name describes an experience or feature rather than build work, flag it: *"This name describes what the system does when finished, not what we're building. I'd rename it to [X] — OK?"* Don't silently leave a feature-description name in place.
 
    Show your proposals plainly. She confirms, edits, or rejects each. On confirm, update BOTH the name and the context in Anytype:
 
