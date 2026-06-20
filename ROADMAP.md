@@ -1,6 +1,16 @@
 # Controlled Drift — Build Roadmap & "What Now"
 
-*Written session 6 (2026-06-17), after the data model was built. Plain-language map of where the system is and what comes next. Authoritative for sequencing; `AI_LAYER_SPEC.md` is authoritative for design.*
+*Written session 6 (2026-06-17); updated session 10 (2026-06-19) after binding + sweep build. Authoritative for sequencing; `AI_LAYER_SPEC.md` is authoritative for design.*
+
+## Current state (2026-06-19, session 10)
+
+✅ **Binding + Orient (Build 1, session 10):** `gsdt_bind.py` wired to the drift skill; hierarchy rendering (Goal > Project > sub-project tree); Orient as the 5th skill function; first `.gsdot` bindings written (this repo → "Build Controlled Drift"; Job Search → Material survival). Disability infrastructure Goal created.
+
+✅ **Sweep workflow / Orient Mode 2 (Build 2, session 10):** `scripts/sweep.py` (file selection, signal extraction, staleness), `scripts/sweep_log.py` (conditional feedback log), `_write_claude_md()` in `gsdt_bind.py` (CLAUDE.md written on every new binding), drift skill fully wired — CLAUDE.md check on every open, stale-sweep offer, concrete 6-step Mode 2 workflow with Haiku subagents for large repos. 46 tests passing. Both commits on `main`.
+
+**Next: live test.** Open a fresh session in a bound repo and verify the startup offer, CLAUDE.md check, and stale-sweep trigger behave correctly. Fix any issues that surface.
+
+---
 
 ## Is the system "running"? — Honest answer: not yet.
 
@@ -30,7 +40,7 @@ Rename: drop the "GSDO" display-name prefix; Task uses built-in **Due date** + *
 3. Result: you get a capacity-first daily plan; edits get logged for the future rhythm-learning loop.
 
 ### Step 3+ — Later increments (not soon)
-Drift detection (§8b); the learning loops (rhythm, strategy lifespan, access-barrier promotion, the surface-log companion to `last_surfaced`); wins mirror; Apple-Calendar integration; the no-app-switching chat-stream surface; pagination on `query_neglected`; **repo/folder ↔ Goal/Project binding** (being in a given folder auto-contextualizes the system to that slice of the graph — first binding: job-search folder → Material survival; mechanism + open questions in `AI_LAYER_SPEC.md §10`).
+Drift detection (§8b); the learning loops (rhythm, strategy lifespan, access-barrier promotion, the surface-log companion to `last_surfaced`); wins mirror; Apple-Calendar integration; the no-app-switching chat-stream surface; pagination on `query_neglected`. **Repo/folder binding is built (session 10)** — the hook-based enforcement of default capture (auto-load binding via `settings.local.json` hook) is the post-v1 tighter version. Post-v1 sweep items: hooks-based enforcement, `.gsdot-log.md` quality improvements, Orient Mode 3 (reorganization, parked).
 
 ## How you invoke it (so you never have to remember functions)
 
