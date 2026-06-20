@@ -169,7 +169,29 @@ def _load():
     objs = g.fetch_all_objects(sid)
     goals = [o for o in objs if _tkey(o) == "gsdo_goal"]
     projects = [o for o in objs if _tkey(o) == "gsdo_project"]
-    return goals, projects
+    tasks = []
+    for o in objs:
+        if _tkey(o) != "task":
+            continue
+        props = {p.get("key"): p for p in o.get("properties", [])}
+        status_sel = (props.get("status") or {}).get("select") or {}
+        status = status_sel.get("name") if isinstance(status_sel, dict) else None
+        if status not in (None, "Active", "Needs Clarifying"):
+            continue
+        if (props.get("done") or {}).get("checkbox"):
+            continue
+        # linked_projects uses "object" (singular) — returns list of {id, name} dicts
+        linked_raw = (props.get("linked_projects") or {}).get("object") or []
+        linked = [lp.get("name") for lp in linked_raw
+                  if isinstance(lp, dict) and lp.get("name")]
+        tasks.append({"id": o["id"], "name": o.get("name", ""), "linked": linked,
+                      "status": status})
+    return goals, projects, tasks
+
+
+def _tasks_for(stream_name, tasks):
+    """Return tasks whose linked_projects includes this stream's name."""
+    return [t for t in tasks if stream_name in t["linked"]]
 
 
 # ---------------------------------------------------------------------------
@@ -178,7 +200,7 @@ def _load():
 
 def render_map(project_name):
     """Render the full map for a parent project."""
-    goals, projects = _load()
+    goals, projects, tasks = _load()
     proj = next((o for o in projects if o.get("name") == project_name), None)
     if proj is None:
         return f"(no project named {project_name!r} found)"
@@ -214,8 +236,16 @@ def render_map(project_name):
     if not streams:
         lines.append("  No work streams yet.")
     else:
+        task_indent = " " * (_NAME_COL + 2)
         for s in active:
             lines.extend(_stream_block(s))
+            # Show tasks under ACTIVE streams — this is the "what's in here right now"
+            stream_tasks = _tasks_for(s["name"], tasks)
+            if stream_tasks:
+                lines.append(f"{task_indent}Tasks:")
+                for t in stream_tasks:
+                    flag = " (needs clarifying)" if t["status"] == "Needs Clarifying" else ""
+                    lines.append(f"{task_indent}  · {t['name']}{flag}")
             lines.append("")
         for s in later:
             lines.extend(_stream_block(s))
@@ -230,7 +260,7 @@ def render_map(project_name):
 
 def render_stream(stream_name):
     """Show one work stream in full — description plus any sub-streams."""
-    goals, projects = _load()
+    goals, projects, tasks = _load()
     s = next((o for o in projects if o.get("name") == stream_name), None)
     if s is None:
         return f"(no work stream named {stream_name!r} found)"
@@ -269,7 +299,7 @@ def missing_descriptions(project_name):
     the three-line format (what it's doing / where we are / where it goes).
     Done streams are excluded — they're finished.
     """
-    _, projects = _load()
+    _, projects, _ = _load()
     proj = next((o for o in projects if o.get("name") == project_name), None)
     if proj is None:
         return []

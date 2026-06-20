@@ -95,7 +95,7 @@ She picks by saying any of it in her own words — she never has to use these ex
    - Load the full space and render each top-level Goal cluster as a group. For each cluster's parent project, run `render_map(project_name)`.
 
    **After rendering — if `gaps` is non-empty:**
-   Name the streams that need the structured description pass. Offer once, plainly: *"[N] work streams need descriptions. Want me to help write them? I'll go one at a time."* If she says yes, go one stream at a time. For each stream, read what's in the repo about it and propose:
+   Do not ask permission. Say: *"The stream names and/or descriptions need updating — I'm going to propose them now."* Then immediately go through each gap stream and propose:
 
    1. **A revised name** — names a body of BUILD WORK, not a feature or end-state experience.
       - RIGHT: "Finish the daily plan pipeline" — describes what's being built

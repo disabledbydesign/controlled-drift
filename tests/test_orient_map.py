@@ -23,8 +23,8 @@ def _make_obj(name, type_key, oid, props=None):
     return {"id": oid, "name": name, "type": {"key": type_key},
             "properties": prop_list}
 
-def _patch_load(goals, projects, monkeypatch):
-    monkeypatch.setattr(om, "_load", lambda: (goals, projects))
+def _patch_load(goals, projects, monkeypatch, tasks=None):
+    monkeypatch.setattr(om, "_load", lambda: (goals, projects, tasks or []))
 
 STRUCTURED_CTX = (
     "what it's doing — making the system take a messy dump and hand back a real day\n"
@@ -180,6 +180,30 @@ def test_render_map_unstructured_context_not_shown(monkeypatch):
     out = om.render_map("My Project")
     assert "Raw stream" in out          # name still shows
     assert "just a raw blob" not in out  # blob suppressed
+
+def test_render_map_shows_tasks_under_active_stream(monkeypatch):
+    proj = _make_obj("My Project", "gsdo_project", "p1")
+    s = _make_obj("Active stream", "gsdo_project", "s1",
+                  props={"gsdo_parent_project": ["p1"]})
+    tasks = [{"id": "t1", "name": "Write the thing", "linked": ["Active stream"],
+               "status": "Active"},
+             {"id": "t2", "name": "Review it", "linked": ["Active stream"],
+               "status": "Active"}]
+    _patch_load([], [proj, s], monkeypatch, tasks=tasks)
+    out = om.render_map("My Project")
+    assert "Tasks:" in out
+    assert "Write the thing" in out
+    assert "Review it" in out
+
+def test_render_map_no_tasks_shown_under_later_stream(monkeypatch):
+    proj = _make_obj("My Project", "gsdo_project", "p1")
+    s = _make_obj("Later stream", "gsdo_project", "s1",
+                  props={"gsdo_parent_project": ["p1"], "engagement": "Backburner"})
+    tasks = [{"id": "t1", "name": "Some task", "linked": ["Later stream"],
+               "status": "Active"}]
+    _patch_load([], [proj, s], monkeypatch, tasks=tasks)
+    out = om.render_map("My Project")
+    assert "Some task" not in out
 
 def test_render_map_no_engagement_labels_in_output(monkeypatch):
     proj = _make_obj("My Project", "gsdo_project", "p1")
