@@ -10,3 +10,8 @@
 # Python
 __pycache__/
 *.pyc
+
+# Secret — a markdown copy of the Anytype API key. NEVER commit.
+Anytype Key.md
+# Runtime data the system writes at use time (not source).
+scripts/data/*.jsonl

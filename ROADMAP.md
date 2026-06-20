@@ -8,7 +8,15 @@
 
 ✅ **Sweep workflow / Orient Mode 2 (Build 2, session 10):** `scripts/sweep.py` (file selection, signal extraction, staleness), `scripts/sweep_log.py` (conditional feedback log), `_write_claude_md()` in `gsdt_bind.py` (CLAUDE.md written on every new binding), drift skill fully wired — CLAUDE.md check on every open, stale-sweep offer, concrete 6-step Mode 2 workflow with Haiku subagents for large repos. 46 tests passing. Both commits on `main`.
 
-**Next: live test.** Open a fresh session in a bound repo and verify the startup offer, CLAUDE.md check, and stale-sweep trigger behave correctly. Fix any issues that surface.
+**Live test: DONE (2026-06-20).** Startup offer, CLAUDE.md check, and stale-sweep trigger all fire correctly. The gap it surfaced — Orient rendering a hard-to-read soup of symbols and codes — is what produced the map/arc framing below.
+
+**⭐ Core framing locked (live test, 2026-06-19/20):** the load-bearing deliverable is **the map / the arc**, not tasks — see `docs/map_and_arc.md`. June navigates by *work streams* she can open and look inside (pieces held at any grain, so nothing gets lost), not by a task pile.
+
+**What the map is — settled 2026-06-20:** it lets June *see the whole picture at once*. It **describes in plain words, never encodes** — no filled/empty symbols, no one-word codes to decode (and this holds for *all* communication and the concepts built into the system, not just the map). For the stream being worked on now, it shows what is actually being worked on in it. It is built on **open, flexible structure — not a fixed, closed list of states**. It reads the same every time by showing a *stored plain-language description*, not by locking categories. Full: `docs/map_and_arc.md` ("What the map is").
+
+**Anytype state right now:** 6 work streams exist under "Build Controlled Drift" with provisional (marketing-register) names + context blobs — names and descriptions still need the plain-language pass. `scripts/orient_map.py` is a **superseded first cut** (it used filled/empty symbols driven by the fixed Engagement field) — rebuild it to show stored plain-language descriptions on open structure. Propagating the arc/map framing back through Orient / daily plan / rendering is the next high-leverage pass.
+
+**Correction — the brain-dump is NOT the blocking next step.** The weeding/brain-dump pipeline works and is not owed. Surfacing it repeatedly became a stressor (see `the-map-and-the-arc` + `brain-dump-repetition-stress` memories). The "what do I do now" / brain-dump prompts lower in this doc are superseded — do not re-raise the brain-dump as a gate.
 
 ---
 
