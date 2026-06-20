@@ -88,50 +88,45 @@ She picks by saying any of it in her own words — she never has to use these ex
    ```
 
    If a binding is active:
-   - Run `render_map(bound_project_name)` and show the output as-is.
+   - Run `render_map(bound_project_name)`.
+   - **Show the output inside a code block (triple backticks), verbatim.** The map is column-aligned monospace; shown as ordinary text the alignment collapses into an unreadable bulleted mush. This is not optional. Never reformat it into a markdown list.
    - Then check: `gaps = missing_descriptions(bound_project_name)`
 
    If no binding:
    - Load the full space and render each top-level Goal cluster as a group. For each cluster's parent project, run `render_map(project_name)`.
 
    **After rendering — if `gaps` is non-empty:**
-   Do not ask permission. Say: *"The stream names and/or descriptions need updating — I'm going to propose them now."* Then immediately go through each gap stream and propose:
+   Do not ask permission. Say: *"Some streams need their names or descriptions cleaned up — I'm going to propose them now."* Then go through each gap stream and propose a name + the two stored lines. Follow the canonical register spec in `REPO/docs/work_stream_register.md` — read it before proposing. In short:
 
-   1. **A revised name** — names a body of BUILD WORK, not a feature or end-state experience.
-      - RIGHT: "Finish the daily plan pipeline" — describes what's being built
-      - WRONG: "Getting your thoughts in, and a usable daily plan out" — describes what the finished system does
-      - RIGHT: "Build the visual layer: spatial time + wins mirror" — names the build work
-      - WRONG: "Seeing your time, and seeing what you actually did" — describes an experience
-      A work stream name answers "what are we building?" not "what will it feel like to use?"
-      Keep it short — 4–8 words — so it's scannable at a glance.
+   - **Name** — names the body of build work, short (4–8 words). Not a feature-experience.
+   - **what it is** — ONE plain sentence: what this stream is, in words June would use. No filenames, no jargon, no coded status words.
+   - **next step** — the single clear next move. Plain language.
 
-   2. **Three description lines** for the stream's content. For ● ACTIVE streams, all three. For ○ later streams, "what it's doing" is enough:
+   Store them in `gsdo_context` in exactly this format (the renderer parses it):
 
    ```
-   what it's doing — [what body of work this is — what gets built here, concretely]
-   where we are    — [what's already done, what's not, where you are in it right now]
-   where it goes   — [the actual next move — specific, not vague]
+   what it is — [one plain sentence]
+   next step — [the single clear next move]
    ```
 
-   If a stream's name describes an experience or feature rather than build work, flag it: *"This name describes what the system does when finished, not what we're building. I'd rename it to [X] — OK?"* Don't silently leave a feature-description name in place.
+   **If a stream is already finished, don't rewrite it — mark it done.** When she says a stream is complete (or the repo shows the work is done), set its Engagement to "Done" so it drops to the Finished section. Confirm with her first.
 
-   Show your proposals plainly. She confirms, edits, or rejects each. On confirm, update BOTH the name and the context in Anytype:
+   Show your proposals plainly. She confirms, edits, or rejects each. On confirm, use `gsdo_objects.update()` — it resolves value shapes correctly (a raw select write needs a tag id, not the string "Done", and gets it wrong):
 
    ```python
-   from anytype_test import call
-   import gsdo_anytype as g
-   sid = g.get_space_id()
-   # Update name
-   call("PATCH", f"/spaces/{sid}/objects/{stream_id}", json={"name": confirmed_name})
-   # Update context
-   call("PATCH", f"/spaces/{sid}/objects/{stream_id}",
-        json={"properties": [{"key": "gsdo_context", "text": confirmed_context}]})
+   import gsdo_objects as o
+   # Rename + description in one call
+   # (context by stable key "gsdo_context"; Engagement by NAME — its key is auto-generated)
+   o.update(stream_id, name=confirmed_name,
+            properties={"gsdo_context": "what it is — ...\nnext step — ..."})
+   # Mark a finished stream done — moves it to Finished
+   o.update(stream_id, properties={"Engagement": "Done"})
    ```
 
-   Read it back to confirm both saved, then ding (one ding per stream confirmed). After all streams are done, re-run `render_map()` and show the updated map.
+   Read it back to confirm each change saved, then ding (one ding per stream confirmed). After all streams are done, re-run `render_map()` and show the updated map (in a code block).
 
    **After rendering — if streams exist but there are no work streams at all under the bound project:**
-   The structure doesn't exist yet. Offer once: *"There are no work streams under [project name] yet. Want me to help build out the structure?"* If she says yes, read the repo (or ask her a few questions), propose an initial set of named work streams with descriptions, and create them via `gsdo_objects.create("Project", name, properties={...})` after she confirms. These are sub-projects of the bound project.
+   The structure doesn't exist yet. Offer once: *"There are no work streams under [project name] yet. Want me to help build out the structure?"* If she says yes, read the repo (or ask her a few questions), propose an initial set of named work streams with descriptions **following `REPO/docs/work_stream_register.md`** (read it first), and create them via `gsdo_objects.create("Project", name, properties={"gsdo_context": "what it is — ...\nnext step — ..."})` after she confirms. These are sub-projects of the bound project.
 
    Discuss freely after rendering; nothing else changes in Anytype.
 
@@ -163,7 +158,7 @@ She picks by saying any of it in her own words — she never has to use these ex
    **Step 4 — Synthesize (lead agent):**
    - For each finding: does it map to an existing sub-project or work stream? If yes → task under that stream (check if already captured). If no → new work stream candidate.
    - Code comparison: for findings that look open in planning docs, quickly check whether code evidence shows the work was already done. Flag uncertain cases as "might already be complete — verify before adding."
-   - Group all surviving findings into named work streams — **never a flat list**. Subdirectory organization is a hint, not authoritative.
+   - Group all surviving findings into named work streams — **never a flat list**. Subdirectory organization is a hint, not authoritative. Name streams and write their descriptions following `REPO/docs/work_stream_register.md` (read it first) — plain language, the two-line `what it is` / `next step` format.
    - Format as a grouped proposal with sources for every item (see `docs/sweep_design.md` for full format).
 
    **Step 5 — Gate:**

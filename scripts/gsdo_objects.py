@@ -61,3 +61,36 @@ def create(type_name, name, body=None, properties=None):
     if t is None:
         raise ValueError(f"create: type {type_name!r} not found")
     return create_object(t.get("key"), name, body=body, properties=properties)
+
+def update(object_id, name=None, properties=None):
+    """Update an existing object's name and/or properties.
+
+    properties: {prop_name_or_key: value} — resolved + formatted the same way as
+    create (select option names -> tag ids, etc.). Use this instead of hand-rolling
+    PATCH calls: it handles the value-shape resolution that raw select writes get wrong.
+
+    Examples:
+      update(stream_id, name="Finish the daily-plan pipeline")
+      update(stream_id, properties={"Context": "what it is — ...\\nnext step — ..."})
+      update(stream_id, properties={"Engagement": "Done"})   # resolves "Done" -> tag id
+    """
+    sid = g.get_space_id()
+    payload = {}
+    if name is not None:
+        payload["name"] = name
+    props = []
+    for pname, value in (properties or {}).items():
+        if value is None:
+            continue
+        prop = g.find_property(pname)
+        if prop is None:
+            raise ValueError(f"update: property {pname!r} not found")
+        props.append(_value_field(prop, value))
+    if props:
+        payload["properties"] = props
+    if not payload:
+        raise ValueError("update: nothing to change (pass name and/or properties)")
+    st, b = call("PATCH", f"/spaces/{sid}/objects/{object_id}", payload)
+    if st not in (200, 201):
+        raise RuntimeError(f"update {object_id!r} failed: {st} {b}")
+    return b.get("object", {}).get("id", object_id)

@@ -4,30 +4,35 @@
 Reads stored fields from Anytype — no LLM, no composition at render time.
 The map is stable because the data is stable.
 
-Each work stream has three stored description lines:
+Each work stream stores two plain-language lines in gsdo_context:
 
-    what it's doing — [the purpose of this stream]
-    where we are    — [current status]
-    where it goes   — [next direction]
+    what it is — [one sentence: what this stream is, in plain words]
+    next step  — [the single clear next move]
 
-These are written once (by the Orient function when it helps set up a stream)
-and read back verbatim every time. If a stream doesn't have the structured
-format yet, its raw context is shown and it's flagged as needing a pass.
+The renderer shows them like this (active stream):
 
-Visual format:
+    ● ACTIVE  Finish the daily-plan pipeline
 
-    ● ACTIVE   Stream name
-               what it's doing — ...
-               where we are    — ...
-               where it goes   — ...
+       What it is:  takes a messy brain-dump and hands you back a real day
+       Next step:   build the planning half — pick what matters, fit it to your day
 
-    ○ later    Stream name
-               what it's doing — ...
+       Tasks:
+         · ...
 
-Engagement drives the ●/○ label:
+A "later" stream shows just its name + What it is (no next step, no tasks).
+A finished stream drops to the "Finished:" section, name only.
+
+Register rules for what gets stored (enforced at entry, see SKILL.md):
+  plain language · one sentence per line · no filenames · no jargon ·
+  no coded status words. Written so June reads it at a glance.
+
+Engagement drives the circle:
   Steady / Sprint / Hyperfixation / unset  →  ● ACTIVE
   Backburner                               →  ○ later
-  Done                                     →  shown in Finished section, no detail
+  Done                                     →  Finished section
+
+IMPORTANT: this output is column-aligned monospace. Whoever shows it to June
+MUST show it inside a code block, or the alignment collapses into mush.
 
 Usage:
   python3 scripts/orient_map.py "Build Controlled Drift"
@@ -37,9 +42,6 @@ Usage:
 import sys, os
 sys.path.insert(0, os.path.dirname(__file__))
 import gsdo_anytype as g
-
-# Column where the stream name starts (after "  ● ACTIVE   ")
-_NAME_COL = 14
 
 
 # ---------------------------------------------------------------------------
@@ -93,69 +95,60 @@ def _is_later(stream):
 # ---------------------------------------------------------------------------
 
 def _parse_context(ctx):
-    """Parse the three-line structured format from gsdo_context.
+    """Parse the two-line structured format from gsdo_context.
 
     Looks for lines starting with:
-      what it's doing —
-      where we are    —
-      where it goes   —
+      what it is —
+      next step  —
 
-    Returns (doing, here, nxt). Any missing line returns None.
-    If none of the three labels are found, returns (None, None, None) —
-    indicating unstructured context that needs a pass.
+    Returns (what_it_is, next_step); a missing line returns None.
+    Splits only on the FIRST em-dash, so the value may contain its own dashes.
     """
     if not ctx:
-        return None, None, None
-    doing = here = nxt = None
+        return None, None
+    what_it_is = next_step = None
     for line in ctx.splitlines():
         stripped = line.strip()
         low = stripped.lower()
-        if low.startswith("what it's doing"):
-            doing = stripped.split("—", 1)[-1].strip() if "—" in stripped else stripped
-        elif low.startswith("where we are"):
-            here = stripped.split("—", 1)[-1].strip() if "—" in stripped else stripped
-        elif low.startswith("where it goes"):
-            nxt = stripped.split("—", 1)[-1].strip() if "—" in stripped else stripped
-    return doing, here, nxt
+        if low.startswith("what it is"):
+            what_it_is = stripped.split("—", 1)[-1].strip() if "—" in stripped else None
+        elif low.startswith("next step"):
+            next_step = stripped.split("—", 1)[-1].strip() if "—" in stripped else None
+    return what_it_is, next_step
 
 def _is_structured(ctx):
-    doing, here, nxt = _parse_context(ctx)
-    return bool(doing or here or nxt)
+    what_it_is, next_step = _parse_context(ctx)
+    return bool(what_it_is or next_step)
 
 
 # ---------------------------------------------------------------------------
 # Rendering helpers
 # ---------------------------------------------------------------------------
 
-def _stream_block(stream, show_detail=True):
-    """Render one stream as a block of lines."""
+def _header(stream):
+    """The stream's title line: '● ACTIVE  Stream name'."""
     circle, label = _engagement_label(stream)
-    sp = _props(stream)
-    ctx = _txt(sp, "gsdo_context")
+    return f"{circle} {label:<6}  {stream['name']}"
 
-    # Header line: "  ● ACTIVE   Stream name"
-    prefix = f"  {circle} {label}"
-    pad = " " * max(1, _NAME_COL - len(prefix))
-    header = f"{prefix}{pad}{stream['name']}"
+def _detail_lines(stream, tasks):
+    """The indented What it is / Next step / Tasks block for an active stream."""
+    lines = []
+    ctx = _txt(_props(stream), "gsdo_context")
+    what_it_is, next_step = _parse_context(ctx)
 
-    lines = [header]
+    if what_it_is:
+        lines.append(f"   What it is:  {what_it_is}")
+    if next_step:
+        lines.append(f"   Next step:   {next_step}")
 
-    if not show_detail:
-        return lines
-
-    desc_indent = " " * _NAME_COL
-
-    doing, here, nxt = _parse_context(ctx)
-
-    if doing or here or nxt:
-        if doing:
-            lines.append(f"{desc_indent}what it's doing — {doing}")
-        if here:
-            lines.append(f"{desc_indent}where we are    — {here}")
-        if nxt:
-            lines.append(f"{desc_indent}where it goes   — {nxt}")
-    # Unstructured context is not shown in the map — it's noise until the
-    # structured pass runs. missing_descriptions() will flag it.
+    stream_tasks = _tasks_for(stream["name"], tasks)
+    if stream_tasks:
+        if lines:
+            lines.append("")
+        lines.append("   Tasks:")
+        for t in stream_tasks:
+            flag = "  (needs clarifying)" if t["status"] == "Needs Clarifying" else ""
+            lines.append(f"     · {t['name']}{flag}")
 
     return lines
 
@@ -230,64 +223,68 @@ def render_map(project_name):
             lines.append(f"       {rf}")
         lines.append("")
 
-    lines.append(f"WORK STREAMS — the work of {proj['name']}:")
+    lines.append(f"WORK STREAMS — {proj['name']}:")
     lines.append("")
 
     if not streams:
         lines.append("  No work streams yet.")
-    else:
-        task_indent = " " * (_NAME_COL + 2)
-        for s in active:
-            lines.extend(_stream_block(s))
-            # Show tasks under ACTIVE streams — this is the "what's in here right now"
-            stream_tasks = _tasks_for(s["name"], tasks)
-            if stream_tasks:
-                lines.append(f"{task_indent}Tasks:")
-                for t in stream_tasks:
-                    flag = " (needs clarifying)" if t["status"] == "Needs Clarifying" else ""
-                    lines.append(f"{task_indent}  · {t['name']}{flag}")
+        return "\n".join(lines).rstrip()
+
+    # Active streams — full detail + tasks
+    for s in active:
+        lines.append(_header(s))
+        detail = _detail_lines(s, tasks)
+        if detail:
             lines.append("")
-        for s in later:
-            lines.extend(_stream_block(s))
-            lines.append("")
-        if done:
-            lines.append("Finished:")
-            for s in done:
-                lines.extend(_stream_block(s, show_detail=False))
+            lines.extend(detail)
+        lines.append("")
+
+    # Later streams — name + What it is only
+    for s in later:
+        lines.append(_header(s))
+        what_it_is, _ = _parse_context(_txt(_props(s), "gsdo_context"))
+        if what_it_is:
+            lines.append(f"   What it is:  {what_it_is}")
+        lines.append("")
+
+    # Finished — name only
+    if done:
+        lines.append("Finished:")
+        for s in done:
+            lines.append(f"   {s['name']}")
 
     return "\n".join(lines).rstrip()
 
 
 def render_stream(stream_name):
-    """Show one work stream in full — description plus any sub-streams."""
+    """Show one work stream in full — detail plus any sub-streams."""
     goals, projects, tasks = _load()
     s = next((o for o in projects if o.get("name") == stream_name), None)
     if s is None:
         return f"(no work stream named {stream_name!r} found)"
 
+    lines = [_header(s)]
+    detail = _detail_lines(s, tasks)
+    if detail:
+        lines.append("")
+        lines.extend(detail)
+
     sid_val = s["id"]
     sub = [o for o in projects
            if sid_val in _objs(_props(o), "gsdo_parent_project")]
     sub_active = [x for x in sub if not _is_done(x) and not _is_later(x)]
-    sub_later = [x for x in sub if _is_later(x)]
     sub_done = [x for x in sub if _is_done(x)]
 
-    lines = _stream_block(s)
-
-    if sub_active or sub_later:
+    if sub_active:
         lines.append("")
-        lines.append("  Inside this stream:")
+        lines.append("   Inside this stream:")
         for x in sub_active:
-            lines.extend("    " + l for l in _stream_block(x))
-            lines.append("")
-        for x in sub_later:
-            lines.extend("    " + l for l in _stream_block(x))
-            lines.append("")
-
+            lines.append(f"     {_header(x)}")
     if sub_done:
-        lines.append("  Finished:")
+        lines.append("")
+        lines.append("   Finished:")
         for x in sub_done:
-            lines.extend("    " + l for l in _stream_block(x, show_detail=False))
+            lines.append(f"     {x['name']}")
 
     return "\n".join(lines)
 
@@ -295,9 +292,8 @@ def render_stream(stream_name):
 def missing_descriptions(project_name):
     """Return names of active work streams that need the structured description pass.
 
-    A stream needs a pass if it has no context, or context that doesn't use
-    the three-line format (what it's doing / where we are / where it goes).
-    Done streams are excluded — they're finished.
+    A stream needs a pass if it has no context, or context not in the
+    two-line format (what it is / next step). Done streams are excluded.
     """
     _, projects, _ = _load()
     proj = next((o for o in projects if o.get("name") == project_name), None)
@@ -307,12 +303,8 @@ def missing_descriptions(project_name):
     streams = [o for o in projects
                if pid in _objs(_props(o), "gsdo_parent_project")
                and not _is_done(o)]
-    result = []
-    for s in streams:
-        ctx = _txt(_props(s), "gsdo_context")
-        if not ctx or not _is_structured(ctx):
-            result.append(s["name"])
-    return result
+    return [s["name"] for s in streams
+            if not _is_structured(_txt(_props(s), "gsdo_context"))]
 
 
 if __name__ == "__main__":

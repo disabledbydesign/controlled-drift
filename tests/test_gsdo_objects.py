@@ -32,6 +32,29 @@ def test_create_task_with_mixed_value_types():
         if oid:
             _delete(oid)
 
+def test_update_name_and_text_property():
+    """update() changes an existing object's name + a text property, resolving shapes."""
+    oid = None
+    try:
+        oid = o.create("Project", "__test stream (gsdo-test)__",
+                       properties={"gsdo_context": "what it is — original\nnext step — original"})
+        assert oid
+        o.update(oid, name="__renamed stream (gsdo-test)__",
+                 properties={"gsdo_context": "what it is — updated\nnext step — updated"})
+        sid = g.get_space_id()
+        rb = call("GET", f"/spaces/{sid}/objects/{oid}")[1].get("object", {})
+        assert rb.get("name") == "__renamed stream (gsdo-test)__"
+        pv = {p.get("key"): p for p in rb.get("properties", [])}
+        assert "updated" in pv["gsdo_context"]["text"]
+    finally:
+        if oid:
+            _delete(oid)
+
+def test_update_nothing_raises():
+    import pytest
+    with pytest.raises(ValueError):
+        o.update("whatever", )  # no name, no properties
+
 def test_unknown_select_option_raises():
     import pytest
     with pytest.raises(ValueError):
