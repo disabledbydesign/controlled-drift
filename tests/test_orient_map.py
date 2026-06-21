@@ -485,6 +485,65 @@ def test_gap_streams_excludes_structured_and_done(monkeypatch):
 
 
 # ---------------------------------------------------------------------------
+# missing_descriptions / gap_streams — groupings blind spot
+# ---------------------------------------------------------------------------
+
+def test_missing_descriptions_finds_stream_inside_grouping(monkeypatch):
+    """A stream nested under a grouping sub-project must be found."""
+    proj = _make_obj("P", "gsdo_project", "p1")
+    grouping = _make_obj("Phase A", "gsdo_project", "g1",
+                         props={"gsdo_parent_project": ["p1"],
+                                "gsdo_context": STRUCTURED_CTX})
+    nested = _make_obj("Nested stream", "gsdo_project", "s1",
+                       props={"gsdo_parent_project": ["g1"]})  # no context
+    _patch_load([], [proj, grouping, nested], monkeypatch)
+    missing = om.missing_descriptions("P")
+    assert "Nested stream" in missing
+
+
+def test_missing_descriptions_nested_structured_not_flagged(monkeypatch):
+    """A nested stream with a proper description is not flagged."""
+    proj = _make_obj("P", "gsdo_project", "p1")
+    grouping = _make_obj("Phase A", "gsdo_project", "g1",
+                         props={"gsdo_parent_project": ["p1"],
+                                "gsdo_context": STRUCTURED_CTX})
+    nested = _make_obj("Nested OK", "gsdo_project", "s1",
+                       props={"gsdo_parent_project": ["g1"],
+                              "gsdo_context": STRUCTURED_CTX})
+    _patch_load([], [proj, grouping, nested], monkeypatch)
+    assert om.missing_descriptions("P") == []
+
+
+def test_missing_descriptions_nested_done_excluded(monkeypatch):
+    """Done streams nested under a grouping are excluded."""
+    proj = _make_obj("P", "gsdo_project", "p1")
+    grouping = _make_obj("Phase A", "gsdo_project", "g1",
+                         props={"gsdo_parent_project": ["p1"],
+                                "gsdo_context": STRUCTURED_CTX})
+    done_nested = _make_obj("Done nested", "gsdo_project", "s1",
+                            props={"gsdo_parent_project": ["g1"],
+                                   "engagement": "Done"})
+    _patch_load([], [proj, grouping, done_nested], monkeypatch)
+    assert om.missing_descriptions("P") == []
+
+
+def test_gap_streams_finds_nested_stream(monkeypatch):
+    """gap_streams returns full dict for streams nested under groupings."""
+    proj = _make_obj("P", "gsdo_project", "p1")
+    grouping = _make_obj("Phase A", "gsdo_project", "g1",
+                         props={"gsdo_parent_project": ["p1"],
+                                "gsdo_context": STRUCTURED_CTX})
+    nested = _make_obj("Nested gap", "gsdo_project", "s1",
+                       props={"gsdo_parent_project": ["g1"], "gsdo_context": "old blob",
+                              "engagement": "Steady"})
+    _patch_load([], [proj, grouping, nested], monkeypatch)
+    gaps = om.gap_streams("P")
+    assert len(gaps) == 1
+    assert gaps[0]["id"] == "s1"
+    assert gaps[0]["name"] == "Nested gap"
+
+
+# ---------------------------------------------------------------------------
 # Grouping structure (sub-projects that contain streams)
 # ---------------------------------------------------------------------------
 

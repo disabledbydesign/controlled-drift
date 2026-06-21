@@ -22,7 +22,9 @@ A **deterministic read of stored fields** that lets June see the whole picture a
 GOAL:  <goal name>  (<horizon>)
        <goal description, wrapped>
 
-THE ARC — <project>:        (streams in trajectory order — the project's own arc)
+  <project name>
+
+  ✓ <done stream> · <done stream>        (compact trajectory — what's behind you)
 
   ● active   <stream name>
              What it is:  <one short line>
@@ -34,17 +36,21 @@ THE ARC — <project>:        (streams in trajectory order — the project's own
   ○ later    <stream name>
              What it is:  <one short line>
 
-  — running alongside —
-  ○ later    <stream name>
-             What it is:  <one short line>
-  ○ later    <stream name>
-             What it is:  <one short line>
+  ● active   <grouping / phase name>         (grouping = stream with its own children)
 
+    ● active   <child stream>
+               What it is:  <one short line>
+               The arc: ...
+
+    ○ later    <child stream>
+               What it is:  <one short line>
+
+  — running alongside —
   ○ later    <stream name>
              What it is:  <one short line>
 ```
 
-The whole map is one ordered list — the project arc (see "the meta-arc" below). Finished streams are **not** shown here (see "Finished").
+The whole map is one ordered list — the project arc (see "the meta-arc" below).
 
 ## The arc (replaces the flat task list)
 
@@ -58,11 +64,27 @@ Steps **are** the stream's tasks, ordered. "Where we are" = the first not-done s
 
 The arc shows on the map **only for the active stream** (what June is in). For other streams it shows when the stream is opened.
 
-## Finished — not on the map (settled 2026-06-20)
+## Finished — trajectory line, not a section (settled 2026-06-20 + 2026-06-20)
 
-Finished streams are **not shown on the map.** Rationale, June's call: a collapsed count can't reach the bigger picture (the map is static text — there's no drill-down from a count to the actual finished work), and listing everything breaks on a long project (imagine 300 finished pieces). A thing that can't get from the count to the bigger picture isn't helpful, so it's removed rather than half-built.
+Done streams appear as a **single compact trajectory line** near the top of the map — names joined with `·`, prefixed `✓`. This is a progress marker ("what's behind you"), not a listing.
 
-The real home for finished work is the **project wins mirror** (see `map_and_arc.md`) — a proper surface to be designed later, where finished streams are celebrated and held. Until then, finished work simply doesn't appear on the live map (its done-ness is still recorded in the Engagement field). Do not re-add a finished section or count to the map; design the wins mirror instead.
+```
+  ✓ Foundation work · Data model build
+```
+
+This is **not** a "Finished" section. There is no heading, no detail, no count. Do not expand it into a section or add structure to it. It stays one line no matter how many streams are done.
+
+The real home for finished work is the **project wins mirror** (see `map_and_arc.md`) — a proper surface to be designed later, where finished streams are celebrated and held. Until the wins mirror is built, the compact trajectory line is the only reference to done work on the live map.
+
+## Groupings (phase sections)
+
+A **grouping** is a sub-project that itself contains streams. It acts as a phase or category header on the map; its children are the actual work streams.
+
+When the map detects at least one direct child of the project has its own children, it switches to grouping layout. The grouping renders its header line (circle + label + name), then its children are shown indented below it. Leaf streams (no children) at the top level continue to render normally alongside grouping sections.
+
+Detection is automatic: a sub-project with children = a grouping. No flag needed.
+
+`missing_descriptions()` and `gap_streams()` check the **full subtree** — groupings and their children — not just direct children of the root project.
 
 ## The meta-arc — the whole map is one ordered arc (settled 2026-06-20)
 

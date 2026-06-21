@@ -525,20 +525,32 @@ def render_stream(stream_name):
     return "\n".join(lines)
 
 
+def _all_sub_projects(parent_id, all_projects):
+    """Recursively collect all projects in the subtree under parent_id.
+
+    Includes groupings (sub-projects with children) and their leaf streams.
+    Depth-first; does not deduplicate (the graph is a tree so no cycles expected).
+    """
+    direct = [p for p in all_projects
+              if parent_id in _objs(_props(p), "gsdo_parent_project")]
+    out = list(direct)
+    for child in direct:
+        out.extend(_all_sub_projects(child["id"], all_projects))
+    return out
+
+
 def missing_descriptions(project_name):
     """Return names of active work streams that need the structured description pass.
 
     A stream needs a pass if it has no context, or context not in the
     two-line format (what it is / next step). Done streams are excluded.
+    Checks all streams in the subtree (including streams nested under groupings).
     """
     _, projects, _ = _load()
     proj = next((o for o in projects if o.get("name") == project_name), None)
     if proj is None:
         return []
-    pid = proj["id"]
-    streams = [o for o in projects
-               if pid in _objs(_props(o), "gsdo_parent_project")
-               and not _is_done(o)]
+    streams = [s for s in _all_sub_projects(proj["id"], projects) if not _is_done(s)]
     return [s["name"] for s in streams
             if not _is_structured(_txt(_props(s), "gsdo_context"))]
 
@@ -548,15 +560,15 @@ def gap_streams(project_name):
     update each stream in place without re-querying every object one by one.
 
     Returns [{id, name, context, engagement}] for active streams that need a pass.
+    Checks all streams in the subtree (including streams nested under groupings).
     """
     _, projects, _ = _load()
     proj = next((o for o in projects if o.get("name") == project_name), None)
     if proj is None:
         return []
-    pid = proj["id"]
     out = []
-    for s in projects:
-        if pid not in _objs(_props(s), "gsdo_parent_project") or _is_done(s):
+    for s in _all_sub_projects(proj["id"], projects):
+        if _is_done(s):
             continue
         ctx = _txt(_props(s), "gsdo_context")
         if not _is_structured(ctx):
