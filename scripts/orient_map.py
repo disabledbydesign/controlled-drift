@@ -332,17 +332,13 @@ def render_map(project_name):
     goal_ids = _objs(pprops, "gsdo_goal_link")
     goal = next((o for o in goals if o["id"] in goal_ids), None)
 
-    # The map is ONE ordered arc — streams in trajectory order (the meta-arc).
-    # Finished streams are NOT shown (a dead-end count can't reach the bigger
-    # picture, and listing all of it breaks long projects — see docs/map_design.md;
-    # finished work belongs in the project wins mirror, to be designed).
-    streams = [o for o in projects
-               if pid in _objs(_props(o), "gsdo_parent_project") and not _is_done(o)]
-
-    # Parallel is the default. Hard dependencies (Depends on field) are enforced by
-    # topological sort. Stream order provides soft sequencing within a depth tier when
-    # explicitly set; absent = truly parallel. See docs/map_design.md.
-    sorted_streams, depths = _topo_sort_streams(streams)
+    # Include done streams in the topo sort so active streams that depended on them
+    # get correct depth values. Split for display: done streams show as a compact
+    # trajectory line (✓ name · name) at the top; active streams render below.
+    all_streams = [o for o in projects if pid in _objs(_props(o), "gsdo_parent_project")]
+    all_sorted, depths = _topo_sort_streams(all_streams)
+    done_sorted = [s for s in all_sorted if _is_done(s)]
+    sorted_streams = [s for s in all_sorted if not _is_done(s)]
 
     lines = []
 
@@ -361,8 +357,14 @@ def render_map(project_name):
     lines.append(f"THE ARC — {proj['name']}:")
     lines.append("")
 
+    if done_sorted:
+        names = " · ".join(s["name"] for s in done_sorted)
+        lines.append(f"  ✓ {names}")
+        lines.append("")
+
     if not sorted_streams:
-        lines.append("  No work streams yet.")
+        if not done_sorted:
+            lines.append("  No work streams yet.")
         return "\n".join(lines).rstrip()
 
     # Build groups: consecutive streams at the same depth + same Stream order are parallel.

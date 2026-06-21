@@ -282,7 +282,7 @@ def test_render_stream_no_rationale_section_when_absent(monkeypatch):
     out = om.render_stream("My Stream")
     assert "Why here:" not in out
 
-def test_done_stream_not_shown_on_map(monkeypatch):
+def test_done_stream_shows_as_trajectory_line(monkeypatch):
     proj = _make_obj("My Project", "gsdo_project", "p1")
     active = _make_obj("Active thing", "gsdo_project", "s1",
                        props={"gsdo_parent_project": ["p1"]})
@@ -291,8 +291,34 @@ def test_done_stream_not_shown_on_map(monkeypatch):
     _patch_load([], [proj, active, done], monkeypatch)
     out = om.render_map("My Project")
     assert "Active thing" in out
-    assert "Done thing" not in out      # finished work is off the map
-    assert "Finished" not in out
+    assert "✓ Done thing" in out        # done stream appears as compact trajectory line
+    assert "Finished" not in out        # not in a "Finished:" block — just the line
+
+
+def test_done_stream_not_in_active_block(monkeypatch):
+    proj = _make_obj("My Project", "gsdo_project", "p1")
+    active = _make_obj("Active thing", "gsdo_project", "s1",
+                       props={"gsdo_parent_project": ["p1"]})
+    done = _make_obj("Done thing", "gsdo_project", "s2",
+                     props={"gsdo_parent_project": ["p1"], "engagement": "Done"})
+    _patch_load([], [proj, active, done], monkeypatch)
+    out = om.render_map("My Project")
+    # Done thing should appear only once (the compact line), not again in active block
+    assert out.count("Done thing") == 1
+
+
+def test_multiple_done_streams_joined_with_dots(monkeypatch):
+    proj = _make_obj("My Project", "gsdo_project", "p1")
+    d1 = _make_obj("Foundation work", "gsdo_project", "s1",
+                   props={"gsdo_parent_project": ["p1"], "engagement": "Done"})
+    d2 = _make_obj("Data model build", "gsdo_project", "s2",
+                   props={"gsdo_parent_project": ["p1"], "engagement": "Done"})
+    _patch_load([], [proj, d1, d2], monkeypatch)
+    out = om.render_map("My Project")
+    assert "✓" in out
+    assert "Foundation work" in out
+    assert "Data model build" in out
+    assert " · " in out
 
 def test_render_map_goal_header(monkeypatch):
     goal = _make_obj("Builder practice", "gsdo_goal", "g1",

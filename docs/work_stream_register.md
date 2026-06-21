@@ -33,6 +33,8 @@ For a **finished** stream, don't write a description — mark its Engagement **D
 - **No jargon.** "clock-time-anchored", "capacity-paced output", "scaffolded", "pipeline seam" — out.
 - **No coded status words.** "held", "live edge", "horizon", "backburner" used as labels she has to translate. The circle (● / ○) already carries active-vs-later; don't restate it in words.
 - **The name names the body of work, short (4–8 words).** A feature/experience description is fine *as the `what it is` line*, but it is not the name. The name answers "what is this chunk of work," the line answers "what does it do for me."
+- **The name must carry meaning on its own.** Reading just the name, June should know what that stream is about — not need to read the description to decode it. If the name doesn't tell her what the work involves, it's too abstract or too compressed. Test: could you hand this name to someone unfamiliar with the project and have them know what the work is? If not, make the name more specific.
+- **One concern per stream.** If a stream name has an "and" connecting two unrelated things, it's two streams. Compressing distinct concerns into one stream hides the shape of the work and makes the map unreadable. When concerns genuinely belong together (they'd never move independently), a category name is fine — but name what the category actually is, not a list of its contents.
 
 ## Good vs. bad — the same stream, both ways
 
