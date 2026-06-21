@@ -56,7 +56,11 @@ def read_binding(start_dir=None):
 
 def load_context(start_dir=None):
     """Resolve the bound Goal/Projects live from Anytype (the slice to pre-load).
-    Returns {"goal": obj|None, "projects": [obj,...], "binding": dict} or None."""
+    Returns {"goal": obj|None, "goals": [obj,...], "projects": [obj,...], "binding": dict} or None.
+
+    Handles both single-goal format (binds_to.goal) and multi-goal format (binds_to.goals).
+    "goal" in the return dict is the first goal (for backwards compatibility); "goals" is all of them.
+    """
     b = read_binding(start_dir)
     if not b:
         return None
@@ -69,9 +73,16 @@ def load_context(start_dir=None):
         return call("GET", f"/spaces/{sid}/objects/{oid}")[1].get("object")
 
     bt = b.get("binds_to", {})
-    goal = fetch(bt["goal"]) if bt.get("goal") else None
+    # Support both "goal" (single) and "goals" (multi-goal) formats
+    if bt.get("goal"):
+        goals = [g_obj for g_obj in [fetch(bt["goal"])] if g_obj]
+    elif bt.get("goals"):
+        goals = [g_obj for g_obj in (fetch(r) for r in bt["goals"]) if g_obj]
+    else:
+        goals = []
+    goal = goals[0] if goals else None
     projects = [p for p in (fetch(r) for r in bt.get("projects", [])) if p]
-    return {"goal": goal, "projects": projects, "binding": b}
+    return {"goal": goal, "goals": goals, "projects": projects, "binding": b}
 
 
 # ---- WORKFLOW half: set up a Project + integrate the folder ----
@@ -149,16 +160,35 @@ def _write_claude_md(folder, project_name, goal_name=None):
 
 
 def init_binding(folder, project_name, goal_id=None, goal_name=None,
+                 goal_ids=None, goal_names=None,
                  parent_project_id=None, project_context=None, note=None):
     """Set up the Project (create if absent, idempotent) and write the marker.
+
+    Supports single goal (goal_id + goal_name) or multiple goals (goal_ids + goal_names lists).
+    goal_ids/goal_names take precedence if both are provided.
 
     Auto-detects a parent .gsdot (walking up from folder's parent) and sets
     Parent project on the new Project — no question asked, mirrors filesystem
     containment. Pass parent_project_id explicitly to override.
 
     Confirms with a live read-back before dinging (the operating guard).
+
+    IMPORTANT: Always call this function for binding creation. Never write inline Python
+    to create the .gsdot directly — this function handles read-back, CLAUDE.md, and ding.
+    If this function doesn't support your case, surface the gap rather than working around it.
     """
     sid = g.get_space_id()
+
+    # Normalize goal args — multi-goal takes precedence
+    if goal_ids:
+        _goal_ids = list(goal_ids)
+        _goal_names = list(goal_names) if goal_names else [""] * len(_goal_ids)
+    elif goal_id:
+        _goal_ids = [goal_id]
+        _goal_names = [goal_name or ""]
+    else:
+        _goal_ids = []
+        _goal_names = []
 
     # Auto-detect parent if not provided
     if parent_project_id is None:
@@ -172,8 +202,8 @@ def init_binding(folder, project_name, goal_id=None, goal_name=None,
         print(f"  [reuse] Project {project_name!r} ({pid[:12]})")
     else:
         props = {"Engagement": "Steady"}
-        if goal_id:
-            props["Goal link"] = [goal_id]
+        if _goal_ids:
+            props["Goal link"] = _goal_ids
         if parent_project_id:
             props["Parent project"] = [parent_project_id]
         if project_context:
@@ -188,8 +218,11 @@ def init_binding(folder, project_name, goal_id=None, goal_name=None,
 
     # 3. integrate the folder — write the marker
     binds_to = {"projects": [{"id": pid, "name": project_name}]}
-    if goal_id:
-        binds_to["goal"] = {"id": goal_id, "name": goal_name}
+    if len(_goal_ids) == 1:
+        binds_to["goal"] = {"id": _goal_ids[0], "name": _goal_names[0]}
+    elif len(_goal_ids) > 1:
+        binds_to["goals"] = [{"id": gid, "name": gname}
+                              for gid, gname in zip(_goal_ids, _goal_names)]
     marker = {"system": "Controlled Drift", "binds_to": binds_to}
     if note:
         marker["note"] = note
@@ -200,12 +233,91 @@ def init_binding(folder, project_name, goal_id=None, goal_name=None,
     print(f"  [marker] {marker_path}")
 
     # 4b. write or update CLAUDE.md at the folder root
-    _write_claude_md(folder, project_name, goal_name)
+    goal_name_display = " + ".join(n for n in _goal_names if n) or None
+    _write_claude_md(folder, project_name, goal_name_display)
     print(f"  [claude.md] updated at {os.path.join(os.path.abspath(folder), 'CLAUDE.md')}")
 
     # 4. confirm + ding (only now)
     notify.ding()
     return {"project_id": pid, "marker_path": marker_path}
+
+
+def repair_binding(folder):
+    """Check a .gsdot binding for known issues and fix what can be fixed automatically.
+
+    Checks:
+    - .gsdot exists and is valid JSON
+    - goals/goal field is readable by load_context()
+    - CLAUDE.md has the Controlled Drift binding section
+    - Project IDs in .gsdot resolve in Anytype
+
+    Fixes automatically: missing CLAUDE.md section.
+    Reports but does not auto-fix: missing/unresolvable project IDs (need init_binding re-run).
+    """
+    folder = os.path.abspath(folder)
+    marker_path = find_marker(folder)
+    if not marker_path:
+        print(f"[error] no .gsdot found from {folder}")
+        return
+
+    print(f"[check] binding: {marker_path}")
+
+    # 1. Parse .gsdot
+    try:
+        with open(marker_path) as f:
+            marker = json.load(f)
+    except Exception as e:
+        print(f"[error] .gsdot is not valid JSON: {e}")
+        return
+
+    bt = marker.get("binds_to", {})
+
+    # 2. Check goals
+    if bt.get("goals"):
+        print(f"[ok]    goals (multi): {[g.get('name') for g in bt['goals']]}")
+    elif bt.get("goal"):
+        print(f"[ok]    goal (single): {bt['goal'].get('name')}")
+    else:
+        print("[warn]  no goal or goals field — binding has no goal context")
+
+    # 3. Check projects resolve in Anytype
+    sid = g.get_space_id()
+    for proj in bt.get("projects", []):
+        pid, pname = proj.get("id"), proj.get("name")
+        try:
+            obj = call("GET", f"/spaces/{sid}/objects/{pid}")[1].get("object", {})
+            if obj.get("name") == pname:
+                print(f"[ok]    project resolves: {pname}")
+            else:
+                print(f"[warn]  project ID {pid[:12]} resolves to {obj.get('name')!r}, expected {pname!r}")
+        except Exception as e:
+            print(f"[error] project ID {pid[:12] if pid else '(none)'} did not resolve: {e}")
+
+    # 4. Check + repair CLAUDE.md
+    claude_path = os.path.join(os.path.dirname(marker_path), "CLAUDE.md")
+    if os.path.isfile(claude_path):
+        with open(claude_path) as f:
+            content = f.read()
+        if _CLAUDE_MD_MARKER in content:
+            print(f"[ok]    CLAUDE.md has Controlled Drift binding section")
+        else:
+            print(f"[fix]   CLAUDE.md missing binding section — writing it now")
+            projects = bt.get("projects", [])
+            pname = projects[0]["name"] if projects else "(unknown project)"
+            goals = bt.get("goals", []) or ([bt["goal"]] if bt.get("goal") else [])
+            goal_display = " + ".join(g.get("name", "") for g in goals) or None
+            _write_claude_md(os.path.dirname(marker_path), pname, goal_display)
+            print(f"[ok]    CLAUDE.md binding section written")
+    else:
+        print(f"[fix]   no CLAUDE.md found — creating it")
+        projects = bt.get("projects", [])
+        pname = projects[0]["name"] if projects else "(unknown project)"
+        goals = bt.get("goals", []) or ([bt["goal"]] if bt.get("goal") else [])
+        goal_display = " + ".join(g.get("name", "") for g in goals) or None
+        _write_claude_md(os.path.dirname(marker_path), pname, goal_display)
+        print(f"[ok]    CLAUDE.md created")
+
+    print("[done]  repair check complete")
 
 
 if __name__ == "__main__":
@@ -225,6 +337,9 @@ if __name__ == "__main__":
     p_init.add_argument("--context", default=None)
     p_init.add_argument("--note", default=None)
 
+    p_repair = sub.add_parser("repair", help="check binding for issues and fix what can be fixed automatically")
+    p_repair.add_argument("folder", nargs="?", default=None)
+
     args = ap.parse_args()
     if args.cmd == "show":
         ctx = load_context(args.folder)
@@ -233,8 +348,9 @@ if __name__ == "__main__":
         else:
             b = ctx["binding"]
             print(f"binding: {b['_marker_path']}")
-            if ctx["goal"]:
-                print(f"  goal:    {ctx['goal'].get('name')}")
+            if ctx["goals"]:
+                for g_obj in ctx["goals"]:
+                    print(f"  goal:    {g_obj.get('name')}")
             for p in ctx["projects"]:
                 print(f"  project: {p.get('name')}")
             if b.get("note"):
@@ -245,5 +361,7 @@ if __name__ == "__main__":
                      parent_project_id=args.parent_project_id,
                      project_context=args.context, note=args.note)
         print("[done] binding set up")
+    elif args.cmd == "repair":
+        repair_binding(args.folder or os.getcwd())
     else:
         ap.print_help()
