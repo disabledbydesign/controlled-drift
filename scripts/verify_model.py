@@ -8,7 +8,7 @@ EXPECTED = {
     "Goal":      ["Reaching for", "Horizon", "Goal status", "Barriers", "Context"],
     "Project":   ["Goal link", "Description", "Reaching for", "Project status",
                   "Deadline", "Parent project", "Excitement level", "Relevant docs",
-                  "Affective", "Barriers", "Context"],
+                  "Affective", "Barriers", "Context", "Depends on", "Arc position rationale"],
     "task":      ["Duration min", "Needs clarifying", "Task status", "Blocked on", "Affective",
                   "Access conditions", "Access notes", "AI autonomous", "Last surfaced", "Context",
                   "Due date", "Linked Projects"],   # Due date / Linked Projects = built-ins (replace custom Deadline/Project link)

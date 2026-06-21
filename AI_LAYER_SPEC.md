@@ -4,7 +4,7 @@
 
 **Name (decided session 5):** **Controlled Drift** names the *whole system* — and especially the AI alignment layer that is the real contribution. It's the name for professional / CV / public contexts. The "controlled drift" is read in the **motorsport** sense: a high-skill maneuver where you intentionally break traction and still steer the corner — *skilled nonlinear movement, not suppression of it*. **GSDO (get-shit-done-o-tron)** names the **deterministic mechanics layer** — the Python core + Anytype store + scheduler that just reliably *gets shit done*, no judgment. The productivity-framed name lands honestly where it's literally true (the dumb reliable executor); the thesis-name covers the whole. *(Note: "GSDO" is used as established shorthand throughout this spec and the repo; read it as the working/mechanics-layer term. The system is Controlled Drift.)*
 
-**Where to start if you're building:** read §0 (why), §2 (data model), §3 (the five guards), then §9 (build sequencing + what v1 actually is). The subsystem stubs (§8) are not yet build-ready — §9 says which one to design first.
+**Where to start if you're building:** read §0 (why), §2 (data model), §3 (the six guards), then §9 (build sequencing + what v1 actually is). The subsystem stubs (§8) are not yet build-ready — §9 says which one to design first.
 
 **Session context (read for depth):** `Parameters_v2.md` (formal brief + 16 parameters), `DESIGN_v1_emerging.md` (synthesis decisions + June's `//` margin notes — keep them), `JULIA_FRAMEWORK.md` (Julia Cordero's ADHD system — the porting source, credited), `SUBSTRATE_eval.md` (Anytype validated 14/14 as store), `EVAL_adopt_adapt_build.md` (ADHD tool field scan), `REFRAME_DESIGN_INDEX.md` (reading guide to the Reframe codebase).
 
@@ -210,7 +210,7 @@ Routing rule for the weeding gate: an adopted *behavioral discipline* → `Strat
 
 ---
 
-## 3. The five guards (non-negotiable)
+## 3. The six guards (non-negotiable)
 
 Satisfy/violate boundaries. Violating one means the tool reproduced what it was built to refuse. Each names what violates it, because a requirement you can't violate is decoration.
 
@@ -223,6 +223,8 @@ Satisfy/violate boundaries. Violating one means the tool reproduced what it was 
 **4. The alignment check must not become surveillance.** Drift is *offered* ("this looks like it might be pulling away from what you said this is for — intentional?"), never scolded, never blocked. Drift may be the goal evolving — returning to the same territory with deeper understanding is valid progress. The system asks; it doesn't enforce. *Violates:* nagging, blocking, automatic re-routing, treating alignment as a performance metric.
 
 **5. Don't flatten June's situated specifics.** A task/project/day is never collapsed to a tidy number. Generative/relational description over scalar scoring — the master principle. *Violates:* any output format that produces a single score for June's work, state, or day.
+
+**6. June needs to understand why — not just told to obey.** When the system makes a proposal, ordering, recommendation, or any decision that shapes what June sees or does, the reasoning must be present, complete, and human-readable — not compressed into a one-liner that collapses the logic, not implicit in a number she has to decode, not hidden behind a result she'd have to reconstruct. Full reasoning surfaces in conversation when a decision is made; it persists in a stored, editable field afterward. This is not a UX nicety — it is a direct EF accessibility requirement. Reconstructing implicit reasoning is exactly the cognitive load this system exists to offload. *Violates:* any ordering, ranking, or recommendation whose reasoning is only implied; any one-line summary compressing multi-sentence logic into jargon; any proposal presented as "the answer" without the path that produced it; storing a decision without storing why.
 
 ---
 

@@ -114,10 +114,23 @@ def _is_later(stream):
     return _sel(_props(stream), "engagement") == "Backburner"
 
 def _stream_order(stream):
-    """The stream's place in the project arc (the meta-arc). Read by NAME —
-    'Stream order' key is auto-generated. Streams sharing a number are parallel."""
+    """Soft-sequence override. Read by name — key is auto-generated.
+    Streams sharing a number are parallel within their depth tier.
+    Optional: when absent, parallel is the default."""
     by_name = {p.get("name"): p for p in stream.get("properties", [])}
     return (by_name.get("Stream order") or {}).get("number")
+
+def _dep_ids(stream):
+    """IDs of streams this stream hard-depends on — must be done before this one starts."""
+    by_name = {p.get("name"): p for p in stream.get("properties", [])}
+    raw = (by_name.get("Depends on") or {}).get("objects") or []
+    return _id_list(raw)
+
+def _arc_rationale(stream):
+    """Plain-language reasoning for why this stream sits where it does in the arc.
+    Written by the AI when proposing ordering; editable by June; shown in render_stream."""
+    by_name = {p.get("name"): p for p in stream.get("properties", [])}
+    return (by_name.get("Arc position rationale") or {}).get("text")
 
 
 # ---------------------------------------------------------------------------
@@ -207,6 +220,48 @@ def _arc_lines(stream, tasks):
 
 
 # ---------------------------------------------------------------------------
+# Stream ordering — dependency-vs-sequence (parallel default)
+# ---------------------------------------------------------------------------
+
+def _topo_sort_streams(streams):
+    """Sort streams with hard-dependency enforcement; parallel is the default.
+
+    Returns (sorted_streams, depths) where depths maps stream_id → int.
+    Depth 0 = no deps within this set; depth N = max(dep depths) + 1.
+    Streams at the same depth have no ordering relationship — they are parallel.
+    Within a depth tier, Stream order provides soft sequencing when present;
+    when absent, streams sort by name (all remain parallel).
+
+    Cycles in the dependency graph are broken gracefully: the cycle node is
+    treated as depth 0 so rendering never crashes.
+    """
+    stream_ids = {s["id"] for s in streams}
+    by_id = {s["id"]: s for s in streams}
+    depths: dict = {}
+
+    def _get_depth(sid, visiting=frozenset()):
+        if sid in depths:
+            return depths[sid]
+        if sid in visiting:          # cycle — treat as root
+            depths[sid] = 0
+            return 0
+        local_deps = [d for d in _dep_ids(by_id[sid]) if d in stream_ids]
+        depths[sid] = (0 if not local_deps
+                       else max(_get_depth(d, visiting | {sid}) for d in local_deps) + 1)
+        return depths[sid]
+
+    for s in streams:
+        _get_depth(s["id"])
+
+    def _sort_key(s):
+        depth = depths.get(s["id"], 0)
+        order = _stream_order(s)
+        return (depth, float("inf") if order is None else order, s["name"])
+
+    return sorted(streams, key=_sort_key), depths
+
+
+# ---------------------------------------------------------------------------
 # Data loading
 # ---------------------------------------------------------------------------
 
@@ -282,7 +337,11 @@ def render_map(project_name):
     # finished work belongs in the project wins mirror, to be designed).
     streams = [o for o in projects
                if pid in _objs(_props(o), "gsdo_parent_project") and not _is_done(o)]
-    streams.sort(key=lambda s: (_stream_order(s) is None, _stream_order(s) or 0, s["name"]))
+
+    # Parallel is the default. Hard dependencies (Depends on field) are enforced by
+    # topological sort. Stream order provides soft sequencing within a depth tier when
+    # explicitly set; absent = truly parallel. See docs/map_design.md.
+    sorted_streams, depths = _topo_sort_streams(streams)
 
     lines = []
 
@@ -301,19 +360,36 @@ def render_map(project_name):
     lines.append(f"THE ARC — {proj['name']}:")
     lines.append("")
 
-    if not streams:
+    if not sorted_streams:
         lines.append("  No work streams yet.")
         return "\n".join(lines).rstrip()
 
-    # Walk the ordered streams; streams sharing a Stream order number are parallel.
-    i, n = 0, len(streams)
+    # Build groups: consecutive streams at the same depth + same Stream order are parallel.
+    groups = []
+    i, n = 0, len(sorted_streams)
     while i < n:
-        order = _stream_order(streams[i])
+        s = sorted_streams[i]
+        cur_depth = depths.get(s["id"], 0)
+        cur_order = _stream_order(s)
         j = i + 1
-        while j < n and _stream_order(streams[j]) == order:
+        while j < n:
+            d2 = depths.get(sorted_streams[j]["id"], 0)
+            o2 = _stream_order(sorted_streams[j])
+            if d2 != cur_depth or o2 != cur_order:
+                break
             j += 1
-        group = streams[i:j]
-        if order is not None and len(group) > 1:
+        groups.append((cur_depth, cur_order, sorted_streams[i:j]))
+        i = j
+
+    multi_group = len(groups) > 1
+
+    for _depth, cur_order, group in groups:
+        # Show "running alongside" when multiple streams are in this group AND either:
+        # (a) there are multiple groups (some sequential structure to distinguish from), or
+        # (b) an explicit Stream order was set (user chose to group them explicitly).
+        # When everything is parallel by default (single group, no explicit order), the
+        # separator adds no information and is omitted.
+        if len(group) > 1 and (multi_group or cur_order is not None):
             lines.append("  — running alongside —")
         for s in group:
             lines.append(_header(s))
@@ -329,7 +405,6 @@ def render_map(project_name):
                     lines.append("")
                     lines.extend(detail)
             lines.append("")
-        i = j
 
     return "\n".join(lines).rstrip()
 
@@ -342,6 +417,10 @@ def render_stream(stream_name):
         return f"(no work stream named {stream_name!r} found)"
 
     lines = [_header(s)]
+    rationale = _arc_rationale(s)
+    if rationale:
+        lines.append("")
+        lines += _wrap("Why here:", rationale)
     detail = _detail_lines(s, tasks)
     if detail:
         lines.append("")

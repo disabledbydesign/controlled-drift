@@ -25,10 +25,16 @@ def build_project():
                                       ["Steady", "Sprint", "Hyperfixation",
                                        "Needs Clarifying", "Backburner", "Done"])
     p_eng_notes   = g.ensure_property("Engagement notes", "text")   # open: thresholds, cadence, conditions
+    # Arc ordering — dependency-vs-sequence refinement (guard #6: June needs to understand why).
+    # Depends on: hard dependency links (X can't start until Y is done; enforced in orient_map.py).
+    # Arc position rationale: full plain-language reasoning for where this stream sits in the arc.
+    # Written by the AI when proposing ordering; editable by June; read by render_stream.
+    p_depends     = g.ensure_property("Depends on", "objects")
+    p_arc_why     = g.ensure_property("Arc position rationale", "text")
     key = g.ensure_type("Project", "Projects",
                         [p_goal_link, p_description, p_reaching, p_deadline,
                          p_parent, p_excitement, p_docs, p_affective, p_barriers,
-                         p_context, p_engagement, p_eng_notes])
+                         p_context, p_engagement, p_eng_notes, p_depends, p_arc_why])
     print(f"[ok] Project type ready: key={key}")
     return key
 

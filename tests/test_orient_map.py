@@ -20,6 +20,10 @@ def _make_obj(name, type_key, oid, props=None):
             prop_list.append({"key": key, "objects": val})
         elif key == "Stream order":
             prop_list.append({"key": "stream_order", "name": "Stream order", "number": val})
+        elif key == "Depends on" and isinstance(val, list):
+            prop_list.append({"key": "depends_on", "name": "Depends on", "objects": val})
+        elif key == "Arc position rationale" and isinstance(val, str):
+            prop_list.append({"key": "arc_rationale", "name": "Arc position rationale", "text": val})
         elif isinstance(val, str):
             prop_list.append({"key": key, "text": val})
     return {"id": oid, "name": name, "type": {"key": type_key},
@@ -184,6 +188,99 @@ def test_sequential_streams_no_alongside_note(monkeypatch):
     _patch_load([], [proj, a, b], monkeypatch)
     out = om.render_map("My Project")
     assert "running alongside" not in out
+
+
+# ---------------------------------------------------------------------------
+# Dependency ordering (parallel-default)
+# ---------------------------------------------------------------------------
+
+def test_dep_ids_empty_when_no_field():
+    s = _make_obj("S", "gsdo_project", "1")
+    assert om._dep_ids(s) == []
+
+def test_dep_ids_reads_list():
+    s = _make_obj("S", "gsdo_project", "1", props={"Depends on": ["a", "b"]})
+    assert om._dep_ids(s) == ["a", "b"]
+
+def test_arc_rationale_none_when_absent():
+    s = _make_obj("S", "gsdo_project", "1")
+    assert om._arc_rationale(s) is None
+
+def test_arc_rationale_reads_text():
+    s = _make_obj("S", "gsdo_project", "1",
+                  props={"Arc position rationale": "because it unlocks everything else"})
+    assert om._arc_rationale(s) == "because it unlocks everything else"
+
+def test_dependency_enforces_order(monkeypatch):
+    """Stream B depends on A — A must render before B regardless of name order."""
+    proj = _make_obj("My Project", "gsdo_project", "p1")
+    a = _make_obj("Zzz First", "gsdo_project", "s1",
+                  props={"gsdo_parent_project": ["p1"], "engagement": "Backburner"})
+    b = _make_obj("Aaa Second", "gsdo_project", "s2",
+                  props={"gsdo_parent_project": ["p1"], "engagement": "Backburner",
+                         "Depends on": ["s1"]})
+    _patch_load([], [proj, a, b], monkeypatch)
+    out = om.render_map("My Project")
+    assert out.index("Zzz First") < out.index("Aaa Second")
+
+def test_dependency_two_groups_no_alongside_for_singletons(monkeypatch):
+    """With a dep, we get two groups of 1 — no running alongside (groups of 1 don't get it)."""
+    proj = _make_obj("My Project", "gsdo_project", "p1")
+    a = _make_obj("Stream A", "gsdo_project", "s1",
+                  props={"gsdo_parent_project": ["p1"], "engagement": "Backburner"})
+    b = _make_obj("Stream B", "gsdo_project", "s2",
+                  props={"gsdo_parent_project": ["p1"], "engagement": "Backburner",
+                         "Depends on": ["s1"]})
+    _patch_load([], [proj, a, b], monkeypatch)
+    out = om.render_map("My Project")
+    assert out.index("Stream A") < out.index("Stream B")
+    assert "running alongside" not in out
+
+def test_parallel_default_no_separator_when_all_parallel(monkeypatch):
+    """No deps, no Stream order set — everything parallel by default; no separator needed."""
+    proj = _make_obj("My Project", "gsdo_project", "p1")
+    a = _make_obj("Alpha", "gsdo_project", "s1",
+                  props={"gsdo_parent_project": ["p1"], "engagement": "Backburner"})
+    b = _make_obj("Beta", "gsdo_project", "s2",
+                  props={"gsdo_parent_project": ["p1"], "engagement": "Backburner"})
+    _patch_load([], [proj, a, b], monkeypatch)
+    out = om.render_map("My Project")
+    assert "Alpha" in out
+    assert "Beta" in out
+    assert "running alongside" not in out
+
+def test_dep_cycle_doesnt_crash(monkeypatch):
+    """Cyclic dependencies are broken gracefully — both streams still render."""
+    proj = _make_obj("My Project", "gsdo_project", "p1")
+    a = _make_obj("Stream A", "gsdo_project", "s1",
+                  props={"gsdo_parent_project": ["p1"], "Depends on": ["s2"],
+                         "engagement": "Backburner"})
+    b = _make_obj("Stream B", "gsdo_project", "s2",
+                  props={"gsdo_parent_project": ["p1"], "Depends on": ["s1"],
+                         "engagement": "Backburner"})
+    _patch_load([], [proj, a, b], monkeypatch)
+    out = om.render_map("My Project")
+    assert "Stream A" in out
+    assert "Stream B" in out
+
+
+# ---------------------------------------------------------------------------
+# Arc position rationale in render_stream
+# ---------------------------------------------------------------------------
+
+def test_render_stream_shows_arc_rationale(monkeypatch):
+    s = _make_obj("My Stream", "gsdo_project", "s1",
+                  props={"Arc position rationale": "this one must come first because it builds the foundation"})
+    _patch_load([], [s], monkeypatch)
+    out = om.render_stream("My Stream")
+    assert "Why here:" in out
+    assert "must come first" in out   # text wraps — check a phrase within one line
+
+def test_render_stream_no_rationale_section_when_absent(monkeypatch):
+    s = _make_obj("My Stream", "gsdo_project", "s1")
+    _patch_load([], [s], monkeypatch)
+    out = om.render_stream("My Stream")
+    assert "Why here:" not in out
 
 def test_done_stream_not_shown_on_map(monkeypatch):
     proj = _make_obj("My Project", "gsdo_project", "p1")
