@@ -255,8 +255,9 @@ def _topo_sort_streams(streams):
 
     def _sort_key(s):
         depth = depths.get(s["id"], 0)
+        later = _is_later(s)     # active (False) sorts before later (True) at same depth
         order = _stream_order(s)
-        return (depth, float("inf") if order is None else order, s["name"])
+        return (depth, later, float("inf") if order is None else order, s["name"])
 
     return sorted(streams, key=_sort_key), depths
 

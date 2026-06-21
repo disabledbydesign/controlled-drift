@@ -100,33 +100,52 @@ _CLAUDE_MD_MARKER = "## Controlled Drift binding"
 
 
 def _write_claude_md(folder, project_name, goal_name=None):
-    """Write or append a Controlled Drift section to CLAUDE.md.
-    Idempotent: if the section already exists, does nothing.
+    """Write or replace the Controlled Drift section in CLAUDE.md.
+
+    Replaces an existing section rather than skipping it, so re-running
+    bind refreshes stale agent instructions when the schema changes.
     """
     path = os.path.join(os.path.abspath(folder), "CLAUDE.md")
-    section_lines = [
+    goal_str = f" (Goal: {goal_name})" if goal_name else ""
+    body = "\n".join([
+        f"Bound to → Project: **{project_name}**{goal_str}.",
+        "Capture any task/commitment mention here to Anytype under this project by default.",
+        "The `drift` skill is active — orient, capture, weed, plan. June never names a function.",
+        "Marker: `.gsdot` in this directory.",
         "",
-        _CLAUDE_MD_MARKER,
-        "",
-        f"This repo is bound to Controlled Drift → Project: {project_name}"
-        + (f" (Goal: {goal_name})" if goal_name else "") + ".",
-        f"When working here: capture any todo/commitment mentions to Anytype "
-        f"under {project_name!r} by default.",
-        "The `drift` skill is active here — June never has to name a function.",
-        "Binding: `.gsdot` in this directory.",
-        "",
-    ]
-    section = "\n".join(section_lines)
+        "**When creating a work stream (sub-project) here:**",
+        "- Set `Depends on` (objects) for hard dependencies only — streams that genuinely",
+        "  cannot start until another is done. Parallel is the default; leave unset when",
+        "  there is no real dependency. The AI can propose candidates from context.",
+        "- Write `Arc position rationale` (text) — full plain sentences (not a one-liner)",
+        "  explaining where this stream sits in the project arc and why. Guard #6: June needs",
+        "  to understand the reasoning, not just see the result. Stored here so it persists",
+        "  across sessions without being re-derived.",
+    ])
+
+    def _build(before, after=""):
+        sep = "\n\n" if before else ""
+        tail = ("\n" + after.lstrip("\n")) if after else ""
+        return before + sep + _CLAUDE_MD_MARKER + "\n\n" + body + "\n" + tail
+
     if os.path.isfile(path):
         with open(path) as f:
             content = f.read()
         if _CLAUDE_MD_MARKER in content:
-            return  # Already present — do nothing
-        with open(path, "a") as f:
-            f.write(section)
+            # Replace existing section — re-running updates stale content
+            idx = content.index(_CLAUDE_MD_MARKER)
+            before = content[:idx].rstrip()
+            rest = content[idx:]
+            nxt = rest.find("\n## ", 1)
+            after = "" if nxt == -1 else rest[nxt:]
+            with open(path, "w") as f:
+                f.write(_build(before, after))
+        else:
+            with open(path, "a") as f:
+                f.write("\n\n" + _CLAUDE_MD_MARKER + "\n\n" + body + "\n")
     else:
         with open(path, "w") as f:
-            f.write(section.lstrip())
+            f.write(_build(""))
 
 
 def init_binding(folder, project_name, goal_id=None, goal_name=None,
