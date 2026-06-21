@@ -320,8 +320,112 @@ def _steps_for(stream_id, tasks):
 # Public API
 # ---------------------------------------------------------------------------
 
+def _children_of(parent_id, all_projects):
+    """Return all projects whose Parent project includes parent_id."""
+    return [p for p in all_projects
+            if parent_id in _objs(_props(p), "gsdo_parent_project")]
+
+
+def _append_flat_streams(lines, active_sorted, tasks, depths):
+    """Render active/later streams as a flat topo-ordered list (no groupings)."""
+    groups = []
+    i, n = 0, len(active_sorted)
+    while i < n:
+        s = active_sorted[i]
+        cur_depth = depths.get(s["id"], 0)
+        cur_order = _stream_order(s)
+        j = i + 1
+        while j < n:
+            d2 = depths.get(active_sorted[j]["id"], 0)
+            o2 = _stream_order(active_sorted[j])
+            if d2 != cur_depth or o2 != cur_order:
+                break
+            j += 1
+        groups.append((cur_depth, cur_order, active_sorted[i:j]))
+        i = j
+
+    multi_group = len(groups) > 1
+
+    for _depth, cur_order, group in groups:
+        # Show "running alongside" when multiple streams are in this group AND either:
+        # (a) there are multiple groups (some sequential structure to distinguish from), or
+        # (b) an explicit Stream order was set (user chose to group them explicitly).
+        if len(group) > 1 and (multi_group or cur_order is not None):
+            lines.append("  — running alongside —")
+        for s in group:
+            lines.append(_header(s))
+            if _is_later(s):
+                what_it_is, _, _ = _parse_context(_txt(_props(s), "gsdo_context"))
+                if what_it_is:
+                    lines += _wrap("What it is:", what_it_is)
+            else:
+                detail = _detail_lines(s, tasks)
+                if detail:
+                    lines.append("")
+                    lines.extend(detail)
+            lines.append("")
+
+
+def _append_grouped_streams(lines, active_sorted, grouping_ids, all_projects, tasks):
+    """Render streams with grouping structure.
+
+    Groupings (sub-projects that have their own children) appear as section
+    headers; their children are shown indented inside them. Leaf streams at
+    the top level render normally alongside grouping sections.
+    """
+    for s in active_sorted:
+        lines.append(_header(s))
+        if s["id"] in grouping_ids:
+            # Section: show children inside the grouping
+            children = _children_of(s["id"], all_projects)
+            children_sorted, _ = _topo_sort_streams(children)
+            done_ch = [c for c in children_sorted if _is_done(c)]
+            active_ch = [c for c in children_sorted if not _is_done(c)]
+            lines.append("")
+            if done_ch:
+                cnames = " · ".join(c["name"] for c in done_ch)
+                lines.append(f"     ✓ {cnames}")
+                lines.append("")
+            for c in active_ch:
+                lines.append("  " + _header(c))
+                if _is_later(c):
+                    what_it_is, _, _ = _parse_context(_txt(_props(c), "gsdo_context"))
+                    if what_it_is:
+                        for ln in _wrap("What it is:", what_it_is):
+                            lines.append("  " + ln)
+                else:
+                    what_it_is, _, _ = _parse_context(_txt(_props(c), "gsdo_context"))
+                    if what_it_is:
+                        lines.append("")
+                        for ln in _wrap("What it is:", what_it_is):
+                            lines.append("  " + ln)
+                    arc = _arc_lines(c, tasks)
+                    if arc:
+                        lines.append("")
+                        for ln in arc:
+                            lines.append("  " + ln)
+                lines.append("")
+        else:
+            # Leaf stream at top level — render normally
+            if _is_later(s):
+                what_it_is, _, _ = _parse_context(_txt(_props(s), "gsdo_context"))
+                if what_it_is:
+                    lines += _wrap("What it is:", what_it_is)
+            else:
+                detail = _detail_lines(s, tasks)
+                if detail:
+                    lines.append("")
+                    lines.extend(detail)
+            lines.append("")
+
+
 def render_map(project_name):
-    """Render the full map for a parent project."""
+    """Render the full map for a parent project.
+
+    When direct sub-projects have their own children (groupings), the map
+    renders them as phase sections with streams inside — mirroring the
+    repo's organizational structure. Without groupings, streams render flat.
+    """
     goals, projects, tasks = _load()
     proj = next((o for o in projects if o.get("name") == project_name), None)
     if proj is None:
@@ -332,13 +436,17 @@ def render_map(project_name):
     goal_ids = _objs(pprops, "gsdo_goal_link")
     goal = next((o for o in goals if o["id"] in goal_ids), None)
 
-    # Include done streams in the topo sort so active streams that depended on them
-    # get correct depth values. Split for display: done streams show as a compact
-    # trajectory line (✓ name · name) at the top; active streams render below.
-    all_streams = [o for o in projects if pid in _objs(_props(o), "gsdo_parent_project")]
-    all_sorted, depths = _topo_sort_streams(all_streams)
+    # Direct sub-projects (groupings or leaf streams)
+    all_direct = [o for o in projects if pid in _objs(_props(o), "gsdo_parent_project")]
+
+    # Detect groupings: direct children that have their own children
+    grouping_ids = {s["id"] for s in all_direct if _children_of(s["id"], projects)}
+
+    # Include done items in topo sort so active items depending on them get
+    # correct depth values. Split for display after.
+    all_sorted, depths = _topo_sort_streams(all_direct)
     done_sorted = [s for s in all_sorted if _is_done(s)]
-    sorted_streams = [s for s in all_sorted if not _is_done(s)]
+    active_sorted = [s for s in all_sorted if not _is_done(s)]
 
     lines = []
 
@@ -354,60 +462,28 @@ def render_map(project_name):
                 lines.append(f"       {piece}")
         lines.append("")
 
-    lines.append(f"THE ARC — {proj['name']}:")
+    lines.append(f"  {proj['name']}")
     lines.append("")
 
+    if not all_direct:
+        lines.append("  No work streams yet.")
+        return "\n".join(lines).rstrip()
+
+    # Compact trajectory line: done phases/streams (what's behind you)
     if done_sorted:
         names = " · ".join(s["name"] for s in done_sorted)
         lines.append(f"  ✓ {names}")
         lines.append("")
 
-    if not sorted_streams:
+    if not active_sorted:
         if not done_sorted:
             lines.append("  No work streams yet.")
         return "\n".join(lines).rstrip()
 
-    # Build groups: consecutive streams at the same depth + same Stream order are parallel.
-    groups = []
-    i, n = 0, len(sorted_streams)
-    while i < n:
-        s = sorted_streams[i]
-        cur_depth = depths.get(s["id"], 0)
-        cur_order = _stream_order(s)
-        j = i + 1
-        while j < n:
-            d2 = depths.get(sorted_streams[j]["id"], 0)
-            o2 = _stream_order(sorted_streams[j])
-            if d2 != cur_depth or o2 != cur_order:
-                break
-            j += 1
-        groups.append((cur_depth, cur_order, sorted_streams[i:j]))
-        i = j
-
-    multi_group = len(groups) > 1
-
-    for _depth, cur_order, group in groups:
-        # Show "running alongside" when multiple streams are in this group AND either:
-        # (a) there are multiple groups (some sequential structure to distinguish from), or
-        # (b) an explicit Stream order was set (user chose to group them explicitly).
-        # When everything is parallel by default (single group, no explicit order), the
-        # separator adds no information and is omitted.
-        if len(group) > 1 and (multi_group or cur_order is not None):
-            lines.append("  — running alongside —")
-        for s in group:
-            lines.append(_header(s))
-            if _is_later(s):
-                # later stream — name + What it is only
-                what_it_is, _, _ = _parse_context(_txt(_props(s), "gsdo_context"))
-                if what_it_is:
-                    lines += _wrap("What it is:", what_it_is)
-            else:
-                # active stream — What it is + its step-arc
-                detail = _detail_lines(s, tasks)
-                if detail:
-                    lines.append("")
-                    lines.extend(detail)
-            lines.append("")
+    if grouping_ids:
+        _append_grouped_streams(lines, active_sorted, grouping_ids, projects, tasks)
+    else:
+        _append_flat_streams(lines, active_sorted, tasks, depths)
 
     return "\n".join(lines).rstrip()
 

@@ -482,3 +482,71 @@ def test_gap_streams_excludes_structured_and_done(monkeypatch):
                      props={"gsdo_parent_project": ["p1"], "engagement": "Done"})
     _patch_load([], [proj, ok, done], monkeypatch)
     assert om.gap_streams("P") == []
+
+
+# ---------------------------------------------------------------------------
+# Grouping structure (sub-projects that contain streams)
+# ---------------------------------------------------------------------------
+
+def test_grouping_renders_as_section_with_children(monkeypatch):
+    """A sub-project that has its own children renders as a section header."""
+    proj = _make_obj("My Project", "gsdo_project", "p1")
+    group = _make_obj("v1 foundation", "gsdo_project", "g1",
+                      props={"gsdo_parent_project": ["p1"]})
+    stream = _make_obj("Data model build", "gsdo_project", "s1",
+                       props={"gsdo_parent_project": ["g1"],
+                              "gsdo_context": STRUCTURED_CTX})
+    _patch_load([], [proj, group, stream], monkeypatch)
+    out = om.render_map("My Project")
+    assert "v1 foundation" in out
+    assert "Data model build" in out
+    # Stream appears indented under the grouping (prefixed with spaces)
+    lines = out.splitlines()
+    group_line = next(l for l in lines if "v1 foundation" in l)
+    stream_line = next(l for l in lines if "Data model build" in l)
+    assert stream_line.startswith("  ")   # child is indented relative to grouping
+
+
+def test_grouping_done_shows_in_compact_line(monkeypatch):
+    """A done grouping appears in the ✓ compact line, not as a section."""
+    proj = _make_obj("My Project", "gsdo_project", "p1")
+    done_group = _make_obj("Foundation phase", "gsdo_project", "g1",
+                           props={"gsdo_parent_project": ["p1"], "engagement": "Done"})
+    done_child = _make_obj("Data model", "gsdo_project", "s1",
+                           props={"gsdo_parent_project": ["g1"], "engagement": "Done"})
+    active_group = _make_obj("Orientation phase", "gsdo_project", "g2",
+                             props={"gsdo_parent_project": ["p1"]})
+    active_child = _make_obj("Orient map", "gsdo_project", "s2",
+                             props={"gsdo_parent_project": ["g2"],
+                                    "gsdo_context": STRUCTURED_CTX})
+    _patch_load([], [proj, done_group, done_child, active_group, active_child], monkeypatch)
+    out = om.render_map("My Project")
+    assert "✓ Foundation phase" in out
+    assert "Orientation phase" in out
+    assert "Orient map" in out
+
+
+def test_project_name_not_labeled_as_arc(monkeypatch):
+    """Project name appears as plain text, not 'THE ARC — name:'."""
+    proj = _make_obj("Build Controlled Drift", "gsdo_project", "p1")
+    _patch_load([], [proj], monkeypatch)
+    out = om.render_map("Build Controlled Drift")
+    assert "THE ARC" not in out
+    assert "Build Controlled Drift" in out
+
+
+def test_flat_structure_unchanged_without_groupings(monkeypatch):
+    """Without groupings, flat streams still render at the top level."""
+    proj = _make_obj("My Project", "gsdo_project", "p1")
+    s1 = _make_obj("Stream A", "gsdo_project", "s1",
+                   props={"gsdo_parent_project": ["p1"], "gsdo_context": STRUCTURED_CTX})
+    s2 = _make_obj("Stream B", "gsdo_project", "s2",
+                   props={"gsdo_parent_project": ["p1"], "gsdo_context": STRUCTURED_CTX})
+    _patch_load([], [proj, s1, s2], monkeypatch)
+    out = om.render_map("My Project")
+    assert "Stream A" in out
+    assert "Stream B" in out
+    # Flat streams should not be indented like children
+    lines = out.splitlines()
+    a_line = next((l for l in lines if "Stream A" in l), "")
+    assert not a_line.startswith("  ●")  # no extra indent for flat streams
