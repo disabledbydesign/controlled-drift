@@ -3,9 +3,9 @@
 
 Uses the built-in 'due_date' (Due date) and 'linked_projects' (Linked Projects) instead of
 custom Deadline / Project-link fields — they're semantically identical and avoid double fields
-in Anytype's native Tasks tab. Keeps a distinct 'Task status' (Active/Needs Clarifying/Blocked/Done)
+in Anytype's native Tasks tab. Keeps a distinct 'Task status' (Ready/In Design/Needs Clarifying/Blocked/Done)
 because the built-in Status (To Do/In Progress/Done) lacks the load-bearing 'Needs Clarifying'
-weeding state."""
+weeding state. Ready = well-specified, executable. In Design = real work, needs design-first."""
 import sys, os
 sys.path.insert(0, os.path.dirname(__file__))
 import gsdo_anytype as g
@@ -16,7 +16,7 @@ def build_task():
     p_clarify  = g.ensure_property("Needs clarifying", "checkbox")  # existing
     # new task properties:
     p_status     = g.ensure_property("Task status", "select",
-                                     ["Active", "Needs Clarifying", "Blocked", "Done"])
+                                     ["Ready", "In Design", "Needs Clarifying", "Blocked", "Done"])
     p_blocked    = g.ensure_property("Blocked on", "text")
     p_affective  = g.ensure_property("Affective", "text")           # reused; capacity signal, never a scalar
     p_access     = g.ensure_property("Access conditions", "multi_select",

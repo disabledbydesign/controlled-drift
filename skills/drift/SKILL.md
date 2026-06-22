@@ -42,6 +42,22 @@ if is_sweep_stale("."):
 ```
 If stale (no `last_sweep` in `.gsdot`, or > 7 days old), offer once: *"I haven't read through this project's files in a while — want me to check what's here and catch anything not yet in Anytype?"* She can decline. If she accepts, run Mode 2. Do not re-offer in the same session.
 
+**Step 3.5 — Task closure check (only if bound):**
+```python
+from sweep import is_task_check_stale
+if is_task_check_stale("."):
+    # run the check once; never repeat in the same session
+```
+If stale (no `last_task_check` in `.gsdot`, or > 7 days old):
+1. Run `git log --oneline --since=[last_task_check date, or 7 days ago]`
+2. Load open tasks (status ≠ Done) under the bound project from Anytype
+3. Use agent judgment: which open tasks does this commit history resolve?
+4. If any — surface once: *"These look done based on recent commits — close them?"*
+   - On confirm: mark each Done via `gsdo_objects.update(id, properties={"Task status": "Done"})`, read back each, ding once for the batch, then call `update_last_task_check(".")`
+   - On decline: skip silently; still call `update_last_task_check(".")` to reset the window
+5. If none match: skip silently; still call `update_last_task_check(".")` to reset the window
+Do not repeat this offer in the same session.
+
 **After the startup checks, always show the menu** — don't wait for her to name a function. One short line per option, no jargon:
 
 ```
@@ -180,6 +196,26 @@ She picks by saying any of it in her own words — she never has to use these ex
 
    **Mode 3 — reorganization: parked.** If the existing structure is genuinely getting in the way, you may *suggest* it once softly ("I notice the structure might be clearer if...") — never automatic, never without her explicit confirmation. Full design deferred.
 
+6. **"Do what you can"** — she says something like "do what you can without me," "knock out the mechanical stuff," "run what doesn't need me weighing in," or similar. Run the automatable task filter and execute.
+
+   **Scope:** the bound project (if bound); the full space (if unbound).
+
+   **Filter — which tasks to run:**
+   - Task status = `Ready` AND `AI autonomous` = True
+   - Parent stream Engagement ∈ {Steady, Sprint, Hyperfixation} → **run**
+   - Parent stream Engagement = Backburner → **skip** (intentional deferral — wait for stream to become active)
+   - Parent stream Engagement = Done → **run + flag once** ("this stream is marked Done but has an open task — running it")
+
+   **For each task that passes the filter:**
+   - Read task name + Context + Relevant docs (read any listed file paths before starting)
+   - Execute without surfacing to June
+   - On completion: `gsdo_objects.update(id, properties={"Task status": "Done"})` → read back → ding per task
+   - If a task turns out to need a judgment call mid-execution: stop and surface it
+
+   **After all tasks:** brief summary of what was done and what was skipped (with why). Do NOT touch tasks with status In Design, Needs Clarifying, Blocked, or AI autonomous = False.
+
+   Backburner tasks are excluded even if automatable — Backburner is an intentional deferral June chose. "Do what you can" respects that; automatable Backburner tasks execute when the stream becomes active, not before.
+
 ---
 
 ## Use the built scripts — do NOT hand-roll Anytype queries
@@ -208,7 +244,7 @@ from anytype_test import call
 import gsdo_anytype as g
 
 # 1. create by friendly type name; properties by display name; select/multi_select by option name
-oid = o.create("Task", "Call the bank", properties={"Task status": "Active"})
+oid = o.create("Task", "Call the bank", properties={"Task status": "Ready"})
 
 # 2. READ BACK — prove it persisted before claiming success
 sid = g.get_space_id()
@@ -218,7 +254,7 @@ assert obj.get("name") == "Call the bank", f"read-back FAILED: {obj}"
 # 3. only now confirm + ding
 notify.ding()   # audible confirmation — see below
 ```
-Types: **Task, Goal, Project, Recurring, Strategy, Note.** Key fields (all optional): Task status (Active/Needs Clarifying/Blocked/Done), Affective (free text — never a 1–5 number), Context, Due date, Linked Projects, Access conditions, Duration min. Goals carry `Reaching for`, `Horizon` (Chapter/Ongoing/Milestone), `Resolution condition` (for Chapter goals: what resolved looks like); Projects carry `Engagement` (Steady/Sprint/Hyperfixation/Backburner/Done), `Parent project` (objects link — for sub-projects), and link to Goals via `Goal link`. **Hyperfixation on a project is a space-wide signal, not a local one**: one project in Hyperfixation explains why other projects are neglected — read it systemically. Don't add barriers to every neglected project; surface the Hyperfixation project as the context. Full model: `REPO/AI_LAYER_SPEC.md §2`.
+Types: **Task, Goal, Project, Recurring, Strategy, Note.** Key fields (all optional): Task status (Ready/In Design/Needs Clarifying/Blocked/Done — legacy tasks may carry Active, treated as Ready), Affective (free text — never a 1–5 number), Context, Due date, Linked Projects, Access conditions, Duration min. Goals carry `Reaching for`, `Horizon` (Chapter/Ongoing/Milestone), `Resolution condition` (for Chapter goals: what resolved looks like); Projects carry `Engagement` (Steady/Sprint/Hyperfixation/Backburner/Done), `Parent project` (objects link — for sub-projects), and link to Goals via `Goal link`. **Hyperfixation on a project is a space-wide signal, not a local one**: one project in Hyperfixation explains why other projects are neglected — read it systemically. Don't add barriers to every neglected project; surface the Hyperfixation project as the context. Full model: `REPO/AI_LAYER_SPEC.md §2`.
 
 ---
 

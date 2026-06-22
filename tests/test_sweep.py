@@ -171,3 +171,69 @@ def test_update_last_sweep_stale_becomes_fresh(tmp_path):
     assert is_sweep_stale(str(tmp_path)) == True
     update_last_sweep(str(tmp_path))
     assert is_sweep_stale(str(tmp_path)) == False
+
+
+# --- Task closure check (mirrors sweep staleness tests) ---------------------
+
+def test_is_task_check_stale_no_binding(tmp_path):
+    from sweep import is_task_check_stale
+    assert is_task_check_stale(str(tmp_path)) == False  # unbound → not applicable
+
+def test_is_task_check_stale_no_last_check(tmp_path):
+    import json
+    gsdot = {"system": "Controlled Drift", "binds_to": {"projects": [{"id": "x", "name": "X"}]}}
+    with open(os.path.join(str(tmp_path), ".gsdot"), "w") as f:
+        json.dump(gsdot, f)
+    from sweep import is_task_check_stale
+    assert is_task_check_stale(str(tmp_path)) == True
+
+def test_is_task_check_stale_recent(tmp_path):
+    import json, datetime
+    gsdot = {"system": "Controlled Drift",
+             "binds_to": {"projects": [{"id": "x", "name": "X"}]},
+             "last_task_check": datetime.date.today().isoformat()}
+    with open(os.path.join(str(tmp_path), ".gsdot"), "w") as f:
+        json.dump(gsdot, f)
+    from sweep import is_task_check_stale
+    assert is_task_check_stale(str(tmp_path)) == False
+
+def test_is_task_check_stale_old(tmp_path):
+    import json, datetime
+    old = (datetime.date.today() - datetime.timedelta(days=10)).isoformat()
+    gsdot = {"system": "Controlled Drift",
+             "binds_to": {"projects": [{"id": "x", "name": "X"}]},
+             "last_task_check": old}
+    with open(os.path.join(str(tmp_path), ".gsdot"), "w") as f:
+        json.dump(gsdot, f)
+    from sweep import is_task_check_stale
+    assert is_task_check_stale(str(tmp_path)) == True
+
+def test_update_last_task_check_stale_becomes_fresh(tmp_path):
+    import json, datetime
+    old = (datetime.date.today() - datetime.timedelta(days=10)).isoformat()
+    gsdot = {"system": "Controlled Drift",
+             "binds_to": {"projects": [{"id": "x", "name": "X"}]},
+             "last_task_check": old}
+    with open(os.path.join(str(tmp_path), ".gsdot"), "w") as f:
+        json.dump(gsdot, f)
+    from sweep import update_last_task_check, is_task_check_stale
+    assert is_task_check_stale(str(tmp_path)) == True
+    update_last_task_check(str(tmp_path))
+    assert is_task_check_stale(str(tmp_path)) == False
+
+def test_update_last_task_check_records_items_marked_done(tmp_path):
+    import json
+    gsdot = {"system": "Controlled Drift", "binds_to": {"projects": [{"id": "x", "name": "X"}]}}
+    with open(os.path.join(str(tmp_path), ".gsdot"), "w") as f:
+        json.dump(gsdot, f)
+    from sweep import update_last_task_check
+    update_last_task_check(str(tmp_path), items_marked_done=["task-a", "task-b"])
+    with open(os.path.join(str(tmp_path), ".gsdot")) as f:
+        marker = json.load(f)
+    assert marker["items_marked_done"] == ["task-a", "task-b"]
+
+def test_update_last_task_check_no_binding_raises(tmp_path):
+    from sweep import update_last_task_check
+    import pytest
+    with pytest.raises(FileNotFoundError):
+        update_last_task_check(str(tmp_path))

@@ -136,7 +136,7 @@ A step-trajectory from task breakdown (§8c) produces de facto sub-tasks without
 |---|---|---|
 | `name` | text | |
 | `done` | bool | Always present. |
-| `status` | select | **Active / Needs Clarifying / Blocked / Done.** "Needs Clarifying" gates vague items out of the actionable list. Associational input lands here first. "Blocked" surfaces `blocked_on`. |
+| `status` | select | **Ready / In Design / Needs Clarifying / Blocked / Done.** `Ready` = well-specified; an agent or June can pick it up now. `In Design` = real committed work but needs a design conversation before execution — holds the task without it appearing executable. `Needs Clarifying` = shape unclear; weeding gate output for vague items. `Blocked` surfaces `blocked_on`. "Active tasks" are derived: tasks linked to streams where Engagement ∈ {Steady, Sprint, Hyperfixation} with status = Ready. (Legacy: tasks created before this rename may carry `Active`; treated identically to `Ready` in queries.) |
 | `project` | objects-relation | Links to one or more Projects (the anti-drift chain). Optional for bare chores. |
 | `blocked_on` | text | What's being waited for. When set, this IS the displayed next item, surfaced positively: "Waiting: Julia's spec. Job Search is healthy — nothing to do here right now is the right answer." Relief, not anxiety. |
 | `deadline` | date | Optional. |

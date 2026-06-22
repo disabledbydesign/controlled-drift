@@ -181,6 +181,39 @@ def update_last_sweep(folder, items_surfaced=None):
         f.write("\n")
 
 
+def update_last_task_check(folder, items_marked_done=None):
+    """Write last_task_check (today) to .gsdot. Mirrors update_last_sweep.
+    Raises FileNotFoundError if no binding found.
+    """
+    path = find_marker(folder)
+    if not path:
+        raise FileNotFoundError(f"No .gsdot binding found from {os.path.abspath(folder)}")
+    with open(path) as f:
+        marker = json.load(f)
+    marker["last_task_check"] = datetime.date.today().isoformat()
+    if items_marked_done is not None:
+        marker["items_marked_done"] = list(items_marked_done)
+    with open(path, "w") as f:
+        json.dump(marker, f, indent=2)
+        f.write("\n")
+
+
+def is_task_check_stale(folder, days=7):
+    """True if last_task_check is absent or older than `days` days.
+    Returns False (not applicable) for unbound folders."""
+    binding = read_binding(folder)
+    if not binding:
+        return False
+    last = binding.get("last_task_check")
+    if not last:
+        return True
+    try:
+        last_dt = datetime.date.fromisoformat(last)
+        return (datetime.date.today() - last_dt).days >= days
+    except Exception:
+        return True
+
+
 _SIGNAL_PATTERNS = [
     (r"#\s*TODO[:\s]+(.*)", "todo"),
     (r"#\s*FIXME[:\s]+(.*)", "fixme"),

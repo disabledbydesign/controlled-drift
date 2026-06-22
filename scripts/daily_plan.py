@@ -88,7 +88,7 @@ def load_active_items(sid):
         elif tkey == "task":
             status_tag = pv("status", "select") or {}
             status = status_tag.get("name") if isinstance(status_tag, dict) else status_tag
-            if status in (None, "Active", "Needs Clarifying"):
+            if status in (None, "Active", "Ready", "Needs Clarifying"):
                 done = pv("done", "checkbox")
                 if done:
                     continue
