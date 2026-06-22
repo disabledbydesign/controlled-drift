@@ -69,14 +69,6 @@ What would you like to do?
   I'm stuck  — think something through together
 ```
 
-**After the menu** — check the Parking lot (space-wide staging area):
-```python
-parking_lot = next((p for p in g.fetch_all_objects(g.get_space_id())
-                    if p.get("name") == "Parking lot"
-                    and (p.get("type") or {}).get("key") == "gsdo_project"), None)
-```
-If found and has tasks linked to it: add one soft line below the menu — `(N items in the parking lot — say "weed parking lot" to process them)`. Not a gate, not a banner. One line, then move on.
-
 She picks by saying any of it in her own words — she never has to use these exact phrases. If it's already clear from context what she wants (she said it before startup finished), skip the menu and proceed.
 
 **Binding is a suggestion, not a mandate.** She can always route differently mid-session. Silent after the startup offer — no redundant banners.
@@ -224,22 +216,27 @@ She picks by saying any of it in her own words — she never has to use these ex
 
    Backburner tasks are excluded even if automatable — Backburner is an intentional deferral June chose. "Do what you can" respects that; automatable Backburner tasks execute when the stream becomes active, not before.
 
-7. **Park** — she says "park this," "hold this," "I don't want to lose X but not now," "save that for later," or similar. Capture to the **Parking lot** project (the space-wide staging area) without ceremony. The item lands with status Needs Clarifying — it hasn't been triaged yet and that's fine. No linking to a goal or project; that happens when she weeds it.
+7. **Park** — she says "park this," "hold this," "I don't want to lose X but not now," "send a note about this to [project]," or similar. Creates a Task with status=Parked. No ceremony.
+
+   **Project resolution — three tiers, in order:**
+   1. **Explicit target** — she names a project ("park this under Reframe," "send this to GRA"): look up the named project in the space and link there.
+   2. **Bound project** — no explicit target but a binding is active: link to the bound project.
+   3. **Global catch** — no explicit target and no binding: create with no project link. This is the fallback, never the default. A task with no project link is a signal it might be a new project; the weeding gate will surface that.
 
    ```python
    oid = o.create("Task", item_name, properties={
-       "Task status": "Needs Clarifying",
-       "linked_projects": [parking_lot_id],
+       "Task status": "Parked",
+       "linked_projects": [target_project_id],   # omit if global catch
        "Context": any_context_she_gave,
    })
    ```
-   Read back → confirm what landed → ding. One line: *"Parked: [name]."* No elaboration.
+   Read back → one line: *"Parked: [name]."* → ding. If multiple, batch-create then one ding.
 
-   If she parks multiple things at once, batch-create them all, then one ding.
-
-8. **Weed parking lot** — she says "weed the parking lot," "let's go through what's parked," "process the inbox," or the soft nudge from the menu triggers it. Load all tasks linked to the Parking lot project and run the weeding gate on them as a group. The weeding gate treats them exactly like any other brain dump — reads as a web, checks existing Goals/Projects for alignment, produces a validation surface. On confirm, link each item to its real stream (or mark it composted if it's no longer relevant).
-
-   After processing: re-link confirmed items to their real streams, remove the Parking lot link. Items that survive without a home stay in the Parking lot and remain Needs Clarifying.
+8. **Weed park** — she says "weed park," "let's go through what's parked," "process parked items," or the soft menu nudge prompts it. Load all tasks where status=Parked across the space. Run the weeding gate on them as a group — same flow as any brain dump, reads as a web first. On confirm:
+   - Items with a real stream: update `linked_projects` to point there, set status=Ready (or Needs Clarifying if still unclear)
+   - Items with no project link flagged as potential new project: surface as "this might be a new project — create it?" before linking
+   - Items still unclear: leave Parked, stay in the next weed pass
+   - Items no longer relevant: mark Done
 
 ---
 
@@ -279,7 +276,7 @@ assert obj.get("name") == "Call the bank", f"read-back FAILED: {obj}"
 # 3. only now confirm + ding
 notify.ding()   # audible confirmation — see below
 ```
-Types: **Task, Goal, Project, Recurring, Strategy, Note.** Key fields (all optional): Task status (Ready/In Design/Needs Clarifying/Blocked/Done — legacy tasks may carry Active, treated as Ready), Affective (free text — never a 1–5 number), Context, Due date, Linked Projects, Access conditions, Duration min. Goals carry `Reaching for`, `Horizon` (Chapter/Ongoing/Milestone), `Resolution condition` (for Chapter goals: what resolved looks like); Projects carry `Engagement` (Steady/Sprint/Hyperfixation/Backburner/Done), `Parent project` (objects link — for sub-projects), and link to Goals via `Goal link`. **Hyperfixation on a project is a space-wide signal, not a local one**: one project in Hyperfixation explains why other projects are neglected — read it systemically. Don't add barriers to every neglected project; surface the Hyperfixation project as the context. Full model: `REPO/AI_LAYER_SPEC.md §2`.
+Types: **Task, Goal, Project, Recurring, Strategy, Note.** Key fields (all optional): Task status (Ready/In Design/Parked/Needs Clarifying/Blocked/Done — legacy tasks may carry Active, treated as Ready), Affective (free text — never a 1–5 number), Context, Due date, Linked Projects, Access conditions, Duration min. Goals carry `Reaching for`, `Horizon` (Chapter/Ongoing/Milestone), `Resolution condition` (for Chapter goals: what resolved looks like); Projects carry `Engagement` (Steady/Sprint/Hyperfixation/Backburner/Done), `Parent project` (objects link — for sub-projects), and link to Goals via `Goal link`. **Hyperfixation on a project is a space-wide signal, not a local one**: one project in Hyperfixation explains why other projects are neglected — read it systemically. Don't add barriers to every neglected project; surface the Hyperfixation project as the context. Full model: `REPO/AI_LAYER_SPEC.md §2`.
 
 ---
 

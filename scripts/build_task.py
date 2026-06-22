@@ -16,7 +16,7 @@ def build_task():
     p_clarify  = g.ensure_property("Needs clarifying", "checkbox")  # existing
     # new task properties:
     p_status     = g.ensure_property("Task status", "select",
-                                     ["Ready", "In Design", "Needs Clarifying", "Blocked", "Done"])
+                                     ["Ready", "In Design", "Parked", "Needs Clarifying", "Blocked", "Done"])
     p_blocked    = g.ensure_property("Blocked on", "text")
     p_affective  = g.ensure_property("Affective", "text")           # reused; capacity signal, never a scalar
     p_access     = g.ensure_property("Access conditions", "multi_select",
