@@ -44,7 +44,7 @@ If stale (no `last_sweep` in `.gsdot`, or > 7 days old), offer once: *"I haven't
 
 **Step 3.5 — Task closure check (only if bound):**
 ```python
-from sweep import is_task_check_stale
+from sweep import is_task_check_stale, update_last_task_check
 if is_task_check_stale("."):
     # run the check once; never repeat in the same session
 ```
@@ -201,7 +201,7 @@ She picks by saying any of it in her own words — she never has to use these ex
    **Scope:** the bound project (if bound); the full space (if unbound).
 
    **Filter — which tasks to run:**
-   - Task status = `Ready` AND `AI autonomous` = True
+   - Task status = `Ready` (or legacy `Active`) AND `AI autonomous` = True
    - Parent stream Engagement ∈ {Steady, Sprint, Hyperfixation} → **run**
    - Parent stream Engagement = Backburner → **skip** (intentional deferral — wait for stream to become active)
    - Parent stream Engagement = Done → **run + flag once** ("this stream is marked Done but has an open task — running it")

@@ -271,6 +271,11 @@ if __name__ == "__main__":
     p_upd.add_argument("--items", default=None,
                        help='JSON array of item names surfaced, e.g. \'["Task A","Task B"]\'')
 
+    p_tc = sub.add_parser("task-check", help="write last_task_check to .gsdot after a closure check")
+    p_tc.add_argument("folder", nargs="?", default=".")
+    p_tc.add_argument("--done", default=None,
+                      help='JSON array of task names marked done, e.g. \'["Task A"]\'')
+
     args = ap.parse_args()
 
     if args.cmd == "select":
@@ -284,5 +289,9 @@ if __name__ == "__main__":
         items = json.loads(args.items) if args.items else None
         update_last_sweep(args.folder, items)
         print(f"[ok] last_sweep updated: {datetime.date.today().isoformat()}")
+    elif args.cmd == "task-check":
+        done = json.loads(args.done) if args.done else None
+        update_last_task_check(args.folder, done)
+        print(f"[ok] last_task_check updated: {datetime.date.today().isoformat()}")
     else:
         ap.print_help()
