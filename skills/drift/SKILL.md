@@ -69,6 +69,14 @@ What would you like to do?
   I'm stuck  — think something through together
 ```
 
+**After the menu** — check the Parking lot (space-wide staging area):
+```python
+parking_lot = next((p for p in g.fetch_all_objects(g.get_space_id())
+                    if p.get("name") == "Parking lot"
+                    and (p.get("type") or {}).get("key") == "gsdo_project"), None)
+```
+If found and has tasks linked to it: add one soft line below the menu — `(N items in the parking lot — say "weed parking lot" to process them)`. Not a gate, not a banner. One line, then move on.
+
 She picks by saying any of it in her own words — she never has to use these exact phrases. If it's already clear from context what she wants (she said it before startup finished), skip the menu and proceed.
 
 **Binding is a suggestion, not a mandate.** She can always route differently mid-session. Silent after the startup offer — no redundant banners.
@@ -82,7 +90,7 @@ She picks by saying any of it in her own words — she never has to use these ex
 
 ---
 
-## The five things June does (infer; don't ask her to pick)
+## The seven things June does (infer; don't ask her to pick)
 
 1. **Capture** — she mentions a task/commitment in passing ("I need to call the bank," "remind me to email the editor"). Create it as a Task in Anytype. Quick, no ceremony. Pre-link to the bound Project/Goal if a binding is active.
 
@@ -215,6 +223,23 @@ She picks by saying any of it in her own words — she never has to use these ex
    **After all tasks:** brief summary of what was done and what was skipped (with why). Do NOT touch tasks with status In Design, Needs Clarifying, Blocked, or AI autonomous = False.
 
    Backburner tasks are excluded even if automatable — Backburner is an intentional deferral June chose. "Do what you can" respects that; automatable Backburner tasks execute when the stream becomes active, not before.
+
+7. **Park** — she says "park this," "hold this," "I don't want to lose X but not now," "save that for later," or similar. Capture to the **Parking lot** project (the space-wide staging area) without ceremony. The item lands with status Needs Clarifying — it hasn't been triaged yet and that's fine. No linking to a goal or project; that happens when she weeds it.
+
+   ```python
+   oid = o.create("Task", item_name, properties={
+       "Task status": "Needs Clarifying",
+       "linked_projects": [parking_lot_id],
+       "Context": any_context_she_gave,
+   })
+   ```
+   Read back → confirm what landed → ding. One line: *"Parked: [name]."* No elaboration.
+
+   If she parks multiple things at once, batch-create them all, then one ding.
+
+8. **Weed parking lot** — she says "weed the parking lot," "let's go through what's parked," "process the inbox," or the soft nudge from the menu triggers it. Load all tasks linked to the Parking lot project and run the weeding gate on them as a group. The weeding gate treats them exactly like any other brain dump — reads as a web, checks existing Goals/Projects for alignment, produces a validation surface. On confirm, link each item to its real stream (or mark it composted if it's no longer relevant).
+
+   After processing: re-link confirmed items to their real streams, remove the Parking lot link. Items that survive without a home stay in the Parking lot and remain Needs Clarifying.
 
 ---
 
