@@ -52,6 +52,36 @@ def _ntfy_topic():
         return None
 
 
+def _overlay_url():
+    """The URL June's phone uses to reach the always-on overlay over wifi — so tapping the
+    notification opens the live surface, not just the cached text.
+
+    The phone reaches the Mac at its LAN IP on port 5050 (server binds 0.0.0.0). The LAN IP
+    is DHCP-assigned, so we DETECT it fresh each morning rather than hardcoding a value that
+    silently rots. An explicit override (~/.controlled-drift/overlay_url) wins if present —
+    for pinning a reserved IP, an mDNS .local name, or a tunnel. Returns None if we can't
+    determine an address (then no tap-action is attached — the text push still lands)."""
+    # 1. Explicit override (a full URL), if June ever pins one.
+    try:
+        with open(cd_paths.config_file("overlay_url")) as f:
+            url = f.read().strip()
+            if url:
+                return url
+    except FileNotFoundError:
+        pass
+    # 2. Auto-detect the current LAN IP (en0 = wifi on this Mac; en1 fallback).
+    for iface in ("en0", "en1"):
+        try:
+            out = subprocess.run(["ipconfig", "getifaddr", iface],
+                                 capture_output=True, text=True, timeout=5)
+            ip = out.stdout.strip()
+            if ip:
+                return f"http://{ip}:5050"   # server.py PORT
+        except Exception:
+            continue
+    return None
+
+
 def _push_to_phone(plan):
     """Push the plan to June's phone via ntfy (free, open-source pub/sub) — the part she
     reads in bed as she wakes. Best-effort: a push failure must never lose the cached plan.
@@ -76,6 +106,10 @@ def _push_to_phone(plan):
                                      data=body.encode("utf-8"), method="POST")
         req.add_header("Title", "Today, if you want it")   # ASCII title; body carries UTF-8
         req.add_header("Tags", "sunrise")
+        # Tap the notification → open the live overlay (not just the cached text).
+        overlay = _overlay_url()
+        if overlay:
+            req.add_header("Click", overlay)
         urllib.request.urlopen(req, timeout=10)
         return True
     except Exception as e:
