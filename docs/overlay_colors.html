@@ -1,0 +1,599 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>Overlay — color comparison</title>
+<style>
+* { box-sizing: border-box; margin: 0; padding: 0; }
+body {
+  background: #111;
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', system-ui, sans-serif;
+  padding: 40px 24px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 32px;
+}
+.row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 28px;
+  justify-content: center;
+}
+.section-label {
+  font-size: 10px;
+  color: #444;
+  text-transform: uppercase;
+  letter-spacing: 0.12em;
+  width: 100%;
+  text-align: center;
+  padding-bottom: 4px;
+  border-bottom: 1px solid #222;
+}
+.swatch-label {
+  font-size: 11px;
+  color: #666;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  text-align: center;
+  margin-bottom: 10px;
+}
+.variant { display: flex; flex-direction: column; }
+
+/* ── shared overlay chrome ── */
+.overlay {
+  background: #1c1c1e;
+  border: 1px solid #48484a;
+  border-radius: 14px;
+  width: 300px;
+  overflow: hidden;
+  box-shadow: 0 8px 32px rgba(0,0,0,0.5);
+}
+.overlay-header {
+  display: flex; align-items: center; justify-content: space-between;
+  padding: 9px 13px; border-bottom: 1px solid #48484a;
+}
+.header-title { font-size: 11px; color: #5a5a5e; text-transform: uppercase; letter-spacing: 0.1em; }
+.header-time { font-size: 11px; color: #5a5a5e; }
+.plan-section { padding: 13px; border-bottom: 1px solid #48484a; }
+.stream-block { margin-bottom: 11px; }
+.stream-block:last-child { margin-bottom: 0; }
+.stream-label { display: flex; align-items: center; gap: 7px; margin-bottom: 5px; }
+.stream-dot { width: 7px; height: 7px; border-radius: 50%; flex-shrink: 0; }
+.stream-name { font-size: 11px; font-weight: 600; color: #98989f; text-transform: uppercase; letter-spacing: 0.05em; }
+.arc-step { font-size: 14px; color: #f2f2f7; line-height: 1.4; padding-left: 14px; margin-bottom: 6px; }
+.why-block { border-radius: 7px; padding: 7px 10px; margin-left: 14px; }
+.why-label { font-size: 10px; color: #5a5a5e; text-transform: uppercase; letter-spacing: 0.08em; margin-bottom: 2px; }
+.why-text { font-size: 12px; line-height: 1.4; opacity: 0.95; }
+.stream-divider { height: 1px; background: #48484a; margin: 11px 0; opacity: 0.5; }
+.actions-section {
+  padding: 9px 13px; border-bottom: 1px solid #48484a;
+  display: flex; flex-wrap: wrap; gap: 6px;
+}
+.action-btn {
+  background: #3a3a3c; border: 1px solid #48484a; border-radius: 7px;
+  color: #98989f; font-size: 11px; padding: 5px 9px;
+  font-family: inherit; line-height: 1; cursor: pointer;
+}
+.action-btn.primary {
+  background: rgba(110,180,247,0.12); border-color: rgba(110,180,247,0.3); color: #6eb4f7;
+}
+.ask-section { padding: 9px 13px 12px; }
+.ask-label { font-size: 10px; color: #5a5a5e; text-transform: uppercase; letter-spacing: 0.08em; margin-bottom: 6px; }
+.ask-row { display: flex; gap: 7px; align-items: flex-end; }
+.ask-field {
+  flex: 1; background: #0a0a0c; border: 1px solid #2a2a2e; border-radius: 8px;
+  color: #f2f2f7; font-size: 12px; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', system-ui, sans-serif; padding: 7px 10px;
+  resize: none; min-height: 54px; outline: none; line-height: 1.4;
+}
+.ask-field::placeholder { color: #565660; }
+
+/* typed text color per theme */
+.lavender .ask-field  { color: #b89fe8; }
+.rose .ask-field      { color: #c78fa0; }
+.amber .ask-field     { color: #d4a96a; }
+.trans .ask-field     { color: #F7A8B8; }
+.lav-gold .ask-field  { color: #d4a96a; }
+.rose-gold .ask-field { color: #d4a96a; }
+.gold-rose .ask-field { color: #d4a96a; }
+.trans-split .ask-field { color: #5BCEFA; }
+.bi-split .ask-field  { color: #9B5FC8; }
+
+/* placeholder: dim version of each theme's typed color — brightness shift, not color shift */
+.lavender .ask-field::placeholder  { color: #5a4e73; }
+.rose .ask-field::placeholder      { color: #614550; }
+.amber .ask-field::placeholder     { color: #6a5230; }
+.trans .ask-field::placeholder     { color: #5a4050; }
+.lav-gold .ask-field::placeholder  { color: #6a5230; }
+.rose-gold .ask-field::placeholder { color: #6a5230; }
+.gold-rose .ask-field::placeholder { color: #6a5230; }
+.trans-split .ask-field::placeholder { color: #1e5a70; }
+.bi-split .ask-field::placeholder  { color: #4a2a60; }
+.ask-send {
+  background: rgba(110,180,247,0.15); border: 1px solid rgba(110,180,247,0.3);
+  border-radius: 8px; color: #6eb4f7; font-size: 11px; padding: 0 10px;
+  font-family: inherit; height: 36px; white-space: nowrap; display: flex; align-items: center; cursor: pointer;
+  align-self: flex-end;
+}
+
+/* ── COLOR THEMES ── */
+
+/* 1. Lavender */
+.lavender .stream-dot { background: #b89fe8; }
+.lavender .why-block { background: #1e1a2a; border: 1px solid #3a3050; }
+.lavender .why-text { color: #b89fe8; }
+.lavender .action-btn.primary { background: rgba(184,159,232,0.15); border-color: rgba(184,159,232,0.35); color: #b89fe8; }
+.lavender .ask-send { background: rgba(184,159,232,0.15); border-color: rgba(184,159,232,0.35); color: #b89fe8; }
+
+/* 2. Dusty rose */
+.rose .stream-dot { background: #c78fa0; }
+.rose .why-block { background: #251a1e; border: 1px solid #4a2e38; }
+.rose .why-text { color: #c78fa0; }
+.rose .action-btn.primary { background: rgba(199,143,160,0.15); border-color: rgba(199,143,160,0.35); color: #c78fa0; }
+.rose .ask-send { background: rgba(199,143,160,0.15); border-color: rgba(199,143,160,0.35); color: #c78fa0; }
+
+/* 3. Amber */
+.amber .stream-dot { background: #d4a96a; }
+.amber .why-block { background: #251e14; border: 1px solid #4a3820; }
+.amber .why-text { color: #d4a96a; }
+.amber .action-btn.primary { background: rgba(212,169,106,0.15); border-color: rgba(212,169,106,0.35); color: #d4a96a; }
+.amber .ask-send { background: rgba(212,169,106,0.15); border-color: rgba(212,169,106,0.35); color: #d4a96a; }
+
+/* 4. Trans flag */
+.trans .stream-dot { background: #5BCEFA; }
+.trans .why-block { background: #1f1820; border: 1px solid #4a2a3a; }
+.trans .why-text { color: #F7A8B8; }
+.trans .action-btn.primary { background: rgba(91,206,250,0.12); border-color: rgba(91,206,250,0.3); color: #5BCEFA; }
+.trans .ask-send { background: rgba(91,206,250,0.12); border-color: rgba(91,206,250,0.3); color: #5BCEFA; }
+
+/* 5. Lavender primary, gold interactive */
+.lav-gold .stream-dot { background: #b89fe8; }
+.lav-gold .why-block { background: #1e1a2a; border: 1px solid #3a3050; }
+.lav-gold .why-text { color: #b89fe8; }
+.lav-gold .action-btn.primary { background: rgba(212,169,106,0.12); border-color: rgba(212,169,106,0.3); color: #d4a96a; }
+.lav-gold .ask-send { background: rgba(212,169,106,0.12); border-color: rgba(212,169,106,0.3); color: #d4a96a; }
+
+/* 6. Rose primary, gold interactive */
+.rose-gold .stream-dot { background: #c78fa0; }
+.rose-gold .why-block { background: #251a1e; border: 1px solid #4a2e38; }
+.rose-gold .why-text { color: #c78fa0; }
+.rose-gold .action-btn.primary { background: rgba(212,169,106,0.12); border-color: rgba(212,169,106,0.3); color: #d4a96a; }
+.rose-gold .ask-send { background: rgba(212,169,106,0.12); border-color: rgba(212,169,106,0.3); color: #d4a96a; }
+
+/* 7. Gold primary, rose interactive — amber's exact gold tint bg */
+.gold-rose .stream-dot { background: #d4a96a; }
+.gold-rose .why-block { background: #251e14; border: 1px solid #4a3820; }
+.gold-rose .why-text { color: #d4a96a; }
+.gold-rose .action-btn.primary { background: rgba(199,143,160,0.15); border-color: rgba(199,143,160,0.35); color: #c78fa0; }
+.gold-rose .ask-send { background: rgba(199,143,160,0.15); border-color: rgba(199,143,160,0.35); color: #c78fa0; }
+
+/* 8. Trans split — blue dots + buttons, blue bg + pink text in why box */
+.trans-split .stream-dot { background: #5BCEFA; }
+.trans-split .why-block { background: #0d1e2c; border: 1px solid #1a4060; }
+.trans-split .why-text { color: #F7A8B8; }
+.trans-split .action-btn.primary { background: rgba(91,206,250,0.12); border-color: rgba(91,206,250,0.3); color: #5BCEFA; }
+.trans-split .ask-send { background: rgba(91,206,250,0.12); border-color: rgba(91,206,250,0.3); color: #5BCEFA; }
+
+/* 9. Bi split — pink dots, purple bg + pink text in why box, purple buttons */
+.bi-split .stream-dot { background: #D4608A; }
+.bi-split .why-block { background: #1c1228; border: 1px solid #3e2458; }
+.bi-split .why-text { color: #D4608A; }
+.bi-split .action-btn.primary { background: rgba(139,79,184,0.15); border-color: rgba(139,79,184,0.35); color: #9B5FC8; }
+.bi-split .ask-send { background: rgba(139,79,184,0.15); border-color: rgba(139,79,184,0.35); color: #9B5FC8; }
+</style>
+</head>
+<body>
+
+<!-- ROW 1: originals -->
+<div style="width:100%; max-width: 1040px;">
+  <div class="section-label" style="margin-bottom:20px;">originals</div>
+  <div class="row">
+
+    <!-- 1. Lavender -->
+    <div class="variant">
+      <div class="swatch-label">Lavender</div>
+      <div class="overlay lavender">
+        <div class="overlay-header">
+          <span class="header-title">Controlled Drift</span>
+          <span class="header-time">Mon Jun 22</span>
+        </div>
+        <div class="plan-section">
+          <div class="stream-block">
+            <div class="stream-label"><div class="stream-dot"></div><span class="stream-name">Orientation map + arc</span></div>
+            <div class="arc-step">Prototype the overlay UI</div>
+            <div class="why-block">
+              <div class="why-label">why this matters</div>
+              <div class="why-text">Making alignment visible so you don't have to carry the shape of the work in your head</div>
+            </div>
+          </div>
+          <div class="stream-divider"></div>
+          <div class="stream-block">
+            <div class="stream-label"><div class="stream-dot"></div><span class="stream-name">Job search</span></div>
+            <div class="arc-step">Follow up on GRA leads</div>
+            <div class="why-block">
+              <div class="why-label">why this matters</div>
+              <div class="why-text">Income and a role that fits — not one that extracts</div>
+            </div>
+          </div>
+        </div>
+        <div class="actions-section">
+          <button class="action-btn primary">↻ Fresh plan</button>
+          <button class="action-btn">Low energy today</button>
+          <button class="action-btn">Quick wins only</button>
+          <button class="action-btn">I'm stuck</button>
+        </div>
+        <div class="ask-section">
+          <div class="ask-label">or tell me what you need</div>
+          <div class="ask-row">
+            <textarea class="ask-field" placeholder="e.g. I only have 30 min…"></textarea>
+            <button class="ask-send">↑ Send</button>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- 2. Dusty rose -->
+    <div class="variant">
+      <div class="swatch-label">Dusty rose</div>
+      <div class="overlay rose">
+        <div class="overlay-header">
+          <span class="header-title">Controlled Drift</span>
+          <span class="header-time">Mon Jun 22</span>
+        </div>
+        <div class="plan-section">
+          <div class="stream-block">
+            <div class="stream-label"><div class="stream-dot"></div><span class="stream-name">Orientation map + arc</span></div>
+            <div class="arc-step">Prototype the overlay UI</div>
+            <div class="why-block">
+              <div class="why-label">why this matters</div>
+              <div class="why-text">Making alignment visible so you don't have to carry the shape of the work in your head</div>
+            </div>
+          </div>
+          <div class="stream-divider"></div>
+          <div class="stream-block">
+            <div class="stream-label"><div class="stream-dot"></div><span class="stream-name">Job search</span></div>
+            <div class="arc-step">Follow up on GRA leads</div>
+            <div class="why-block">
+              <div class="why-label">why this matters</div>
+              <div class="why-text">Income and a role that fits — not one that extracts</div>
+            </div>
+          </div>
+        </div>
+        <div class="actions-section">
+          <button class="action-btn primary">↻ Fresh plan</button>
+          <button class="action-btn">Low energy today</button>
+          <button class="action-btn">Quick wins only</button>
+          <button class="action-btn">I'm stuck</button>
+        </div>
+        <div class="ask-section">
+          <div class="ask-label">or tell me what you need</div>
+          <div class="ask-row">
+            <textarea class="ask-field" placeholder="e.g. I only have 30 min…"></textarea>
+            <button class="ask-send">↑ Send</button>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- 3. Amber -->
+    <div class="variant">
+      <div class="swatch-label">Amber</div>
+      <div class="overlay amber">
+        <div class="overlay-header">
+          <span class="header-title">Controlled Drift</span>
+          <span class="header-time">Mon Jun 22</span>
+        </div>
+        <div class="plan-section">
+          <div class="stream-block">
+            <div class="stream-label"><div class="stream-dot"></div><span class="stream-name">Orientation map + arc</span></div>
+            <div class="arc-step">Prototype the overlay UI</div>
+            <div class="why-block">
+              <div class="why-label">why this matters</div>
+              <div class="why-text">Making alignment visible so you don't have to carry the shape of the work in your head</div>
+            </div>
+          </div>
+          <div class="stream-divider"></div>
+          <div class="stream-block">
+            <div class="stream-label"><div class="stream-dot"></div><span class="stream-name">Job search</span></div>
+            <div class="arc-step">Follow up on GRA leads</div>
+            <div class="why-block">
+              <div class="why-label">why this matters</div>
+              <div class="why-text">Income and a role that fits — not one that extracts</div>
+            </div>
+          </div>
+        </div>
+        <div class="actions-section">
+          <button class="action-btn primary">↻ Fresh plan</button>
+          <button class="action-btn">Low energy today</button>
+          <button class="action-btn">Quick wins only</button>
+          <button class="action-btn">I'm stuck</button>
+        </div>
+        <div class="ask-section">
+          <div class="ask-label">or tell me what you need</div>
+          <div class="ask-row">
+            <textarea class="ask-field" placeholder="e.g. I only have 30 min…"></textarea>
+            <button class="ask-send">↑ Send</button>
+          </div>
+        </div>
+      </div>
+    </div>
+
+  </div>
+</div>
+
+<!-- ROW 2: combos + trans -->
+<div style="width:100%; max-width: 1040px;">
+  <div class="section-label" style="margin-bottom:20px;">combos + trans flag</div>
+  <div class="row">
+
+    <!-- 4. Trans flag -->
+    <div class="variant">
+      <div class="swatch-label">Trans flag</div>
+      <div class="overlay trans">
+        <div class="overlay-header">
+          <span class="header-title">Controlled Drift</span>
+          <span class="header-time">Mon Jun 22</span>
+        </div>
+        <div class="plan-section">
+          <div class="stream-block">
+            <div class="stream-label"><div class="stream-dot"></div><span class="stream-name">Orientation map + arc</span></div>
+            <div class="arc-step">Prototype the overlay UI</div>
+            <div class="why-block">
+              <div class="why-label">why this matters</div>
+              <div class="why-text">Making alignment visible so you don't have to carry the shape of the work in your head</div>
+            </div>
+          </div>
+          <div class="stream-divider"></div>
+          <div class="stream-block">
+            <div class="stream-label"><div class="stream-dot"></div><span class="stream-name">Job search</span></div>
+            <div class="arc-step">Follow up on GRA leads</div>
+            <div class="why-block">
+              <div class="why-label">why this matters</div>
+              <div class="why-text">Income and a role that fits — not one that extracts</div>
+            </div>
+          </div>
+        </div>
+        <div class="actions-section">
+          <button class="action-btn primary">↻ Fresh plan</button>
+          <button class="action-btn">Low energy today</button>
+          <button class="action-btn">Quick wins only</button>
+          <button class="action-btn">I'm stuck</button>
+        </div>
+        <div class="ask-section">
+          <div class="ask-label">or tell me what you need</div>
+          <div class="ask-row">
+            <textarea class="ask-field" placeholder="e.g. I only have 30 min…"></textarea>
+            <button class="ask-send">↑ Send</button>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- 5. Lavender + gold -->
+    <div class="variant">
+      <div class="swatch-label">Lavender + gold — lavender meaning, gold buttons</div>
+      <div class="overlay lav-gold">
+        <div class="overlay-header">
+          <span class="header-title">Controlled Drift</span>
+          <span class="header-time">Mon Jun 22</span>
+        </div>
+        <div class="plan-section">
+          <div class="stream-block">
+            <div class="stream-label"><div class="stream-dot"></div><span class="stream-name">Orientation map + arc</span></div>
+            <div class="arc-step">Prototype the overlay UI</div>
+            <div class="why-block">
+              <div class="why-label">why this matters</div>
+              <div class="why-text">Making alignment visible so you don't have to carry the shape of the work in your head</div>
+            </div>
+          </div>
+          <div class="stream-divider"></div>
+          <div class="stream-block">
+            <div class="stream-label"><div class="stream-dot"></div><span class="stream-name">Job search</span></div>
+            <div class="arc-step">Follow up on GRA leads</div>
+            <div class="why-block">
+              <div class="why-label">why this matters</div>
+              <div class="why-text">Income and a role that fits — not one that extracts</div>
+            </div>
+          </div>
+        </div>
+        <div class="actions-section">
+          <button class="action-btn primary">↻ Fresh plan</button>
+          <button class="action-btn">Low energy today</button>
+          <button class="action-btn">Quick wins only</button>
+          <button class="action-btn">I'm stuck</button>
+        </div>
+        <div class="ask-section">
+          <div class="ask-label">or tell me what you need</div>
+          <div class="ask-row">
+            <textarea class="ask-field" placeholder="e.g. I only have 30 min…"></textarea>
+            <button class="ask-send">↑ Send</button>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- 6. Rose + gold -->
+    <div class="variant">
+      <div class="swatch-label">Rose + gold — rose meaning, gold buttons</div>
+      <div class="overlay rose-gold">
+        <div class="overlay-header">
+          <span class="header-title">Controlled Drift</span>
+          <span class="header-time">Mon Jun 22</span>
+        </div>
+        <div class="plan-section">
+          <div class="stream-block">
+            <div class="stream-label"><div class="stream-dot"></div><span class="stream-name">Orientation map + arc</span></div>
+            <div class="arc-step">Prototype the overlay UI</div>
+            <div class="why-block">
+              <div class="why-label">why this matters</div>
+              <div class="why-text">Making alignment visible so you don't have to carry the shape of the work in your head</div>
+            </div>
+          </div>
+          <div class="stream-divider"></div>
+          <div class="stream-block">
+            <div class="stream-label"><div class="stream-dot"></div><span class="stream-name">Job search</span></div>
+            <div class="arc-step">Follow up on GRA leads</div>
+            <div class="why-block">
+              <div class="why-label">why this matters</div>
+              <div class="why-text">Income and a role that fits — not one that extracts</div>
+            </div>
+          </div>
+        </div>
+        <div class="actions-section">
+          <button class="action-btn primary">↻ Fresh plan</button>
+          <button class="action-btn">Low energy today</button>
+          <button class="action-btn">Quick wins only</button>
+          <button class="action-btn">I'm stuck</button>
+        </div>
+        <div class="ask-section">
+          <div class="ask-label">or tell me what you need</div>
+          <div class="ask-row">
+            <textarea class="ask-field" placeholder="e.g. I only have 30 min…"></textarea>
+            <button class="ask-send">↑ Send</button>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- 7. Gold + rose (cleaned) -->
+    <div class="variant">
+      <div class="swatch-label">Rose + gold — gold meaning, rose buttons</div>
+      <div class="overlay gold-rose">
+        <div class="overlay-header">
+          <span class="header-title">Controlled Drift</span>
+          <span class="header-time">Mon Jun 22</span>
+        </div>
+        <div class="plan-section">
+          <div class="stream-block">
+            <div class="stream-label"><div class="stream-dot"></div><span class="stream-name">Orientation map + arc</span></div>
+            <div class="arc-step">Prototype the overlay UI</div>
+            <div class="why-block">
+              <div class="why-label">why this matters</div>
+              <div class="why-text">Making alignment visible so you don't have to carry the shape of the work in your head</div>
+            </div>
+          </div>
+          <div class="stream-divider"></div>
+          <div class="stream-block">
+            <div class="stream-label"><div class="stream-dot"></div><span class="stream-name">Job search</span></div>
+            <div class="arc-step">Follow up on GRA leads</div>
+            <div class="why-block">
+              <div class="why-label">why this matters</div>
+              <div class="why-text">Income and a role that fits — not one that extracts</div>
+            </div>
+          </div>
+        </div>
+        <div class="actions-section">
+          <button class="action-btn primary">↻ Fresh plan</button>
+          <button class="action-btn">Low energy today</button>
+          <button class="action-btn">Quick wins only</button>
+          <button class="action-btn">I'm stuck</button>
+        </div>
+        <div class="ask-section">
+          <div class="ask-label">or tell me what you need</div>
+          <div class="ask-row">
+            <textarea class="ask-field" placeholder="e.g. I only have 30 min…"></textarea>
+            <button class="ask-send">↑ Send</button>
+          </div>
+        </div>
+      </div>
+    </div>
+
+  </div>
+</div>
+
+<!-- ROW 3: pride flag splits -->
+<div style="width:100%; max-width: 1040px;">
+  <div class="section-label" style="margin-bottom:20px;">flag splits</div>
+  <div class="row">
+
+    <!-- 8. Trans split -->
+    <div class="variant">
+      <div class="swatch-label">Trans — blue dots + buttons, pink why</div>
+      <div class="overlay trans-split">
+        <div class="overlay-header">
+          <span class="header-title">Controlled Drift</span>
+          <span class="header-time">Mon Jun 22</span>
+        </div>
+        <div class="plan-section">
+          <div class="stream-block">
+            <div class="stream-label"><div class="stream-dot"></div><span class="stream-name">Orientation map + arc</span></div>
+            <div class="arc-step">Prototype the overlay UI</div>
+            <div class="why-block">
+              <div class="why-label">why this matters</div>
+              <div class="why-text">Making alignment visible so you don't have to carry the shape of the work in your head</div>
+            </div>
+          </div>
+          <div class="stream-divider"></div>
+          <div class="stream-block">
+            <div class="stream-label"><div class="stream-dot"></div><span class="stream-name">Job search</span></div>
+            <div class="arc-step">Follow up on GRA leads</div>
+            <div class="why-block">
+              <div class="why-label">why this matters</div>
+              <div class="why-text">Income and a role that fits — not one that extracts</div>
+            </div>
+          </div>
+        </div>
+        <div class="actions-section">
+          <button class="action-btn primary">↻ Fresh plan</button>
+          <button class="action-btn">Low energy today</button>
+          <button class="action-btn">Quick wins only</button>
+          <button class="action-btn">I'm stuck</button>
+        </div>
+        <div class="ask-section">
+          <div class="ask-label">or tell me what you need</div>
+          <div class="ask-row">
+            <textarea class="ask-field" placeholder="e.g. I only have 30 min…"></textarea>
+            <button class="ask-send">↑ Send</button>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- 9. Bi split -->
+    <div class="variant">
+      <div class="swatch-label">Bi — pink dots, blue why, purple buttons</div>
+      <div class="overlay bi-split">
+        <div class="overlay-header">
+          <span class="header-title">Controlled Drift</span>
+          <span class="header-time">Mon Jun 22</span>
+        </div>
+        <div class="plan-section">
+          <div class="stream-block">
+            <div class="stream-label"><div class="stream-dot"></div><span class="stream-name">Orientation map + arc</span></div>
+            <div class="arc-step">Prototype the overlay UI</div>
+            <div class="why-block">
+              <div class="why-label">why this matters</div>
+              <div class="why-text">Making alignment visible so you don't have to carry the shape of the work in your head</div>
+            </div>
+          </div>
+          <div class="stream-divider"></div>
+          <div class="stream-block">
+            <div class="stream-label"><div class="stream-dot"></div><span class="stream-name">Job search</span></div>
+            <div class="arc-step">Follow up on GRA leads</div>
+            <div class="why-block">
+              <div class="why-label">why this matters</div>
+              <div class="why-text">Income and a role that fits — not one that extracts</div>
+            </div>
+          </div>
+        </div>
+        <div class="actions-section">
+          <button class="action-btn primary">↻ Fresh plan</button>
+          <button class="action-btn">Low energy today</button>
+          <button class="action-btn">Quick wins only</button>
+          <button class="action-btn">I'm stuck</button>
+        </div>
+        <div class="ask-section">
+          <div class="ask-label">or tell me what you need</div>
+          <div class="ask-row">
+            <textarea class="ask-field" placeholder="e.g. I only have 30 min…"></textarea>
+            <button class="ask-send">↑ Send</button>
+          </div>
+        </div>
+      </div>
+    </div>
+
+  </div>
+</div>
+
+</body>
+</html>

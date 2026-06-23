@@ -279,7 +279,10 @@ def format_context(goals, projects, tasks, strategies, today_recurrings, neglect
 
 # --- Clock-time schedule + time-block formatting ----------------------------
 
-_MEAL_PARAMS_PATH = os.path.join(os.path.dirname(__file__), "data", "meal_params.json")
+import cd_paths
+def _meal_params_path():
+    # Resolved at call time so the test sandbox redirect (CD_DATA_DIR) takes effect.
+    return cd_paths.data_file("meal_params.json")
 _MEAL_PARAMS_DEFAULT = {
     "lunch": {
         "default_hour": 12.0,   # learned decimal hour (12.5 = 12:30); updated by corrections
@@ -290,7 +293,7 @@ _MEAL_PARAMS_DEFAULT = {
 
 def _load_meal_params():
     try:
-        with open(_MEAL_PARAMS_PATH) as f:
+        with open(_meal_params_path()) as f:
             return json.load(f)
     except (FileNotFoundError, json.JSONDecodeError):
         return _MEAL_PARAMS_DEFAULT
@@ -310,8 +313,9 @@ def update_meal_learned_time(meal_name, actual_hour, actual_minute=0):
     actual_decimal = actual_hour + actual_minute / 60.0
     current = params[key]["default_hour"]
     params[key]["default_hour"] = round(0.8 * current + 0.2 * actual_decimal, 2)
-    os.makedirs(os.path.dirname(_MEAL_PARAMS_PATH), exist_ok=True)
-    with open(_MEAL_PARAMS_PATH, "w") as f:
+    path = _meal_params_path()
+    os.makedirs(os.path.dirname(path), exist_ok=True)
+    with open(path, "w") as f:
         json.dump(params, f, indent=2)
 
 
