@@ -86,7 +86,11 @@ def load_active_items(sid):
                               "parent_project_id": parent_project_id})
 
         elif tkey == "task":
-            status_tag = pv("status", "select") or {}
+            # The system's task status lives in the GSDO `gsdo_task_status` select (Active /
+            # Ready / Done / Parked / …) — NOT the built-in `status`, which is vestigial and
+            # always empty. Reading the built-in one silently included Done/Parked tasks in the
+            # plan (they never got filtered). Read the property the rest of the system writes.
+            status_tag = pv("gsdo_task_status", "select") or {}
             status = status_tag.get("name") if isinstance(status_tag, dict) else status_tag
             if status in (None, "Active", "Ready", "Needs Clarifying"):
                 done = pv("done", "checkbox")
