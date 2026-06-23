@@ -17,7 +17,7 @@ daily_list.md — so the structured schema sits next to the parser that reads it
 validated chat-flow prompt stays untouched. The prose plan is still produced (for the
 /drift flow); the overlay reads the JSON block this module appends a request for.
 """
-import sys, os, json, re, subprocess, datetime as dt
+import sys, os, json, re, subprocess, datetime as dt, time
 
 sys.path.insert(0, os.path.dirname(__file__))
 import gsdo_anytype as g
@@ -26,6 +26,7 @@ from surface_log import log_surfaced_batch
 from plan_corrections_log import log_correction
 import plan_store
 import cd_paths
+import generation_log
 
 PROMPT_PATH = os.path.join(os.path.dirname(__file__), "..", "prompts", "daily_list.md")
 GEN_TIMEOUT = 300  # seconds. A full plan runs ~160s (JSON-only); 300 gives margin for a
@@ -36,14 +37,18 @@ GEN_TIMEOUT = 300  # seconds. A full plan runs ~160s (JSON-only); 300 gives marg
 
 # --- the pluggable LLM seam -------------------------------------------------
 
-def generate(prompt, backend=None):
+def generate(prompt, backend=None, model=None):
     """Run one LLM generation. Returns raw model text. Raises on failure (never silent)."""
-    backend = backend or os.environ.get("CD_BACKEND", "claude")
+    backend = backend or os.environ.get("CD_BACKEND", "mistral")
+    if backend == "openrouter":
+        return _generate_openrouter(prompt, model=model)
+    if backend == "mistral":
+        return _generate_mistral(prompt, model=model)
     if backend == "claude":
         return _generate_claude(prompt)
     if backend == "local":
         return _generate_local(prompt)
-    raise ValueError(f"unknown CD_BACKEND {backend!r} (expected 'claude' or 'local')")
+    raise ValueError(f"unknown CD_BACKEND {backend!r} (expected 'openrouter', 'mistral', 'claude', or 'local')")
 
 
 def _claude_env():
@@ -109,12 +114,106 @@ def _generate_local(prompt):
     try:
         from mlx_lm import load, generate as mlx_generate
     except ImportError:
-        raise RuntimeError("mlx_lm not installed — `pip install mlx-lm`, or use CD_BACKEND=claude")
+        raise RuntimeError("mlx_lm not installed — `pip install mlx-lm`, or use CD_BACKEND=openrouter")
     model_name = os.environ.get("CD_LOCAL_MODEL", "mlx-community/Qwen2.5-7B-Instruct-4bit")
     model, tokenizer = load(model_name)
     messages = [{"role": "user", "content": prompt}]
     formatted = tokenizer.apply_chat_template(messages, tokenize=False, add_generation_prompt=True)
     return mlx_generate(model, tokenizer, prompt=formatted, max_tokens=2048, verbose=False)
+
+
+def _load_key(*env_vars):
+    """Return the first non-empty value from env or ~/Documents/.env. Raises if none found."""
+    for var in env_vars:
+        val = os.environ.get(var)
+        if val:
+            return val
+    env_path = os.path.expanduser("~/Documents/.env")
+    try:
+        with open(env_path) as f:
+            for line in f:
+                line = line.strip()
+                if not line or line.startswith("#") or "=" not in line:
+                    continue
+                k, _, v = line.partition("=")
+                if k.strip() in env_vars and v.strip():
+                    return v.strip().strip('"').strip("'")
+    except FileNotFoundError:
+        pass
+    raise RuntimeError(f"API key not found — set one of: {', '.join(env_vars)}")
+
+
+def _http_post(url, payload, headers, timeout=None):
+    """Minimal HTTP POST using stdlib — no requests dependency."""
+    import urllib.request, urllib.error
+    data = json.dumps(payload).encode()
+    req = urllib.request.Request(url, data=data, headers=headers, method="POST")
+    try:
+        with urllib.request.urlopen(req, timeout=timeout or GEN_TIMEOUT) as resp:
+            return json.loads(resp.read().decode())
+    except urllib.error.HTTPError as e:
+        body = e.read().decode()[:300]
+        raise RuntimeError(f"HTTP {e.code} from {url}: {body}")
+    except urllib.error.URLError as e:
+        raise RuntimeError(f"Network error reaching {url}: {e.reason}")
+
+
+def _generate_openrouter(prompt, model=None):
+    """Direct HTTP call to OpenRouter (OpenAI-compatible). No claude CLI involved.
+
+    Model: CD_OPENROUTER_MODEL env var, or pass model= explicitly (for the compare script).
+    Default: Claude Sonnet 4 — verified working 2026-06-23.
+    Key: REFRAME_SHARED_OPENROUTER_KEY from env or ~/Documents/.env.
+    """
+    key = _load_key("REFRAME_SHARED_OPENROUTER_KEY")
+    model = model or os.environ.get("CD_OPENROUTER_MODEL", "anthropic/claude-sonnet-4")
+    data = _http_post(
+        "https://openrouter.ai/api/v1/chat/completions",
+        payload={"model": model, "messages": [{"role": "user", "content": prompt}]},
+        headers={"Authorization": f"Bearer {key}", "Content-Type": "application/json"},
+    )
+    try:
+        return data["choices"][0]["message"]["content"]
+    except (KeyError, IndexError):
+        raise RuntimeError(f"OpenRouter response missing content: {str(data)[:200]}")
+
+
+def _generate_mistral(prompt, model=None):
+    """Direct HTTP call to Mistral API (EU/GDPR, no-train on API inputs).
+
+    Model: CD_MISTRAL_MODEL env var, or pass model= explicitly.
+    Default: mistral-large-latest (30s, highest register quality tested 2026-06-23).
+    Key: MISTRAL_API_KEY or REFRAME_SHARED_MISTRAL_KEY from env or ~/Documents/.env.
+    """
+    key = _load_key("MISTRAL_API_KEY", "REFRAME_SHARED_MISTRAL_KEY")
+    model = model or os.environ.get("CD_MISTRAL_MODEL", "mistral-large-latest")
+    data = _http_post(
+        "https://api.mistral.ai/v1/chat/completions",
+        payload={"model": model, "messages": [{"role": "user", "content": prompt}]},
+        headers={"Authorization": f"Bearer {key}", "Content-Type": "application/json"},
+    )
+    try:
+        return data["choices"][0]["message"]["content"]
+    except (KeyError, IndexError):
+        raise RuntimeError(f"Mistral response missing content: {str(data)[:200]}")
+
+
+def _active_model(backend):
+    """The model string for this backend, for logging. None if not applicable."""
+    if backend == "openrouter":
+        return os.environ.get("CD_OPENROUTER_MODEL", "anthropic/claude-sonnet-4")
+    if backend == "mistral":
+        return os.environ.get("CD_MISTRAL_MODEL", "mistral-large-latest")
+    return None
+
+
+def build_prompt(capacity=None, extra=None):
+    """Build the full generation prompt. Public for the compare script and manual testing."""
+    full_context, tasks, start_time = build_context(capacity=capacity)
+    ref_map, task_table = _build_task_refs(tasks)
+    prompt = _assemble_prompt(full_context, start_time, capacity=capacity,
+                              extra=extra, task_table=task_table)
+    return prompt, tasks, ref_map
 
 
 # --- the JSON-output contract (appended to the daily_list.md prompt) ---------
@@ -324,9 +423,26 @@ def generate_plan(capacity=None, source="generate"):
     full_context, tasks, start_time = build_context(capacity=capacity)
     ref_map, task_table = _build_task_refs(tasks)
     prompt = _assemble_prompt(full_context, start_time, capacity=capacity, task_table=task_table)
-    model_text = generate(prompt)
-    plan = parse_plan(model_text)
-    _resolve_ids(plan, ref_map, tasks)  # thread Anytype task ids onto items (mark-done)
+    backend = os.environ.get("CD_BACKEND", "mistral")
+    model = _active_model(backend)
+    backend_label = f"{backend}/{model}" if model else backend
+    t0 = time.monotonic()
+    try:
+        model_text = generate(prompt)
+        plan = parse_plan(model_text)
+        _resolve_ids(plan, ref_map, tasks)
+    except Exception as e:
+        generation_log.log_generation(
+            backend=backend_label, duration_s=time.monotonic() - t0,
+            success=False, source=source,
+            error_type=type(e).__name__, error_msg=str(e),
+        )
+        raise
+    generation_log.log_generation(
+        backend=backend_label, duration_s=time.monotonic() - t0,
+        success=True, source=source,
+        structural=generation_log.check_plan(plan, n_input_tasks=len(tasks)),
+    )
     saved = plan_store.save_plan(plan, source=source)
     # Learning loop: every generation records what surfaced (neglect/rhythm history).
     if tasks:
@@ -345,9 +461,26 @@ def negotiate(message, kind):
     full_context, tasks, start_time = build_context()
     ref_map, task_table = _build_task_refs(tasks)
     prompt = _assemble_prompt(full_context, start_time, extra=message, task_table=task_table)
-    model_text = generate(prompt)
-    plan = parse_plan(model_text)
-    _resolve_ids(plan, ref_map, tasks)  # thread Anytype task ids onto items (mark-done)
+    backend = os.environ.get("CD_BACKEND", "mistral")
+    model = _active_model(backend)
+    backend_label = f"{backend}/{model}" if model else backend
+    t0 = time.monotonic()
+    try:
+        model_text = generate(prompt)
+        plan = parse_plan(model_text)
+        _resolve_ids(plan, ref_map, tasks)
+    except Exception as e:
+        generation_log.log_generation(
+            backend=backend_label, duration_s=time.monotonic() - t0,
+            success=False, source=kind,
+            error_type=type(e).__name__, error_msg=str(e),
+        )
+        raise
+    generation_log.log_generation(
+        backend=backend_label, duration_s=time.monotonic() - t0,
+        success=True, source=kind,
+        structural=generation_log.check_plan(plan, n_input_tasks=len(tasks)),
+    )
     saved = plan_store.save_plan(plan, source=kind)
 
     # Learning loop #1: the correction itself (the richest signal — live negotiation).
