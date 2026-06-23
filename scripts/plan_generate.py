@@ -28,7 +28,10 @@ import plan_store
 import cd_paths
 
 PROMPT_PATH = os.path.join(os.path.dirname(__file__), "..", "prompts", "daily_list.md")
-GEN_TIMEOUT = 240  # seconds; a generation that hangs longer is a failure, not a wait
+GEN_TIMEOUT = 300  # seconds. A full plan runs ~160s (JSON-only); 300 gives margin for a
+                   # slow/variable run so it succeeds-slow rather than fails (a failed gen
+                   # leaves a STALE plan, which is worse than a wait — and it's async anyway).
+                   # The real fix for speed is fewer tasks per plan (the prioritization work).
 
 
 # --- the pluggable LLM seam -------------------------------------------------
@@ -127,8 +130,8 @@ conversation to answer you.** Your output is written straight to a cache the ove
 displays. Therefore:
 
 - **Do NOT ask questions, offer choices, or propose to wait.** There is no one to reply.
-- **Always produce a plan and the JSON block below**, even with imperfect inputs (no
-  capacity signal, an awkward hour, a long task list). Make reasonable assumptions.
+- **Always produce the JSON block below**, even with imperfect inputs (no capacity signal,
+  an awkward hour, a long task list). Make reasonable assumptions.
 - If it is **late at night** or the day's hours are mostly gone, do NOT schedule tasks
   past midnight or pretend a full day remains. Instead produce a short, gentle plan for
   the time that's actually left — a wind-down, the one small thing worth closing on, or an
@@ -136,11 +139,13 @@ displays. Therefore:
   (a calm minimal plan is valid), not in refusing to produce one.
 - June still negotiates later via buttons; this is her starting point, not a contract.
 
-## REQUIRED OVERLAY OUTPUT
+## REQUIRED OUTPUT — THE JSON BLOCK ONLY
 
-After the prose plan above, emit a single fenced ```json code block — and nothing after
-it — containing the SAME plan as structured data the overlay renders. This block is
-mandatory. Use exactly this shape (keep clock times verbatim from the schedule; `project`
+Output **ONLY** the single fenced ```json code block specified here — nothing before it,
+nothing after it. **Do NOT write out the prose plan** described earlier in this prompt: the
+JSON below already carries all of it — the woven frame, each block's framing, each item's
+why — so the prose version is redundant and only slows you down. Skip straight to the JSON.
+Use exactly this shape (keep clock times verbatim from the schedule; `project`
 is null for items with no project like Lunch; `why` is the short upward-link phrase,
 omit/null if none; `ref` is the task-reference token — see TASK REFERENCE in the inputs —
 for items that ARE one of the listed tasks, and null for non-task items like Lunch, breaks,
@@ -165,8 +170,9 @@ or household chores):
 }
 ```
 
-The JSON must be faithful to the prose plan — same items, same times, same order. This
-block is what June actually sees; the prose is for the chat flow.
+This JSON is the whole output — it is exactly what June sees in the overlay. Keep the woven
+frame specific and warm (per the guidance above), the block framings and why-phrases intact,
+and the items in schedule order. No prose before or after — just the block.
 """
 
 
