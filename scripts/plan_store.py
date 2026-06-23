@@ -108,6 +108,86 @@ def load_plan():
         return None
 
 
+def mark_item_done(task_id):
+    """Flip done=true on every cached plan item carrying this Anytype task id, so reopening
+    the overlay shows it checked WITHOUT a regeneration (closing a task must not cost an LLM
+    call). Returns the updated plan, or None if there's no cache / no matching item.
+
+    Preserves generated_at + source deliberately — a checkoff is not a new generation, and
+    re-stamping would make a mark-done masquerade as a fresh morning plan.
+    """
+    plan = load_plan()
+    if plan is None:
+        return None
+    changed = False
+    for block in plan.get("blocks", []):
+        for item in block.get("items", []):
+            if item.get("id") == task_id:
+                item["done"] = True
+                changed = True
+    if changed:
+        path = _plan_path()
+        tmp = path + ".tmp"
+        with open(tmp, "w") as f:
+            json.dump(plan, f, indent=2)
+        os.replace(tmp, path)  # atomic — the overlay never reads a half-written plan
+    return plan
+
+
+def mark_item_undone(task_id):
+    """Undo a checkoff in the cache (the mis-tap fix): set done=False on every cached plan
+    item with this task id, so reopening the overlay shows it un-checked again. Mirror of
+    mark_item_done; preserves generated_at (a toggle is not a regeneration)."""
+    plan = load_plan()
+    if plan is None:
+        return None
+    changed = False
+    for block in plan.get("blocks", []):
+        for item in block.get("items", []):
+            if item.get("id") == task_id and item.get("done"):
+                item["done"] = False
+                changed = True
+    if changed:
+        path = _plan_path()
+        tmp = path + ".tmp"
+        with open(tmp, "w") as f:
+            json.dump(plan, f, indent=2)
+        os.replace(tmp, path)
+    return plan
+
+
+# --- generation status (for async generate-and-poll) ------------------------
+# A long generation (the LLM call) no longer blocks the HTTP request — the server kicks it
+# off in the background and the overlay polls this status. Lives in its own small file so a
+# status write never races a plan write.
+def _status_path():
+    return cd_paths.config_file("gen_status.json")
+
+
+def get_gen_status():
+    """Current generation state: {state: 'idle'|'running'|'error', updated_at, [error]}.
+    'idle' is the honest default (nothing has run, or the last run finished)."""
+    try:
+        with open(_status_path()) as f:
+            return json.load(f)
+    except (FileNotFoundError, json.JSONDecodeError):
+        return {"state": "idle"}
+
+
+def set_gen_status(state, error=None):
+    """Record generation state. `state` in {'running','idle','error'}; `error` on failure."""
+    _ensure_dir()
+    rec = {"state": state, "updated_at": dt.datetime.now().isoformat()}
+    if error:
+        rec["error"] = error
+    path = _status_path()
+    tmp = path + ".tmp"
+    with open(tmp, "w") as f:
+        json.dump(rec, f, indent=2)
+    os.replace(tmp, path)
+    return rec
+
+
 # --- actions (variable button schema) ---------------------------------------
 
 def load_actions():

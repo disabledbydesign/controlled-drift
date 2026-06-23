@@ -142,7 +142,9 @@ After the prose plan above, emit a single fenced ```json code block — and noth
 it — containing the SAME plan as structured data the overlay renders. This block is
 mandatory. Use exactly this shape (keep clock times verbatim from the schedule; `project`
 is null for items with no project like Lunch; `why` is the short upward-link phrase,
-omit/null if none):
+omit/null if none; `ref` is the task-reference token — see TASK REFERENCE in the inputs —
+for items that ARE one of the listed tasks, and null for non-task items like Lunch, breaks,
+or household chores):
 
 ```json
 {
@@ -153,7 +155,7 @@ omit/null if none):
       "time": "9:00 AM – 12:00 PM",
       "framing": "the 1-2 sentence block framing",
       "items": [
-        {"time": "9:00 – 10:30 AM", "project": "Project/thread name", "task": "the specific next action", "why": "short why-here phrase"}
+        {"time": "9:00 – 10:30 AM", "project": "Project/thread name", "task": "the specific next action", "why": "short why-here phrase", "ref": "T1"}
       ]
     }
   ],
@@ -195,7 +197,26 @@ def build_context(capacity=None, start_time=None):
     return full_context, tasks, start_time
 
 
-def _assemble_prompt(full_context, start_time, capacity=None, extra=None):
+def _build_task_refs(tasks):
+    """Assign each active task a short stable token (T1, T2, …) for the id-threading
+    handshake. Returns (ref_map, table_text):
+
+      ref_map    {"T1": anytype_id, ...} — Python owns the token->real-id mapping
+      table_text the "T1 — <task name>" block injected into the prompt
+
+    Why tokens, not raw ids: the model only has to copy a 2-char token verbatim (which it
+    does reliably), while the 40+ char opaque Anytype id never enters its output to be
+    mangled. The model echoes the token on each plan item; _resolve_ids maps it back here.
+    """
+    ref_map, lines = {}, []
+    for i, t in enumerate(tasks, start=1):
+        token = f"T{i}"
+        ref_map[token] = t["id"]
+        lines.append(f"  {token} — {t['name']}")
+    return ref_map, "\n".join(lines)
+
+
+def _assemble_prompt(full_context, start_time, capacity=None, extra=None, task_table=None):
     """Build the full prompt: the daily_list.md template + an authoritative inputs section
     holding the real data, + the JSON contract (+ any negotiation note).
 
@@ -222,11 +243,50 @@ def _assemble_prompt(full_context, start_time, capacity=None, extra=None):
         "",
         full_context,
     ]
+    if task_table:
+        parts += [
+            "",
+            "### TASK REFERENCE — copy the matching `ref` token onto each plan item",
+            "",
+            "Each active task below has a short token. In the JSON output, set each task "
+            "item's `ref` to the token of the task it represents, copied EXACTLY (do not "
+            "invent, alter, or renumber tokens). Use null for non-task items (Lunch, breaks, "
+            "household chores). This is how June marks a task done from the surface — a wrong "
+            "or missing token just means that item can't be checked off, so be faithful.",
+            "",
+            task_table,
+        ]
     if extra:
         parts += ["", "## JUNE'S REQUEST FOR THIS PLAN", "", extra]
     prompt = "\n".join(parts)
     prompt += _JSON_INSTRUCTION
     return prompt
+
+
+def _norm(s):
+    """Normalize a task string for fallback name-matching: lowercased, whitespace-collapsed."""
+    return re.sub(r"\s+", " ", (s or "").strip().lower())
+
+
+def _resolve_ids(plan, ref_map, tasks):
+    """Thread the real Anytype task id onto each plan item, in place.
+
+    Primary path: the model echoed a `ref` token -> map it back through ref_map.
+    Fallback: no/unknown token, but the item's task text matches a real task name exactly
+    (normalized) -> use that id. This is deliberately STRICT (exact normalized equality, not
+    substring) — a loose match risks marking the WRONG task done, the one error worse than
+    no id at all. No match -> the item simply carries no id and shows no done-affordance.
+    """
+    by_name = {_norm(t["name"]): t["id"] for t in tasks}
+    for block in plan.get("blocks", []):
+        for item in block.get("items", []):
+            ref = item.pop("ref", None)  # consume the token; the overlay only needs the id
+            tid = ref_map.get(ref) if ref else None
+            if not tid:
+                tid = by_name.get(_norm(item.get("task")))
+            if tid:
+                item["id"] = tid
+    return plan
 
 
 # --- parsing the model output ----------------------------------------------
@@ -256,9 +316,11 @@ def parse_plan(model_text):
 def generate_plan(capacity=None, source="generate"):
     """Fresh generation (morning push / refresh). Writes cache, logs what surfaced."""
     full_context, tasks, start_time = build_context(capacity=capacity)
-    prompt = _assemble_prompt(full_context, start_time, capacity=capacity)
+    ref_map, task_table = _build_task_refs(tasks)
+    prompt = _assemble_prompt(full_context, start_time, capacity=capacity, task_table=task_table)
     model_text = generate(prompt)
     plan = parse_plan(model_text)
+    _resolve_ids(plan, ref_map, tasks)  # thread Anytype task ids onto items (mark-done)
     saved = plan_store.save_plan(plan, source=source)
     # Learning loop: every generation records what surfaced (neglect/rhythm history).
     if tasks:
@@ -275,9 +337,11 @@ def negotiate(message, kind):
     """
     before = plan_store.load_plan()
     full_context, tasks, start_time = build_context()
-    prompt = _assemble_prompt(full_context, start_time, extra=message)
+    ref_map, task_table = _build_task_refs(tasks)
+    prompt = _assemble_prompt(full_context, start_time, extra=message, task_table=task_table)
     model_text = generate(prompt)
     plan = parse_plan(model_text)
+    _resolve_ids(plan, ref_map, tasks)  # thread Anytype task ids onto items (mark-done)
     saved = plan_store.save_plan(plan, source=kind)
 
     # Learning loop #1: the correction itself (the richest signal — live negotiation).

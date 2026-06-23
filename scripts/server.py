@@ -11,18 +11,50 @@ Routes:
   GET  /api/plan        the cached daily plan (JSON) — instant, no LLM
   GET  /api/map         orient_map.render_map(...) verbatim (text) — deterministic, no LLM
   GET  /api/actions     the variable button schema (JSON)
-  POST /api/refresh     regenerate a fresh plan, re-cache  [logs surfaced]
-  POST /api/negotiate   {preset_id} or {message} -> renegotiate  [logs correction + surfaced]
+  GET  /api/status      generation state {idle|running|error} + plan timestamp (for polling)
+  POST /api/refresh     start a fresh generation (async, 202); poll /api/status  [logs surfaced]
+  POST /api/negotiate   {preset_id}|{message} -> start a renegotiation (async, 202); poll status
+  POST /api/complete    {id} -> mark a task done in Anytype (read-back) + flip the cache
+  POST /api/uncomplete  {id} -> undo: status back to Ready (read-back) + un-flip the cache
 
 Run:  python3 scripts/server.py   (then open http://localhost:5050)
 """
-import sys, os, json
+import sys, os, json, threading
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 
 sys.path.insert(0, os.path.dirname(__file__))
 import plan_store
 import plan_generate
+import task_actions
 import orient_map
+
+# A generation (the LLM call) takes ~60-110s — far longer than a phone browser will hold a
+# connection open, so it must NOT block the HTTP request (that's the "build my plan from bed"
+# timeout: the phone gives up, the server finishes into a dead socket). Instead we kick the
+# generation off in the background and the overlay polls GET /api/status. One at a time —
+# the lock means a second tap while one is running is a no-op, not a double generation.
+_gen_lock = threading.Lock()
+
+
+def _start_generation(fn):
+    """Run a generation `fn()` in a background thread, tracking status for the poller.
+    Returns True if started, False if one is already in flight (don't stack generations)."""
+    if not _gen_lock.acquire(blocking=False):
+        return False
+    plan_store.set_gen_status("running")
+
+    def worker():
+        try:
+            fn()
+            plan_store.set_gen_status("idle")
+        except Exception as e:
+            # Surface the failure to the poller honestly — never a silent dead end.
+            plan_store.set_gen_status("error", error=str(e))
+        finally:
+            _gen_lock.release()
+
+    threading.Thread(target=worker, daemon=True).start()
+    return True
 
 # Bind address. Default is loopback (Mac-only). Set CD_BIND=0.0.0.0 to also accept
 # connections from June's phone on the same wifi (so she can use the overlay from bed).
@@ -87,13 +119,24 @@ class Handler(BaseHTTPRequestHandler):
             self._send(200, plan_store.load_actions())
             return
 
+        if self.path == "/api/status":
+            # The overlay polls this after kicking off a generation: are we still running,
+            # did it land (idle + a newer plan timestamp), or did it fail?
+            st = plan_store.get_gen_status()
+            plan = plan_store.load_plan()
+            st["plan_generated_at"] = plan.get("generated_at") if plan else None
+            self._send(200, st)
+            return
+
         self._send(404, {"error": f"no route {self.path}"})
 
     # --- POST ---------------------------------------------------------------
 
     def do_POST(self):
         if self.path == "/api/refresh":
-            self._generate(lambda: plan_generate.generate_plan(source="refresh"))
+            # Async: kick off the generation, return immediately; the overlay polls /api/status.
+            started = _start_generation(lambda: plan_generate.generate_plan(source="refresh"))
+            self._send(202, {"state": "running", "started": started})
             return
 
         if self.path == "/api/negotiate":
@@ -106,28 +149,57 @@ class Handler(BaseHTTPRequestHandler):
                     return
                 payload = preset.get("payload")
                 if not payload:
-                    # e.g. "add" — a UI-only action; nothing to generate.
+                    # e.g. "add" — a UI-only action; nothing to generate (synchronous).
                     self._send(200, plan_store.load_plan() or {"empty": True})
                     return
-                self._generate(lambda: plan_generate.negotiate(payload, kind=f"preset:{preset_id}"))
+                started = _start_generation(
+                    lambda: plan_generate.negotiate(payload, kind=f"preset:{preset_id}"))
+                self._send(202, {"state": "running", "started": started})
                 return
             message = (body.get("message") or "").strip()
             if message:
-                self._generate(lambda: plan_generate.negotiate(message, kind="freetext"))
+                started = _start_generation(
+                    lambda: plan_generate.negotiate(message, kind="freetext"))
+                self._send(202, {"state": "running", "started": started})
                 return
             self._send(400, {"error": "negotiate needs preset_id or message"})
             return
 
-        self._send(404, {"error": f"no route {self.path}"})
-
-    def _generate(self, fn):
-        """Run a generation; surface failures honestly instead of a fake/empty plan."""
-        try:
-            plan = fn()
-        except Exception as e:
-            self._send(500, {"error": str(e)})
+        if self.path == "/api/complete":
+            body = self._read_json_body()
+            task_id = (body.get("id") or "").strip()
+            if not task_id:
+                self._send(400, {"error": "complete needs a task id"})
+                return
+            # Mark done in Anytype (with read-back), then flip the cache so the surface
+            # shows it checked without a regeneration. A failed close surfaces honestly.
+            try:
+                confirmed = task_actions.complete_task(task_id)
+            except Exception as e:
+                self._send(500, {"error": str(e)})
+                return
+            plan = plan_store.mark_item_done(task_id)
+            self._send(200, {"completed": confirmed, "plan": plan or {"empty": True}})
             return
-        self._send(200, plan)
+
+        if self.path == "/api/uncomplete":
+            body = self._read_json_body()
+            task_id = (body.get("id") or "").strip()
+            if not task_id:
+                self._send(400, {"error": "uncomplete needs a task id"})
+                return
+            # Undo a completion (mis-tap fix): status back to Ready in Anytype (read-back),
+            # then un-check the cache. A failed undo surfaces honestly.
+            try:
+                confirmed = task_actions.uncomplete_task(task_id)
+            except Exception as e:
+                self._send(500, {"error": str(e)})
+                return
+            plan = plan_store.mark_item_undone(task_id)
+            self._send(200, {"uncompleted": confirmed, "plan": plan or {"empty": True}})
+            return
+
+        self._send(404, {"error": f"no route {self.path}"})
 
     # quieter logging — one line per request, no client noise
     def log_message(self, fmt, *args):
@@ -138,7 +210,8 @@ def main():
     plan_store.load_actions()  # seed the button schema on first run
     srv = ThreadingHTTPServer((HOST, PORT), Handler)
     print(f"Controlled Drift overlay → http://{HOST}:{PORT}")
-    print("  GET /api/plan · /api/map · /api/actions   POST /api/refresh · /api/negotiate")
+    print("  GET /api/plan · /api/map · /api/actions · /api/status")
+    print("  POST /api/refresh · /api/negotiate (async) · /api/complete · /api/uncomplete")
     print("  Ctrl-C to stop.")
     try:
         srv.serve_forever()

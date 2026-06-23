@@ -94,12 +94,24 @@ def test_unknown_route_404(live_server):
 
 # --- POST routes ------------------------------------------------------------
 
+def _wait_idle(base, timeout=5.0):
+    """Generation is async now — wait for the background thread to finish (status idle)."""
+    import time
+    deadline = time.time() + timeout
+    while time.time() < deadline:
+        _, txt = _get(base, "/api/status")
+        if json.loads(txt).get("state") == "idle":
+            return json.loads(txt)
+        time.sleep(0.03)
+    raise AssertionError("generation did not reach idle in time")
+
+
 def test_refresh_generates_and_caches(live_server):
     base, calls = live_server
     status, body = _post(base, "/api/refresh", {})
-    assert status == 200 and body["woven_frame"] == "fresh"
+    assert status == 202 and body["state"] == "running"   # async: returns at once, no blocking
+    _wait_idle(base)                                       # background generation completes
     assert ("generate_plan", "refresh") in calls
-    # now cached
     _, plan = _get(base, "/api/plan")
     assert json.loads(plan)["woven_frame"] == "fresh"
 
@@ -107,17 +119,45 @@ def test_refresh_generates_and_caches(live_server):
 def test_negotiate_preset_looks_up_payload_and_tags_kind(live_server):
     base, calls = live_server
     status, body = _post(base, "/api/negotiate", {"preset_id": "low-energy"})
-    assert status == 200 and body["woven_frame"] == "renegotiated"
+    assert status == 202 and body["state"] == "running"
+    _wait_idle(base)
     kind = [c for c in calls if c[0] == "negotiate"][0][1]
     assert kind == "preset:low-energy"
+    _, plan = _get(base, "/api/plan")
+    assert json.loads(plan)["woven_frame"] == "renegotiated"
 
 
 def test_negotiate_freetext(live_server):
     base, calls = live_server
     status, body = _post(base, "/api/negotiate", {"message": "only 30 minutes today"})
-    assert status == 200
+    assert status == 202 and body["state"] == "running"
+    _wait_idle(base)
     call = [c for c in calls if c[0] == "negotiate"][0]
     assert call[1] == "freetext" and "30 minutes" in call[2]
+
+
+def test_status_idle_to_landed(live_server):
+    base, calls = live_server
+    _post(base, "/api/refresh", {})
+    st = _wait_idle(base)
+    assert st["state"] == "idle" and st["plan_generated_at"]   # a plan timestamp is present
+
+
+def test_generation_error_surfaces_in_status(live_server, monkeypatch):
+    base, calls = live_server
+    def boom(source="generate"):
+        raise RuntimeError("kaboom")
+    monkeypatch.setattr(plan_generate, "generate_plan", boom)   # overrides the fixture's fake
+    _post(base, "/api/refresh", {})
+    import time
+    deadline, st = time.time() + 5, {}
+    while time.time() < deadline:
+        _, txt = _get(base, "/api/status")
+        st = json.loads(txt)
+        if st.get("state") == "error":
+            break
+        time.sleep(0.03)
+    assert st.get("state") == "error" and "kaboom" in st.get("error", "")
 
 
 def test_negotiate_add_preset_does_not_generate(live_server):

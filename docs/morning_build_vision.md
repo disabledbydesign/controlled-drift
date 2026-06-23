@@ -37,19 +37,29 @@ from bed. Build incrementally, one type at a time:
   June-facing tasks → June closes (here); agent-facing tasks → the agent that finishes closes.
   Pairs naturally with capture (add + complete = full task lifecycle from bed).
 
-**Status (2026-06-23):** the always-on server (`com.june.controlled-drift.server.plist`,
+**Status (2026-06-24, session 17):** the always-on server (`com.june.controlled-drift.server.plist`,
 `CD_BIND=0.0.0.0`) + ntfy phone push are LIVE. Phone reaches the *interactive* overlay over wifi
-(read + replan, verified in Safari); ntfy delivers the read-only morning ping. Remaining for the
-from-bed loop: add-types capture + mark-complete (this section).
+(read + replan, verified in Safari); ntfy delivers the read-only morning ping.
+- **Notification → overlay tap-link BUILT:** `morning_push.py` adds an ntfy `Click` header pointing
+  at the overlay (LAN IP auto-detected each run via `_overlay_url()`, override at
+  `~/.controlled-drift/overlay_url`). Tap the push → opens the live overlay. *Pending June's phone tap.*
+- **Mark-complete BUILT (code-complete, unit + live-read verified; pending June's live tap):** wrinkle
+  below solved. New `scripts/task_actions.py` `complete_task(id)` (read-back confirmed), `POST
+  /api/complete`, `plan_store.mark_item_done`, quiet ✓ affordance in the overlay.
+- Remaining for the from-bed loop: add-types capture (next build).
 
-**⚠️ Design wrinkle to solve FIRST in the mark-complete build:** the plan JSON items carry task
-*text* but NOT the Anytype object ID, so the overlay can't yet PATCH a task to Done. Thread the
-task `id` through to each plan item — options: (a) include the active task list *with ids* in the
-generation prompt and ask the LLM to echo each item's `id`; or (b) deterministically match plan
-items back to Anytype tasks by name after generation (fuzzy, fragile); (a) is cleaner. Then
-`POST /api/complete {id}` → `gsdo_objects.update(id, properties={"Task status":"Done","done":True})`
-→ re-render. Adding reuses `gsdo_objects.create()` + the drift capture inference; `POST /api/capture
-{text, type?}`. **Recommend: fresh session, planning mode first — these have real design depth.**
+**✅ Design wrinkle SOLVED (was: "solve FIRST in the mark-complete build"):** plan items carried task
+*text* but not the Anytype id. Solved with a **short-token handshake** (cleaner than the two options
+originally listed — raw-id-echo mangles 50-char ids; name-match breaks because the prompt rewords
+tasks): each active task gets a `T1`/`T2` token in the prompt, the planner copies just the token,
+`plan_generate._resolve_ids` maps it back to the real id (name-match fallback; no match → no id, never
+the wrong one). Completion writes **`gsdo_task_status="Done"`** — the canonical status property the
+whole system uses (NOT the vestigial built-in `done` checkbox; verified live).
+**⚠️ Bug found + fixed en route:** `daily_plan.load_active_items` read the *built-in* `status`
+(always empty) instead of `gsdo_task_status`, so Done tasks (e.g. "build the arc") were silently
+leaking into the plan. Fixed to read the canonical property — the morning plan will be shorter/cleaner.
+Adding-types is still the next build (`POST /api/capture {text, type?}`, reuse `gsdo_objects.create()`
++ drift capture inference). **Recommend: fresh session, planning mode first.**
 
 ## 3. One open-chat affordance — stuck-support AND help
 June folded these together: "I'm stuck" (can't start) and "help, how do I even do this" (mid-task)
@@ -68,6 +78,31 @@ its own operating protocol. **Build a Claude-facing index** — "how this system
 capture/weed/plan protocols" — so the system holds its functions for its operators, not only for
 June. (This is the telos applied one level up: alignment + protocol live outside the instance's
 head too.)
+
+## Sequencing decision: UI polish vs. "converting out of HTML" (June's question, 2026-06-23)
+
+"Convert out of HTML" bundles two separate things — **(1) stop being a browser tab** (become
+chromeless/ambient) and **(2) stop using HTML/CSS as the UI tech** (native rewrite). **June wants
+(1), not (2).** The realistic "not a web app" path is **wrapping this same HTML in a chromeless
+shell** — a **PWA** ("Add to Home Screen" on the phone / "Add to Dock" on Mac) or a tiny webview
+app. The HTML/CSS stays, so **UI polish transfers — it is NOT wasted.** Only a full native rewrite
+would discard it, and that's **not recommended**: far more work + maintenance, and it forfeits the
+single codebase that already runs on both Mac AND phone (the anti-fragility win).
+
+**Therefore the order is:** (1) functional builds first (mark-done, adding) — frame-independent, and
+don't polish a half-functional UI; (2) **get the PWA shell in BEFORE polishing** (June's call,
+2026-06-23, and correct); (3) THEN polish, in the standalone frame.
+
+**Why shell-before-polish (not a wash):** the chromeless PWA changes the rendering *frame*, not just
+the chrome — **safe-area insets** (content runs under the notch + home-indicator; needs
+`viewport-fit=cover` + `env(safe-area-inset-*)`), **full height** (no Safari toolbar), and status-bar
+handling. Polishing in a browser tab and then converting means redoing spacing against the real
+insets — the wasted-energy path. So establish the real frame first, then tune to it.
+
+**The shell is cheap (~15 min, not an infra project):** phone PWA = a few `<meta>` tags
+(`apple-mobile-web-app-capable`, `viewport-fit=cover`, `theme-color`) + a tiny `manifest.webmanifest`
++ "Add to Home Screen" in Safari. Bonus: it gives June the *real* chromeless launch experience to
+react to early (the react-to-the-real-thing discipline). No native rewrite — same HTML.
 
 ## Discipline for all of the above
 Simple over clever; reuse the existing write layer (`gsdo_objects`, the `drift` skill); each piece
