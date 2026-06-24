@@ -9,6 +9,7 @@ sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "scripts"))
 
 import capture_generate as cg
 import session_store
+import generation_log
 
 
 _CANNED = json.dumps({
@@ -181,6 +182,56 @@ def test_oversize_prompt_logged_not_silent(tmp_path, monkeypatch):
     monkeypatch.setattr(cg, "PROMPT_TOKEN_WARN", 0)   # force the size guard to trip
     cg.capture("dump")
     assert any(f["kind"] == "prompt_large" for f in session_store.failures("capture"))
+
+
+# --- dedup notes captured deterministically into the durable learning log ---
+
+def test_dedup_notes_logged_to_durable_learning_log(tmp_path, monkeypatch):
+    # The model's dedup judgments (its OWN uncertainty) must land in the append-only learning
+    # log automatically — built in Python every weed, not dependent on the LLM logging it.
+    _stub(monkeypatch, tmp_path)   # _CANNED skips "SSRC grant" with a dedup_note
+    cg.capture("dump")
+    recs = [json.loads(l) for l in
+            (tmp_path / "generation_log.jsonl").read_text().strip().splitlines()]
+    cap = [r for r in recs if r.get("source") == "capture" and r.get("success")]
+    assert cap, "no capture record in the durable learning log"
+    structural = cap[-1]["structural"]
+    assert structural["n_skipped"] == 1 and structural["n_created"] == 2
+    notes = structural["dedup_notes"]
+    assert any(n["name"] == "SSRC grant" and n["action"] == "skip" for n in notes)
+
+
+def test_create_with_overlap_note_is_logged(tmp_path, monkeypatch):
+    # A create-with-a-possible-overlap (bias: create, don't drop) still records the doubt.
+    canned = json.dumps({"opening": "x", "capacity_read": None, "groups": [
+        {"label": "g", "through_line": "t", "items": [
+            {"type": "Task", "name": "email the editor", "link": None, "status": "Ready",
+             "action": "create", "dedup_note": "maybe overlaps the Haraway email, but different",
+             "reasoning": "different action"},
+        ]},
+    ]})
+    _stub(monkeypatch, tmp_path, canned=canned)
+    result = cg.capture("email editor")
+    assert result["created"][0]["dedup_note"].startswith("maybe overlaps")   # kept on the record
+    recs = [json.loads(l) for l in
+            (tmp_path / "generation_log.jsonl").read_text().strip().splitlines()]
+    notes = [r for r in recs if r.get("source") == "capture"][-1]["structural"]["dedup_notes"]
+    assert any(n["action"] == "create" and "overlap" in n["note"] for n in notes)
+
+
+def test_check_capture_extracts_only_flagged_notes():
+    # Unit check on the deterministic extractor: only items carrying a dedup_note appear.
+    parsed = {"capacity_read": {"x": 1}, "groups": [
+        {"items": [
+            {"name": "A", "action": "create", "dedup_note": "overlap?"},
+            {"name": "B", "action": "create"},                      # no note → not logged
+            {"name": "C", "action": "skip", "dedup_note": "dup"},
+        ]},
+    ]}
+    s = generation_log.check_capture(parsed, created=[1, 2], skipped=[1], failed=[])
+    assert s["n_items"] == 3 and s["n_created"] == 2 and s["n_skipped"] == 1
+    assert s["capacity_read_present"] is True
+    assert {n["name"] for n in s["dedup_notes"]} == {"A", "C"}
 
 
 # --- follow-up context: history is assembled into the prompt ----------------

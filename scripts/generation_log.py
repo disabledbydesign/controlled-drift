@@ -60,3 +60,31 @@ def check_plan(plan, n_input_tasks=None):
     if n_input_tasks is not None:
         result["input_task_count"] = n_input_tasks
     return result
+
+
+def check_capture(parsed, created, skipped, failed):
+    """Deterministic structural facts about a weed turn — built in Python from the model's
+    output every time, so the learning signal is captured automatically, never dependent on the
+    LLM (or an instance) remembering to record it.
+
+    The load-bearing field is `dedup_notes`: every place the model flagged a possible duplicate —
+    on a skip OR a create-with-overlap. That's the model surfacing its OWN uncertainty, which is
+    exactly where the dedup learning loop should look. This log is durable (append-only); the
+    session log that also holds these notes is ephemeral (windowed), so the durable copy lives
+    here on purpose.
+    """
+    groups = parsed.get("groups", []) if isinstance(parsed, dict) else []
+    items = [it for g in groups for it in (g.get("items", []) or [])]
+    dedup_notes = [
+        {"name": it.get("name"), "action": it.get("action", "create"), "note": it.get("dedup_note")}
+        for it in items if it.get("dedup_note")
+    ]
+    return {
+        "n_groups":              len(groups),
+        "n_items":               len(items),
+        "n_created":             len(created),
+        "n_skipped":             len(skipped),
+        "n_failed":              len(failed),
+        "capacity_read_present": bool(parsed.get("capacity_read")) if isinstance(parsed, dict) else False,
+        "dedup_notes":           dedup_notes,
+    }

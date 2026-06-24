@@ -127,7 +127,9 @@ tools or MCP to look anything up. Therefore:
 - **Dedup (mechanics only — the judgment is in the gate above).** Apply the gate's dedup rule:
   skip ONLY a genuine same-action duplicate; same topic/project/person is NOT a duplicate; when
   unsure, create and note the overlap rather than drop it. Express the decision here as: `action`
-  = "skip" with a `dedup_note` for a true duplicate, otherwise `action` = "create".
+  = "skip" with a `dedup_note` for a true duplicate; OR `action` = "create" — and if you saw a
+  *possible* overlap you chose not to treat as a duplicate, set `dedup_note` on the created item
+  too (record the doubt; it's a signal, not a reason to drop). No overlap seen → omit `dedup_note`.
 - **Capacity/affect.** If a feeling or capacity signal runs through the input ("this is heavy,"
   "I've been avoiding this," frustration, urgency), capture it once in `capacity_read` with
   `source` = "stated" if June said it outright or "inferred" if you read it from how she wrote.
@@ -282,6 +284,7 @@ def _create_one(type_name, item, ref_map, id2name):
         "name": name,
         "project": id2name.get(link_id) if link_id else None,
         "alignment_reasoning": item.get("reasoning"),
+        "dedup_note": item.get("dedup_note"),   # a create-with-overlap doubt, if the model flagged one
     }
 
 
@@ -338,9 +341,6 @@ def capture(text):
         session_store.log_failure("capture", "generation_failed", {
             "error_type": type(e).__name__, "error": str(e), "raw_input": text})
         raise
-    generation_log.log_generation(
-        backend=backend_label, duration_s=time.monotonic() - t0,
-        success=True, source="capture")
 
     created, failed, skipped = [], [], []
     for grp in parsed.get("groups", []):
@@ -359,6 +359,14 @@ def capture(text):
                 session_store.log_failure("capture", "create_failed", {
                     "name": item.get("name"), "type": tname, "error": str(e)})
                 failed.append({"name": item.get("name"), "error": str(e)})
+
+    # Durable learning signal — logged deterministically on every weed (not LLM-dependent), so the
+    # dedup loop gets a clean, automatic corpus of the model's own uncertainty (the dedup_notes).
+    # This log is append-only/permanent; the session log holds the same notes but is windowed.
+    generation_log.log_generation(
+        backend=backend_label, duration_s=time.monotonic() - t0,
+        success=True, source="capture",
+        structural=generation_log.check_capture(parsed, created, skipped, failed))
 
     summary = _summarize(created, failed, skipped)
     session_store.append_entry("capture", {
