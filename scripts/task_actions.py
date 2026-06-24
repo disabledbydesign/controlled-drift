@@ -68,6 +68,18 @@ def uncomplete_task(task_id):
     return {"id": task_id, "name": obj.get("name"), "status": "Ready", "done": False}
 
 
+def archive_object(object_id):
+    """Undo a just-made capture by moving the object to Anytype's bin (DELETE archives, it
+    doesn't hard-delete — recoverable in the app). The honest undo of a *creation* is removal,
+    not a status flip. Confirms the API accepted it; raises otherwise. Returns {"id","archived"}.
+    """
+    sid = g.get_space_id()
+    st, b = call("DELETE", f"/spaces/{sid}/objects/{object_id}")
+    if st not in (200, 204):
+        raise RuntimeError(f"could not archive object {object_id!r}: {st} {b}")
+    return {"id": object_id, "archived": True}
+
+
 if __name__ == "__main__":
     # Manual live check: python3 scripts/task_actions.py <task_id>
     if len(sys.argv) != 2:

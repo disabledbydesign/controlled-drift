@@ -12,6 +12,9 @@ from http.server import ThreadingHTTPServer
 import server
 import plan_store
 import plan_generate
+import capture_generate
+import task_actions
+import session_store
 import orient_map
 
 
@@ -31,6 +34,22 @@ def live_server(tmp_path, monkeypatch):
         return plan_store.save_plan({"woven_frame": "renegotiated", "blocks": [], "still_here": []}, source=kind)
     monkeypatch.setattr(plan_generate, "generate_plan", fake_generate_plan)
     monkeypatch.setattr(plan_generate, "negotiate", fake_negotiate)
+
+    # capture: record the call + write a real session entry (to the sandbox) so the receipt
+    # route returns something — mirrors what the real capture() does.
+    def fake_capture(text):
+        calls.append(("capture", text))
+        session_store.append_entry("capture", {
+            "intent": "weed", "raw_input": text,
+            "created": [{"id": "id-surgeon", "name": "Call surgeon", "type": "Task",
+                         "project": "Build Controlled Drift"}],
+            "result_summary": "added 1"})
+        return {"created": [{"id": "id-surgeon", "name": "Call surgeon"}], "result_summary": "added 1"}
+    def fake_archive(object_id):
+        calls.append(("archive", object_id))
+        return {"id": object_id, "archived": True}
+    monkeypatch.setattr(capture_generate, "capture", fake_capture)
+    monkeypatch.setattr(task_actions, "archive_object", fake_archive)
 
     srv = ThreadingHTTPServer(("127.0.0.1", 0), server.Handler)
     port = srv.server_address[1]
@@ -177,4 +196,57 @@ def test_negotiate_unknown_preset_400(live_server):
 def test_negotiate_empty_body_400(live_server):
     base, _ = live_server
     status, body = _post(base, "/api/negotiate", {})
+    assert status == 400 and "error" in body
+
+
+# --- capture / undo / session ----------------------------------------------
+
+def test_capture_async_runs_and_lands_in_session(live_server):
+    base, calls = live_server
+    status, body = _post(base, "/api/capture", {"text": "call my surgeon"})
+    assert status == 202 and body["state"] == "running"   # async, like negotiate
+    _wait_idle(base)
+    assert ("capture", "call my surgeon") in calls
+    # the receipt route shows what landed
+    _, txt = _get(base, "/api/session?stream=capture")
+    data = json.loads(txt)
+    assert data["stream"] == "capture"
+    assert data["entries"][-1]["created"][0]["name"] == "Call surgeon"
+
+
+def test_capture_empty_text_400(live_server):
+    base, _ = live_server
+    status, body = _post(base, "/api/capture", {"text": "   "})
+    assert status == 400 and "error" in body
+
+
+def test_session_defaults_to_capture_stream(live_server):
+    base, _ = live_server
+    status, txt = _get(base, "/api/session")
+    assert status == 200 and json.loads(txt)["stream"] == "capture"
+
+
+def test_session_unknown_stream_400(live_server):
+    base, _ = live_server
+    try:
+        _get(base, "/api/session?stream=bogus")
+        assert False, "expected 400"
+    except urllib.error.HTTPError as e:
+        assert e.code == 400
+
+
+def test_capture_undo_archives_and_logs(live_server):
+    base, calls = live_server
+    status, body = _post(base, "/api/capture/undo", {"id": "id-surgeon"})
+    assert status == 200 and body["undone"]["archived"] is True
+    assert ("archive", "id-surgeon") in calls
+    # the undo is recorded in the capture stream (next turn's LLM sees it)
+    _, txt = _get(base, "/api/session?stream=capture")
+    entries = json.loads(txt)["entries"]
+    assert any(e.get("intent") == "undo" and e.get("target_id") == "id-surgeon" for e in entries)
+
+
+def test_capture_undo_empty_id_400(live_server):
+    base, _ = live_server
+    status, body = _post(base, "/api/capture/undo", {})
     assert status == 400 and "error" in body

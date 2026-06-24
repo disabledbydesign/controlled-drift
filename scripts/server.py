@@ -16,16 +16,22 @@ Routes:
   POST /api/negotiate   {preset_id}|{message} -> start a renegotiation (async, 202); poll status
   POST /api/complete    {id} -> mark a task done in Anytype (read-back) + flip the cache
   POST /api/uncomplete  {id} -> undo: status back to Ready (read-back) + un-flip the cache
+  GET  /api/session     ?stream=capture|negotiate -> recent session log entries (the receipt)
+  POST /api/capture     {text} -> weed input into typed/linked Anytype objects (async, 202)
+  POST /api/capture/undo {id}  -> archive a just-captured object + log the undo (sync)
 
 Run:  python3 scripts/server.py   (then open http://localhost:5050)
 """
 import sys, os, json, threading
+from urllib.parse import urlparse, parse_qs
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 
 sys.path.insert(0, os.path.dirname(__file__))
 import plan_store
 import plan_generate
 import task_actions
+import capture_generate
+import session_store
 import orient_map
 
 # A generation (the LLM call) takes ~60-110s — far longer than a phone browser will hold a
@@ -128,6 +134,16 @@ class Handler(BaseHTTPRequestHandler):
             self._send(200, st)
             return
 
+        if urlparse(self.path).path == "/api/session":
+            # The Add tab's receipt: recent capture (or negotiate) turns, so June can SEE what
+            # she's done this session without holding it — and undo from there.
+            stream = (parse_qs(urlparse(self.path).query).get("stream", ["capture"])[0])
+            if stream not in session_store.STREAMS:
+                self._send(400, {"error": f"unknown stream {stream!r}"})
+                return
+            self._send(200, {"stream": stream, "entries": session_store.recent_entries(stream)})
+            return
+
         self._send(404, {"error": f"no route {self.path}"})
 
     # --- POST ---------------------------------------------------------------
@@ -199,6 +215,36 @@ class Handler(BaseHTTPRequestHandler):
             self._send(200, {"uncompleted": confirmed, "plan": plan or {"empty": True}})
             return
 
+        if self.path == "/api/capture":
+            body = self._read_json_body()
+            text = (body.get("text") or "").strip()
+            if not text:
+                self._send(400, {"error": "capture needs text"})
+                return
+            # Async like /api/negotiate: a weed is an LLM call (~30s), too long to hold the
+            # phone's connection. Kick it off; the Add tab polls /api/status, then reads
+            # /api/session for the result. One generation at a time (the shared lock).
+            started = _start_generation(lambda: capture_generate.capture(text))
+            self._send(202, {"state": "running", "started": started})
+            return
+
+        if self.path == "/api/capture/undo":
+            body = self._read_json_body()
+            object_id = (body.get("id") or "").strip()
+            if not object_id:
+                self._send(400, {"error": "undo needs an object id"})
+                return
+            # Sync — undo is cheap (no LLM): archive the just-captured object, log the undo so
+            # the next turn's LLM sees it. A failed undo surfaces honestly.
+            try:
+                archived = task_actions.archive_object(object_id)
+            except Exception as e:
+                self._send(500, {"error": str(e)})
+                return
+            session_store.mark_undo("capture", object_id, detail=f"removed {object_id}")
+            self._send(200, {"undone": archived})
+            return
+
         self._send(404, {"error": f"no route {self.path}"})
 
     # quieter logging — one line per request, no client noise
@@ -210,8 +256,9 @@ def main():
     plan_store.load_actions()  # seed the button schema on first run
     srv = ThreadingHTTPServer((HOST, PORT), Handler)
     print(f"Controlled Drift overlay → http://{HOST}:{PORT}")
-    print("  GET /api/plan · /api/map · /api/actions · /api/status")
-    print("  POST /api/refresh · /api/negotiate (async) · /api/complete · /api/uncomplete")
+    print("  GET /api/plan · /api/map · /api/actions · /api/status · /api/session")
+    print("  POST /api/refresh · /api/negotiate · /api/capture (async)")
+    print("  POST /api/complete · /api/uncomplete · /api/capture/undo")
     print("  Ctrl-C to stop.")
     try:
         srv.serve_forever()

@@ -2,6 +2,12 @@
 <html lang="en">
 <head>
 <meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="Drift">
+<meta name="theme-color" content="#1c1c1e">
+<link rel="manifest" href="/manifest.webmanifest">
 <title>Controlled Drift</title>
 <style>
 :root {
@@ -367,6 +373,101 @@ pre.map-output .done-line { color: var(--text-dimmer); opacity: 0.6; }
   text-align: center;
   line-height: 1.5;
 }
+
+/* ── ADD tab ── */
+.add-section { padding: 13px 14px 10px; }
+.add-label {
+  font-size: 10px;
+  color: var(--text-dimmer);
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  margin-bottom: 7px;
+}
+.add-row { display: flex; gap: 7px; align-items: flex-end; }
+textarea.add-field {
+  flex: 1;
+  background: #0a0a0c;
+  border: 1px solid #2a2a2e;
+  border-radius: 8px;
+  color: var(--gold);
+  font-size: 13px;
+  font-family: inherit;
+  padding: 7px 10px;
+  resize: none;
+  min-height: 54px;
+  max-height: 120px;
+  line-height: 1.4;
+  outline: none;
+  transition: border-color 0.12s;
+}
+textarea.add-field::placeholder { color: var(--gold-dim); }
+textarea.add-field:focus { border-color: var(--gold); }
+.add-hint {
+  font-size: 10.5px;
+  color: var(--text-dimmer);
+  margin-top: 7px;
+  line-height: 1.4;
+  opacity: 0.8;
+}
+/* in-flight / error line for the Add tab (its own — separate from the Today busy banner) */
+.add-status {
+  font-size: 11px;
+  color: var(--gold);
+  padding: 8px 14px 0;
+  letter-spacing: 0.03em;
+  display: none;
+}
+.add-status.show { display: flex; align-items: center; gap: 7px; }
+.add-status::before {
+  content: "";
+  width: 7px; height: 7px;
+  border-radius: 50%;
+  background: var(--gold);
+  animation: pulse 1.1s ease-in-out infinite;
+}
+.add-status.error { color: var(--rose); }
+.add-status.error::before { background: var(--rose); animation: none; }
+
+/* ── ADD tab: the session receipt — what landed this session, scannable ── */
+.receipt-section { padding: 4px 14px 14px; }
+.receipt-label {
+  font-size: 10px;
+  color: var(--text-dimmer);
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  margin: 10px 0 7px;
+}
+.receipt-empty { font-size: 12px; color: var(--text-dimmer); opacity: 0.7; line-height: 1.4; }
+.receipt-item {
+  display: flex;
+  align-items: baseline;
+  gap: 7px;
+  padding: 4px 0;
+  font-size: 12px;
+  color: var(--text);
+  line-height: 1.4;
+  border-bottom: 1px solid rgba(72,72,74,0.4);
+}
+.receipt-item:last-child { border-bottom: none; }
+.receipt-check { color: var(--rose); flex-shrink: 0; }
+.receipt-body { flex: 1; }
+.receipt-proj { color: var(--text-dim); }
+.receipt-time { color: var(--text-dimmer); font-size: 10px; font-variant-numeric: tabular-nums; flex-shrink: 0; }
+.receipt-undo {
+  background: none;
+  border: none;
+  color: var(--text-dimmer);
+  font-size: 11px;
+  cursor: pointer;
+  font-family: inherit;
+  padding: 0;
+  flex-shrink: 0;
+  transition: color 0.12s;
+}
+.receipt-undo:hover { color: var(--rose); }
+.receipt-undo:disabled { opacity: 0.4; cursor: default; }
+.receipt-undone { opacity: 0.5; }
+.receipt-undone .receipt-body { text-decoration: line-through; color: var(--text-dimmer); }
 </style>
 </head>
 <body>
@@ -381,6 +482,7 @@ pre.map-output .done-line { color: var(--text-dimmer); opacity: 0.6; }
   <div class="tabs">
     <button class="tab active" onclick="switchTab('today', this)">Today</button>
     <button class="tab" onclick="switchTab('map', this)">Map</button>
+    <button class="tab" onclick="switchTab('add', this)">Add</button>
   </div>
 
   <!-- ══ TODAY TAB ══ -->
@@ -533,6 +635,33 @@ pre.map-output .done-line { color: var(--text-dimmer); opacity: 0.6; }
     </div>
   </div>
 
+  <!-- ══ ADD TAB ══ -->
+  <!-- Capture/weed surface. The textarea runs the FULL weeding gate (not a dumb add): a single
+       item or a messy dump both go in here and come back sorted into types, linked to projects,
+       alignment-checked. API: POST /api/capture {text} (async) → poll /api/status → GET
+       /api/session?stream=capture for the receipt. Undo: POST /api/capture/undo {id}. -->
+  <div class="tab-panel" id="tab-add">
+    <div class="add-section">
+      <div class="add-label">add a task, or dump a tangle to sort</div>
+      <div class="add-row">
+        <textarea class="add-field" id="add-field"
+          placeholder="e.g. call the surgeon's office, and I keep meaning to meditate daily…"></textarea>
+        <button class="ask-send" onclick="captureItem()">+ Add</button>
+      </div>
+      <div class="add-hint">It sorts what you write into the right places and links it to your
+        work. You can undo anything below.</div>
+    </div>
+
+    <div class="add-status" id="add-status">thinking it through…</div>
+
+    <div class="receipt-section">
+      <div class="receipt-label">added this session</div>
+      <div id="receipt-items">
+        <div class="receipt-empty">Nothing yet today. What's on your mind?</div>
+      </div>
+    </div>
+  </div>
+
 </div>
 
 <script>
@@ -543,6 +672,7 @@ function switchTab(name, el) {
   el.classList.add('active');
   document.getElementById('tab-' + name).classList.add('active');
   if (name === 'map') loadMap();
+  if (name === 'add') loadSession();
 }
 
 // ── The variable button schema — loaded, not hardcoded ──────────────────────
@@ -761,6 +891,145 @@ function renderPlan(plan) {
 function esc(s) {
   return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
 }
+
+// ── ADD tab: capture / weed ─────────────────────────────────────────────────
+// The textarea runs the full weeding gate via /api/capture (async, like negotiate). The
+// server starts the LLM call in the background; we poll /api/status, then reload the receipt
+// from /api/session. June corrects after the fact — undo a line, or send a follow-up message
+// (the session history makes the follow-up resolve against what just happened).
+let captureInFlight = false;
+
+async function captureItem() {
+  if (captureInFlight) return;
+  const field = document.getElementById('add-field');
+  const text = field.value.trim();
+  if (!text) return;
+  setAddStatus('thinking it through…');
+  captureInFlight = true;
+  document.querySelectorAll('#tab-add .ask-send').forEach(b => b.disabled = true);
+  try {
+    const res = await fetch('/api/capture', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ text }),
+    });
+    const data = await res.json();
+    if (!res.ok) { setAddStatus(data.error || "couldn't add that", true); endCapture(); return; }
+    if (data.started === false) {
+      setAddStatus('busy with another request — try again in a moment', true);
+      endCapture();
+      return;
+    }
+    field.value = '';
+    pollCapture(0);
+  } catch (_) {
+    setAddStatus("couldn't reach the server — is it running?", true);
+    endCapture();
+  }
+}
+
+async function pollCapture(tries) {
+  if (tries > 60) {   // ~3 min ceiling — a weed this slow is a problem, not a wait
+    setAddStatus('this is taking unusually long — try reloading in a moment', true);
+    endCapture();
+    return;
+  }
+  try {
+    const res = await fetch('/api/status');
+    const st = await res.json();
+    if (st.state === 'error') { setAddStatus(st.error || 'that didn\'t go through', true); endCapture(); return; }
+    if (st.state === 'idle') {
+      await loadSession();    // the receipt now shows what landed
+      clearAddStatus();
+      endCapture();
+      return;
+    }
+  } catch (_) { /* transient blip — keep polling */ }
+  setTimeout(() => pollCapture(tries + 1), 3000);
+}
+
+function endCapture() {
+  captureInFlight = false;
+  document.querySelectorAll('#tab-add .ask-send').forEach(b => b.disabled = false);
+}
+
+function setAddStatus(msg, isError) {
+  const el = document.getElementById('add-status');
+  el.textContent = msg;
+  el.classList.add('show');
+  el.classList.toggle('error', !!isError);
+  if (isError) setTimeout(() => clearAddStatus(), 4500);
+}
+function clearAddStatus() {
+  document.getElementById('add-status').classList.remove('show', 'error');
+}
+
+// ── ADD tab: the session receipt — what landed this session, scannable + undoable ──
+async function loadSession() {
+  try {
+    const res = await fetch('/api/session?stream=capture');
+    if (!res.ok) return;
+    const data = await res.json();
+    renderSession(data.entries || []);
+  } catch (_) { /* static preview — leave the empty state */ }
+}
+
+function renderSession(entries) {
+  const container = document.getElementById('receipt-items');
+  // Flatten to receipt lines, newest first: each created item is a line; an undo entry dims
+  // the matching line. The receipt is June's external working memory for the session.
+  const undone = new Set(
+    entries.filter(e => e.intent === 'undo').map(e => e.target_id));
+  const lines = [];
+  for (const e of entries) {
+    if (e.intent !== 'weed') continue;
+    const t = fmtTime(e.ts);
+    for (const c of (e.created || [])) {
+      lines.push({ id: c.id, name: c.name, project: c.project, time: t,
+                   undone: undone.has(c.id) });
+    }
+  }
+  lines.reverse();   // newest first
+  if (!lines.length) {
+    container.innerHTML = '<div class="receipt-empty">Nothing yet today. What\'s on your mind?</div>';
+    return;
+  }
+  container.innerHTML = lines.map(l => `
+    <div class="receipt-item${l.undone ? ' receipt-undone' : ''}">
+      <span class="receipt-check">✓</span>
+      <span class="receipt-body">${esc(l.name)}${l.project ? `<span class="receipt-proj"> → ${esc(l.project)}</span>` : ''}</span>
+      <span class="receipt-time">${esc(l.time)}</span>
+      ${l.undone ? '' : `<button class="receipt-undo" onclick="undoCapture('${esc(l.id)}', this)">undo</button>`}
+    </div>`).join('');
+}
+
+function fmtTime(iso) {
+  try {
+    return new Date(iso).toLocaleTimeString([], {hour: '2-digit', minute: '2-digit'});
+  } catch (_) { return ''; }
+}
+
+async function undoCapture(id, btn) {
+  if (btn) btn.disabled = true;
+  try {
+    const res = await fetch('/api/capture/undo', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ id }),
+    });
+    const data = await res.json();
+    if (!res.ok) { setAddStatus(data.error || "couldn't undo that", true); if (btn) btn.disabled = false; return; }
+    await loadSession();   // the undo is logged + the line dims
+  } catch (_) {
+    setAddStatus("couldn't reach the server — is it running?", true);
+    if (btn) btn.disabled = false;
+  }
+}
+
+// Enter submits a capture; Shift+Enter makes a newline (the dump case).
+document.getElementById('add-field').addEventListener('keydown', e => {
+  if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); captureItem(); }
+});
 
 // ── Date header ─────────────────────────────────────────────────────────────
 document.getElementById('hdr-time').textContent =

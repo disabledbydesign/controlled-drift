@@ -25,6 +25,7 @@ import daily_plan as dp
 from surface_log import log_surfaced_batch
 from plan_corrections_log import log_correction
 import plan_store
+import session_store
 import cd_paths
 import generation_log
 
@@ -321,7 +322,22 @@ def _build_task_refs(tasks):
     return ref_map, "\n".join(lines)
 
 
-def _assemble_prompt(full_context, start_time, capacity=None, extra=None, task_table=None):
+def _format_session_history(history):
+    """Render recent negotiate turns so a follow-up adjustment ('and move job search later')
+    resolves against what June already asked for today. Oldest→newest, compact."""
+    if not history:
+        return None
+    lines = []
+    for e in history:
+        if e.get("intent") == "undo":
+            lines.append(f"- [undo] {e.get('result_summary')}")
+        else:
+            lines.append(f'- June asked: "{e.get("raw_input")}" -> {e.get("result_summary")}')
+    return "\n".join(lines)
+
+
+def _assemble_prompt(full_context, start_time, capacity=None, extra=None, task_table=None,
+                     history=None):
     """Build the full prompt: the daily_list.md template + an authoritative inputs section
     holding the real data, + the JSON contract (+ any negotiation note).
 
@@ -361,6 +377,10 @@ def _assemble_prompt(full_context, start_time, capacity=None, extra=None, task_t
             "",
             task_table,
         ]
+    history_text = _format_session_history(history)
+    if history_text:
+        parts += ["", "## EARLIER ADJUSTMENTS THIS SESSION (for follow-up context)", "",
+                  history_text]
     if extra:
         parts += ["", "## JUNE'S REQUEST FOR THIS PLAN", "", extra]
     prompt = "\n".join(parts)
@@ -460,7 +480,9 @@ def negotiate(message, kind):
     before = plan_store.load_plan()
     full_context, tasks, start_time = build_context()
     ref_map, task_table = _build_task_refs(tasks)
-    prompt = _assemble_prompt(full_context, start_time, extra=message, task_table=task_table)
+    history = session_store.recent_entries("negotiate")
+    prompt = _assemble_prompt(full_context, start_time, extra=message, task_table=task_table,
+                              history=history)
     backend = os.environ.get("CD_BACKEND", "mistral")
     model = _active_model(backend)
     backend_label = f"{backend}/{model}" if model else backend
@@ -490,6 +512,16 @@ def negotiate(message, kind):
         log_surfaced_batch([{"id": t["id"], "name": t["name"], "type": "task"} for t in tasks])
     # Learning loop #3 (meal timing): if Lunch moved, nudge the learned default.
     _maybe_learn_meal_time(saved)
+    # Session history: record this turn so the NEXT negotiate sees it (the bounded conversation
+    # June asked for — separate stream from capture). Best-effort; never break a renegotiation.
+    try:
+        session_store.append_entry("negotiate", {
+            "intent": "negotiate",
+            "raw_input": message,
+            "result_summary": (saved.get("woven_frame") or "")[:200],
+        })
+    except Exception:
+        pass
     return saved
 
 
