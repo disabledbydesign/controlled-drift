@@ -31,7 +31,7 @@ Output shape for each block:
 [1-2 sentences: what this block is for, energy/pacing note, any special framing]
 
 - [time] – [time] | [Project/thread: specific next action]
-  [one phrase: why it belongs here / upward link — short, can be a few words]
+  [one brief plain-language sentence: how this moves what she's working toward — do NOT name the goal, and use NO metaphors (say the plain thing, not a figure)]
 
 - [time] – [time] | [next item]
   [...]

@@ -32,7 +32,8 @@ body {
   justify-content: center;
   min-height: 100vh;
   font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', system-ui, sans-serif;
-  padding: 40px 16px;
+  padding: max(40px, env(safe-area-inset-top)) 16px
+           max(20px, env(safe-area-inset-bottom));
 }
 
 .overlay {
@@ -52,7 +53,68 @@ body {
   padding: 10px 14px 0;
 }
 .header-title { font-size: 11px; color: var(--text-dimmer); text-transform: uppercase; letter-spacing: 0.1em; }
+.header-right { display: flex; align-items: center; gap: 9px; }
 .header-time { font-size: 11px; color: var(--text-dimmer); }
+.header-gear {
+  background: none;
+  border: none;
+  color: var(--text-dim);
+  font-size: 17px;
+  cursor: pointer;
+  padding: 0;
+  line-height: 1;
+  transition: color 0.12s;
+}
+.header-gear.active { color: var(--gold); }
+.header-gear:hover { color: var(--gold); }
+
+/* ── SETTINGS tab (backend switcher) — opened by the gear, behaves like a tab panel ── */
+.settings-section { padding: 13px 14px; }
+.settings-label {
+  font-size: 10px;
+  color: var(--text-dimmer);
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  margin-bottom: 9px;
+}
+.backend-opt {
+  display: flex;
+  align-items: flex-start;
+  gap: 9px;
+  padding: 8px 0;
+  cursor: pointer;
+  border-bottom: 1px solid rgba(72,72,74,0.4);
+}
+.backend-opt:last-child { border-bottom: none; }
+.backend-radio {
+  width: 14px;
+  height: 14px;
+  border: 1.5px solid var(--text-dimmer);
+  border-radius: 50%;
+  flex-shrink: 0;
+  position: relative;
+  margin-top: 1px;
+  transition: border-color 0.12s;
+}
+.backend-opt.selected .backend-radio { border-color: var(--gold); }
+.backend-opt.selected .backend-radio::after {
+  content: "";
+  position: absolute;
+  inset: 2.5px;
+  border-radius: 50%;
+  background: var(--gold);
+}
+.backend-name { font-size: 13px; color: var(--text-dim); }
+.backend-opt.selected .backend-name { color: var(--text); }
+.backend-opt:hover .backend-name { color: var(--text); }
+/* the concrete model + routing mechanism — the part June asked to see, monospace for precision */
+.backend-detail {
+  font-size: 11px;
+  color: var(--text-dimmer);
+  font-family: 'SF Mono', 'Menlo', monospace;
+  margin-top: 2px;
+  line-height: 1.35;
+}
 
 /* ── tabs ── */
 .tabs {
@@ -91,7 +153,13 @@ body {
   color: var(--rose);
   line-height: 1.55;
   opacity: 0.9;
+  display: -webkit-box;
+  -webkit-line-clamp: 3;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+  cursor: pointer;
 }
+.woven-text.expanded { display: block; }
 
 /* ── TODAY: time blocks ── */
 .plan-blocks {
@@ -109,6 +177,8 @@ body {
   align-items: baseline;
   gap: 8px;
   margin-bottom: 4px;
+  cursor: pointer;
+  user-select: none;
 }
 .block-name {
   font-size: 11px;
@@ -121,17 +191,29 @@ body {
   font-size: 10px;
   color: var(--text-dimmer);
 }
+.block-expand {
+  font-size: 9px;
+  color: var(--text-dimmer);
+  display: inline-block;
+  transition: transform 0.15s;
+  margin-left: auto;
+  opacity: 0.5;
+}
+.time-block.open .block-expand { transform: rotate(90deg); }
 .block-framing {
   font-size: 11px;
   color: var(--text-dimmer);
   line-height: 1.4;
   margin-bottom: 9px;
   font-style: italic;
+  display: none;
 }
+.time-block.open .block-framing { display: block; }
 
 .plan-item {
-  margin-bottom: 8px;
+  margin-bottom: 7px;
   padding-left: 2px;
+  cursor: pointer;
 }
 .plan-item:last-child { margin-bottom: 0; }
 
@@ -144,8 +226,9 @@ body {
 .item-time {
   font-size: 10px;
   color: var(--text-dimmer);
-  white-space: nowrap;
+  width: 56px;            /* wrap start/end onto two lines so the task text gets the room */
   flex-shrink: 0;
+  line-height: 1.3;
   font-variant-numeric: tabular-nums;
 }
 .item-label {
@@ -161,13 +244,26 @@ body {
 .item-task {
   color: var(--text);
 }
+/* description (the task's own detail, from its record) — shown on expand, above the why */
+.item-desc {
+  font-size: 12px;
+  color: var(--text-dim);
+  padding-left: 87px;
+  line-height: 1.4;
+  margin-top: 2px;
+  display: none;
+}
+.plan-item.open .item-desc { display: block; }
 .item-why {
   font-size: 11px;
   color: var(--rose);
-  padding-left: 60px;  /* align under task name past time column */
+  padding-left: 87px;  /* align under the task text (check 15 + time 56 + gaps) */
   line-height: 1.3;
   opacity: 0.85;
+  margin-top: 2px;
+  display: none;
 }
+.plan-item.open .item-why { display: block; }
 
 /* ── done affordance — quiet, permission-granting (a check, not a fanfare) ── */
 .item-check {
@@ -205,6 +301,66 @@ body {
   opacity: 0.65;
 }
 
+/* ── project grouping rows (Variant A) ── */
+.project-row {
+  margin-bottom: 10px;
+  cursor: pointer;
+}
+.project-row:last-child { margin-bottom: 0; }
+.project-name {
+  font-size: 13px;
+  color: var(--text);
+  line-height: 1.35;
+  flex: 1;
+}
+.project-count {
+  font-size: 11px;
+  color: var(--text-dimmer);
+  flex-shrink: 0;
+  transition: color 0.12s;
+}
+.project-row.open .project-count { color: var(--gold); }
+.project-why {
+  font-size: 11px;
+  color: var(--rose);
+  padding-left: 63px;
+  line-height: 1.3;
+  opacity: 0.85;
+  margin-top: 2px;
+  display: none;
+}
+.project-row.open .project-why { display: block; }
+.project-tasks {
+  padding-left: 14px;
+  margin-top: 6px;
+  border-left: 1px solid var(--border);
+  display: none;
+}
+.project-row.open .project-tasks { display: block; }
+.task-sub {
+  display: flex;
+  align-items: baseline;
+  gap: 7px;
+  padding: 4px 0;
+  border-bottom: none;
+  cursor: default;
+}
+.task-sub:last-child { padding-bottom: 0; }
+.task-sub-label {
+  font-size: 12px;
+  color: var(--text-dim);
+  line-height: 1.35;
+  flex: 1;
+}
+.check-gap {
+  width: 15px;
+  flex-shrink: 0;
+  display: inline-block;
+}
+.task-sub.done .item-check { background: var(--rose); border-color: var(--rose); }
+.task-sub.done .item-check::after { content: "✓"; position: absolute; inset: 0; font-size: 10px; line-height: 13px; text-align: center; color: var(--bg); }
+.task-sub.done .task-sub-label { text-decoration: line-through; opacity: 0.65; }
+
 /* ── TODAY: still here ── */
 .still-section {
   padding: 9px 14px 10px;
@@ -216,14 +372,28 @@ body {
   text-transform: uppercase;
   letter-spacing: 0.08em;
   margin-bottom: 6px;
+  cursor: pointer;
+  user-select: none;
+  display: flex;
+  align-items: center;
+  gap: 5px;
 }
+.still-expand {
+  font-size: 9px;
+  display: inline-block;
+  transition: transform 0.15s;
+  opacity: 0.5;
+}
+.still-section.open .still-expand { transform: rotate(90deg); }
+.still-items-inner { display: none; }
+.still-section.open .still-items-inner { display: block; }
 .still-item {
   font-size: 12px;
   color: var(--text-dimmer);
   display: flex;
   gap: 7px;
   padding: 2px 0;
-  line-height: 1.4;
+  line-height: 1.35;
 }
 .still-dot {
   width: 4px;
@@ -476,7 +646,10 @@ textarea.add-field:focus { border-color: var(--gold); }
 
   <div class="overlay-header">
     <span class="header-title">Controlled Drift</span>
-    <span class="header-time" id="hdr-time">Mon Jun 22</span>
+    <span class="header-right">
+      <span class="header-time" id="hdr-time">Mon Jun 22</span>
+      <button class="header-gear" id="gear-btn" title="Settings" onclick="switchTab('settings', null)">⚙</button>
+    </span>
   </div>
 
   <div class="tabs">
@@ -492,7 +665,7 @@ textarea.add-field:focus { border-color: var(--gold); }
          Source: daily_list.md LLM output, first paragraph.
          API: GET /api/plan → plan.woven_frame -->
     <div class="woven-frame">
-      <div class="woven-text" id="woven-frame-text">
+      <div class="woven-text" id="woven-frame-text" onclick="this.classList.toggle('expanded')">
         Two goals are live today: staying a scholar-builder and keeping the material floor intact. The plan gives survival its minimum daily due first — not because it matters more, but because that order keeps both moving without the guilt-drag between them. There's real forward motion in both threads today.
       </div>
     </div>
@@ -503,13 +676,14 @@ textarea.add-field:focus { border-color: var(--gold); }
     <div class="plan-blocks" id="plan-blocks">
 
       <div class="time-block">
-        <div class="block-header">
+        <div class="block-header" onclick="this.closest('.time-block').classList.toggle('open')">
           <span class="block-name">Morning</span>
           <span class="block-time">9:00 – 12:00</span>
+          <span class="block-expand">›</span>
         </div>
         <div class="block-framing">Freshest energy goes to the build. This block is concrete and completable.</div>
 
-        <div class="plan-item">
+        <div class="plan-item" onclick="if(!event.target.closest('.item-check'))this.classList.toggle('open')">
           <div class="item-top">
             <span class="item-time">9:00 – 10:30</span>
             <span class="item-label"><span class="item-project">Build Controlled Drift</span><span class="item-sep"> · </span><span class="item-task">Wire the overlay backend server</span></span>
@@ -517,23 +691,24 @@ textarea.add-field:focus { border-color: var(--gold); }
           <div class="item-why">lays the ground for everything the surface needs to hold</div>
         </div>
 
-        <div class="plan-item">
+        <div class="plan-item" onclick="if(!event.target.closest('.item-check'))this.classList.toggle('open')">
           <div class="item-top">
             <span class="item-time">10:30 – 12:00</span>
-            <span class="item-label"><span class="item-project">Build Controlled Drift</span><span class="item-sep"> · </span><span class="item-task">Redesign the overlay Today tab</span></span>
+            <span class="item-label"><span class="item-task">Redesign the overlay Today tab</span></span>
           </div>
           <div class="item-why">the interface where daily alignment lives — grounded in the actual design</div>
         </div>
       </div>
 
       <div class="time-block">
-        <div class="block-header">
+        <div class="block-header" onclick="this.closest('.time-block').classList.toggle('open')">
           <span class="block-name">Midday</span>
           <span class="block-time">12:00 – 1:00</span>
+          <span class="block-expand">›</span>
         </div>
         <div class="block-framing">A real stop, not a quick break.</div>
 
-        <div class="plan-item">
+        <div class="plan-item" onclick="if(!event.target.closest('.item-check'))this.classList.toggle('open')">
           <div class="item-top">
             <span class="item-time">12:00 – 12:30</span>
             <span class="item-label"><span class="item-task">Lunch</span></span>
@@ -542,13 +717,14 @@ textarea.add-field:focus { border-color: var(--gold); }
       </div>
 
       <div class="time-block">
-        <div class="block-header">
+        <div class="block-header" onclick="this.closest('.time-block').classList.toggle('open')">
           <span class="block-name">Afternoon</span>
           <span class="block-time">12:30 – 3:30</span>
+          <span class="block-expand">›</span>
         </div>
         <div class="block-framing">Post-lunch for outreach — lower stakes, still forward motion.</div>
 
-        <div class="plan-item">
+        <div class="plan-item" onclick="if(!event.target.closest('.item-check'))this.classList.toggle('open')">
           <div class="item-top">
             <span class="item-time">12:30 – 2:00</span>
             <span class="item-label"><span class="item-project">Job search</span><span class="item-sep"> · </span><span class="item-task">Follow up on two GRA leads from last week</span></span>
@@ -556,10 +732,10 @@ textarea.add-field:focus { border-color: var(--gold); }
           <div class="item-why">material survival, minimum daily due — keeps the thread alive</div>
         </div>
 
-        <div class="plan-item">
+        <div class="plan-item" onclick="if(!event.target.closest('.item-check'))this.classList.toggle('open')">
           <div class="item-top">
             <span class="item-time">2:00 – 3:30</span>
-            <span class="item-label"><span class="item-project">Job search</span><span class="item-sep"> · </span><span class="item-task">Review and send the pending application</span></span>
+            <span class="item-label"><span class="item-task">Review and send the pending application</span></span>
           </div>
           <div class="item-why">one thing closed is better than two things half-open</div>
         </div>
@@ -570,11 +746,13 @@ textarea.add-field:focus { border-color: var(--gold); }
     <!-- Still here, not today.
          Source: daily_list.md LLM output, final section.
          API: GET /api/plan → plan.still_here[] -->
-    <div class="still-section">
-      <div class="still-label">still here, not today</div>
-      <div id="still-here-items">
-        <div class="still-item"><div class="still-dot"></div>Calendar integration — backburner by design; resurfaces when the overlay is stable</div>
-        <div class="still-item"><div class="still-dot"></div>Park migration from Reframe — held, not dropped; nothing to do here right now</div>
+    <div class="still-section" id="still-section">
+      <div class="still-label" onclick="document.getElementById('still-section').classList.toggle('open')">
+        <span class="still-expand">›</span><span id="still-label-text">still here, not today</span>
+      </div>
+      <div class="still-items-inner" id="still-here-items">
+        <div class="still-item"><div class="still-dot"></div>Calendar integration</div>
+        <div class="still-item"><div class="still-dot"></div>Park migration from Reframe</div>
       </div>
     </div>
 
@@ -662,6 +840,14 @@ textarea.add-field:focus { border-color: var(--gold); }
     </div>
   </div>
 
+  <!-- ══ SETTINGS TAB ══ (opened by the gear; behaves like a tab, not a collapse) -->
+  <div class="tab-panel" id="tab-settings">
+    <div class="settings-section">
+      <div class="settings-label">which model writes your plans</div>
+      <div id="backend-options"></div>
+    </div>
+  </div>
+
 </div>
 
 <script>
@@ -669,10 +855,13 @@ textarea.add-field:focus { border-color: var(--gold); }
 function switchTab(name, el) {
   document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
   document.querySelectorAll('.tab-panel').forEach(p => p.classList.remove('active'));
-  el.classList.add('active');
+  if (el) el.classList.add('active');   // null for the gear (settings isn't in the tab row)
   document.getElementById('tab-' + name).classList.add('active');
+  // The gear lights up while its panel is showing, so settings reads as a peer of the tabs.
+  document.getElementById('gear-btn').classList.toggle('active', name === 'settings');
   if (name === 'map') loadMap();
   if (name === 'add') loadSession();
+  if (name === 'settings') loadSettings();
 }
 
 // ── The variable button schema — loaded, not hardcoded ──────────────────────
@@ -787,7 +976,7 @@ function setBusy(on) {
 // confirm each way before we flip the check. No regeneration, no fanfare — June's layer.
 async function toggleItem(id, btn) {
   if (btn.classList.contains('pending')) return;
-  const item = btn.closest('.plan-item');
+  const item = btn.closest('.plan-item, .task-sub');
   const isDone = !!(item && item.classList.contains('done'));
   const endpoint = isDone ? '/api/uncomplete' : '/api/complete';
   btn.classList.add('pending');
@@ -849,6 +1038,67 @@ async function loadMap() {
   }
 }
 
+// ── Project grouping helpers ────────────────────────────────────────────────
+// Group consecutive same-project items within a block. Items without a project
+// field render flat; 2+ consecutive tasks from the same project become one
+// expandable project row. This runs entirely in the renderer — no LLM change needed.
+function groupByProject(items) {
+  const groups = [];
+  for (const item of items) {
+    if (!item.project) { groups.push({ atomic: true, item }); continue; }
+    const prev = groups.length ? groups[groups.length - 1] : null;
+    if (prev && !prev.atomic && prev.project === item.project) {
+      prev.tasks.push(item);
+    } else {
+      groups.push({ atomic: false, project: item.project, tasks: [item] });
+    }
+  }
+  return groups;
+}
+
+function renderFlatItem(item, showProject) {
+  return `
+    <div class="plan-item${item.done ? ' done' : ''}" onclick="if(!event.target.closest('.item-check'))this.classList.toggle('open')">
+      <div class="item-top">
+        ${item.id ? `<button class="item-check" title="${item.done ? 'undo' : 'mark done'}" onclick="toggleItem('${esc(item.id)}', this)"></button>` : '<span class="check-gap"></span>'}
+        <span class="item-time">${esc(fmtTime(item.time))}</span>
+        <span class="item-label">
+          ${showProject && item.project ? `<span class="item-project">${esc(item.project)}</span><span class="item-sep"> · </span>` : ''}
+          <span class="item-task">${esc(item.task)}</span>
+        </span>
+      </div>
+      ${item.why ? `<div class="item-why">${esc(item.why)}</div>` : ''}
+    </div>`;
+}
+
+function renderGroup(g) {
+  if (g.atomic) return renderFlatItem(g.item, false);
+  if (g.tasks.length === 1) return renderFlatItem(g.tasks[0], true);
+  // Multi-task project row: compute the time span from first start → last end.
+  const t0 = g.tasks[0].time || '';
+  const tN = g.tasks[g.tasks.length - 1].time || '';
+  const spanStart = t0.split(' – ')[0] || t0;          // split on en-dash
+  const spanEnd   = tN.split(' – ')[1] || tN.split(' – ')[0] || tN;
+  const spanTime  = spanStart && spanEnd ? `${spanStart} – ${spanEnd}` : t0;
+  const why = g.tasks[0].why || '';
+  const subHtml = g.tasks.map(t => `
+    <div class="task-sub${t.done ? ' done' : ''}" onclick="event.stopPropagation()">
+      ${t.id ? `<button class="item-check" onclick="toggleItem('${esc(t.id)}', this)"></button>` : '<span class="check-gap"></span>'}
+      <span class="task-sub-label">${esc(t.task)}</span>
+    </div>`).join('');
+  return `
+    <div class="project-row" onclick="this.classList.toggle('open')">
+      <div class="item-top">
+        <span class="check-gap"></span>
+        <span class="item-time">${esc(fmtTime(spanTime))}</span>
+        <span class="project-name">${esc(g.project)}</span>
+        <span class="project-count">${g.tasks.length} ›</span>
+      </div>
+      ${why ? `<div class="project-why">${esc(why)}</div>` : ''}
+      <div class="project-tasks">${subHtml}</div>
+    </div>`;
+}
+
 // ── Plan renderer — called when /api/plan or /api/negotiate returns ─────────
 // Expects: { woven_frame, blocks: [{label, time, framing, items: [{time, project, task, why}]}],
 //            still_here: [{label, note}] }
@@ -858,38 +1108,48 @@ function renderPlan(plan) {
   }
   if (plan.blocks) {
     const container = document.getElementById('plan-blocks');
-    container.innerHTML = plan.blocks.map(block => `
+    container.innerHTML = plan.blocks.map(block => {
+      const itemsHtml = groupByProject(block.items || []).map(renderGroup).join('');
+      return `
       <div class="time-block">
-        <div class="block-header">
+        <div class="block-header" onclick="this.closest('.time-block').classList.toggle('open')">
           <span class="block-name">${esc(block.label)}</span>
-          <span class="block-time">${esc(block.time)}</span>
+          <span class="block-time">${esc(fmtTime(block.time))}</span>
+          ${block.framing ? '<span class="block-expand">›</span>' : ''}
         </div>
         ${block.framing ? `<div class="block-framing">${esc(block.framing)}</div>` : ''}
-        ${block.items.map(item => `
-          <div class="plan-item${item.done ? ' done' : ''}">
-            <div class="item-top">
-              ${item.id ? `<button class="item-check" title="${item.done ? 'undo' : 'mark done'}" onclick="toggleItem('${esc(item.id)}', this)"></button>` : ''}
-              <span class="item-time">${esc(item.time)}</span>
-              <span class="item-label">
-                ${item.project ? `<span class="item-project">${esc(item.project)}</span><span class="item-sep"> · </span>` : ''}
-                <span class="item-task">${esc(item.task)}</span>
-              </span>
-            </div>
-            ${item.why ? `<div class="item-why">${esc(item.why)}</div>` : ''}
-          </div>`).join('')}
-      </div>`).join('');
+        ${itemsHtml}
+      </div>`;
+    }).join('');
   }
   if (plan.still_here) {
+    // Label only — the note is context that lives in Anytype, not scan-view material. The whole
+    // section is collapsed behind a count so it never out-lengths the actual plan.
+    const n = plan.still_here.length;
+    const labelText = document.getElementById('still-label-text');
+    if (labelText) labelText.textContent =
+      n ? `still here, not today (${n})` : 'still here, not today';
     document.getElementById('still-here-items').innerHTML = plan.still_here.map(s => `
       <div class="still-item">
         <div class="still-dot"></div>
-        ${esc(s.label)}${s.note ? ' — ' + esc(s.note) : ''}
+        ${esc(s.label)}
       </div>`).join('');
   }
 }
 
 function esc(s) {
   return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+}
+
+// Convert 24-hour time string or range to 12-hour display.
+// Accepts "13:30", "09:00 – 12:00", "13:30 – 15:00".
+function fmtTime(s) {
+  return String(s).replace(/\d{2}:\d{2}/g, t => {
+    const [h, m] = t.split(':').map(Number);
+    const suffix = h >= 12 ? 'PM' : 'AM';
+    const h12 = h % 12 || 12;
+    return `${h12}:${String(m).padStart(2,'0')} ${suffix}`;
+  });
 }
 
 // ── ADD tab: capture / weed ─────────────────────────────────────────────────
@@ -983,7 +1243,7 @@ function renderSession(entries) {
   const lines = [];
   for (const e of entries) {
     if (e.intent !== 'weed') continue;
-    const t = fmtTime(e.ts);
+    const t = fmtIsoTime(e.ts);
     for (const c of (e.created || [])) {
       lines.push({ id: c.id, name: c.name, project: c.project, time: t,
                    undone: undone.has(c.id) });
@@ -1003,7 +1263,7 @@ function renderSession(entries) {
     </div>`).join('');
 }
 
-function fmtTime(iso) {
+function fmtIsoTime(iso) {
   try {
     return new Date(iso).toLocaleTimeString([], {hour: '2-digit', minute: '2-digit'});
   } catch (_) { return ''; }
@@ -1034,6 +1294,57 @@ document.getElementById('add-field').addEventListener('keydown', e => {
 // ── Date header ─────────────────────────────────────────────────────────────
 document.getElementById('hdr-time').textContent =
   new Date().toLocaleDateString('en-US', {weekday:'short', month:'short', day:'numeric'});
+
+// ── Settings: backend switcher ──────────────────────────────────────────────
+// The server reports, per option, the real routing mechanism + concrete model (no hand-written
+// marketing copy that drifts from what the backend does). We just render what it sends.
+let _currentBackend = null;
+let _backendOptions = [];
+
+async function loadSettings() {
+  try {
+    const res = await fetch('/api/settings');
+    if (!res.ok) return;
+    const data = await res.json();
+    _currentBackend = data.backend;
+    _backendOptions = data.options || [];
+    renderBackends();
+  } catch (_) { /* static preview — leave panel empty */ }
+}
+
+function renderBackends() {
+  const container = document.getElementById('backend-options');
+  container.innerHTML = _backendOptions.map(o => {
+    const sel = o.id === _currentBackend ? ' selected' : '';
+    // The detail line is what June asked for: the concrete model, then how it's routed.
+    const detail = o.model ? `${esc(o.model)} · ${esc(o.mechanism)}` : esc(o.mechanism);
+    return `
+      <div class="backend-opt${sel}" onclick="setBackend('${o.id}')">
+        <span class="backend-radio"></span>
+        <span>
+          <span class="backend-name">${esc(o.label)}</span>
+          <div class="backend-detail">${detail}</div>
+        </span>
+      </div>`;
+  }).join('');
+}
+
+async function setBackend(backend) {
+  if (backend === _currentBackend) return;   // already selected
+  try {
+    const res = await fetch('/api/settings', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ backend }),
+    });
+    const data = await res.json();
+    if (!res.ok) { showError(data.error || "couldn't switch model"); return; }
+    _currentBackend = data.backend;
+    renderBackends();   // reflect the new selection in place (stays on the settings tab)
+  } catch (_) {
+    showError("couldn't reach the server — is it running?");
+  }
+}
 
 // Load live data + the button schema on startup (no-op in static preview)
 loadActions();

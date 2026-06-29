@@ -33,6 +33,30 @@ import task_actions
 import capture_generate
 import session_store
 import orient_map
+import cd_paths
+
+# The LLM backends the overlay can switch between live (mirrors plan_generate's accepted set).
+# June changes this from the gear panel without restarting; the choice persists in settings.json.
+VALID_BACKENDS = ("mistral", "openrouter", "claude", "local")
+
+
+def _load_settings():
+    """Read persisted overlay settings, or an empty dict if none/corrupt (benign first-run)."""
+    try:
+        with open(cd_paths.config_file("settings.json")) as f:
+            return json.load(f)
+    except (FileNotFoundError, json.JSONDecodeError):
+        return {}
+
+
+def _save_settings(data):
+    """Atomic write — a half-written settings file must never be read (matches session_store)."""
+    os.makedirs(cd_paths.config_dir(), exist_ok=True)
+    path = cd_paths.config_file("settings.json")
+    tmp = path + ".tmp"
+    with open(tmp, "w") as f:
+        json.dump(data, f, indent=2)
+    os.replace(tmp, path)
 
 # A generation (the LLM call) takes ~60-110s — far longer than a phone browser will hold a
 # connection open, so it must NOT block the HTTP request (that's the "build my plan from bed"
@@ -100,9 +124,26 @@ class Handler(BaseHTTPRequestHandler):
         if self.path == "/" or self.path == "/index.html":
             try:
                 with open(OVERLAY_HTML, "rb") as f:
-                    self._send(200, f.read(), ctype="text/html; charset=utf-8")
+                    body = f.read()
+                self.send_response(200)
+                self.send_header("Content-Type", "text/html; charset=utf-8")
+                self.send_header("Content-Length", str(len(body)))
+                self.send_header("Cache-Control", "no-store")
+                self.end_headers()
+                self.wfile.write(body)
             except FileNotFoundError:
                 self._send(404, {"error": "overlay HTML not found"})
+            except FileNotFoundError:
+                self._send(404, {"error": "overlay HTML not found"})
+            return
+
+        if self.path == "/manifest.webmanifest":
+            try:
+                p = os.path.join(os.path.dirname(OVERLAY_HTML), "manifest.webmanifest")
+                with open(p, "rb") as f:
+                    self._send(200, f.read(), ctype="application/manifest+json")
+            except FileNotFoundError:
+                self._send(404, {"error": "manifest not found"})
             return
 
         if self.path == "/api/plan":
@@ -132,6 +173,15 @@ class Handler(BaseHTTPRequestHandler):
             plan = plan_store.load_plan()
             st["plan_generated_at"] = plan.get("generated_at") if plan else None
             self._send(200, st)
+            return
+
+        if self.path == "/api/settings":
+            # The settings view reads this: which backend is live, and for each option the real
+            # routing mechanism + concrete model (computed by plan_generate, so the UI shows the
+            # truth — not a hand-written description that drifts from what the backend does).
+            current = os.environ.get("CD_BACKEND", "mistral")
+            options = [{"id": b, **plan_generate.backend_descriptor(b)} for b in VALID_BACKENDS]
+            self._send(200, {"backend": current, "options": options})
             return
 
         if urlparse(self.path).path == "/api/session":
@@ -215,6 +265,19 @@ class Handler(BaseHTTPRequestHandler):
             self._send(200, {"uncompleted": confirmed, "plan": plan or {"empty": True}})
             return
 
+        if self.path == "/api/settings":
+            # Switch the LLM backend live — sets it for the next generation (the worker reads
+            # CD_BACKEND fresh each time) and persists so a server restart keeps the choice.
+            body = self._read_json_body()
+            backend = (body.get("backend") or "").strip()
+            if backend not in VALID_BACKENDS:
+                self._send(400, {"error": f"unknown backend {backend!r}"})
+                return
+            os.environ["CD_BACKEND"] = backend
+            _save_settings({"backend": backend})
+            self._send(200, {"backend": backend})
+            return
+
         if self.path == "/api/capture":
             body = self._read_json_body()
             text = (body.get("text") or "").strip()
@@ -254,11 +317,16 @@ class Handler(BaseHTTPRequestHandler):
 
 def main():
     plan_store.load_actions()  # seed the button schema on first run
+    # Restore the persisted backend choice (the gear panel writes it). Env var set by an outer
+    # launcher still wins for this process only if no setting was saved.
+    s = _load_settings()
+    if s.get("backend") in VALID_BACKENDS:
+        os.environ["CD_BACKEND"] = s["backend"]
     srv = ThreadingHTTPServer((HOST, PORT), Handler)
     print(f"Controlled Drift overlay → http://{HOST}:{PORT}")
-    print("  GET /api/plan · /api/map · /api/actions · /api/status · /api/session")
+    print("  GET /api/plan · /api/map · /api/actions · /api/status · /api/session · /api/settings")
     print("  POST /api/refresh · /api/negotiate · /api/capture (async)")
-    print("  POST /api/complete · /api/uncomplete · /api/capture/undo")
+    print("  POST /api/complete · /api/uncomplete · /api/capture/undo · /api/settings")
     print("  Ctrl-C to stop.")
     try:
         srv.serve_forever()

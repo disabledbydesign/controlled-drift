@@ -208,6 +208,24 @@ def _active_model(backend):
     return None
 
 
+def backend_descriptor(backend):
+    """How a backend ACTUALLY resolves — display label, routing mechanism, and the concrete model
+    it runs — so the settings UI shows the truth (computed here, can't drift from marketing copy).
+    For 'claude' the model is the CLI's own default (we don't pin one), so it's reported as None."""
+    if backend == "mistral":
+        return {"label": "Mistral", "mechanism": "Mistral API (direct)",
+                "model": os.environ.get("CD_MISTRAL_MODEL", "mistral-large-latest")}
+    if backend == "openrouter":
+        return {"label": "OpenRouter", "mechanism": "OpenRouter API",
+                "model": os.environ.get("CD_OPENROUTER_MODEL", "anthropic/claude-sonnet-4")}
+    if backend == "claude":
+        return {"label": "Claude", "mechanism": "claude -p CLI (your subscription)", "model": None}
+    if backend == "local":
+        return {"label": "Local", "mechanism": "on-device (MLX)",
+                "model": os.environ.get("CD_LOCAL_MODEL", "mlx-community/Qwen2.5-7B-Instruct-4bit")}
+    return {"label": backend, "mechanism": backend, "model": None}
+
+
 def build_prompt(capacity=None, extra=None):
     """Build the full generation prompt. Public for the compare script and manual testing."""
     full_context, tasks, start_time = build_context(capacity=capacity)
@@ -245,11 +263,24 @@ Output **ONLY** the single fenced ```json code block specified here — nothing 
 nothing after it. **Do NOT write out the prose plan** described earlier in this prompt: the
 JSON below already carries all of it — the woven frame, each block's framing, each item's
 why — so the prose version is redundant and only slows you down. Skip straight to the JSON.
-Use exactly this shape (keep clock times verbatim from the schedule; `project`
+Use exactly this shape (keep clock times verbatim from the schedule — 24-hour format, e.g. "13:30 – 15:00"; the UI converts to 12-hour for display; `project`
 is null for items with no project like Lunch; `why` is the short upward-link phrase,
 omit/null if none; `ref` is the task-reference token — see TASK REFERENCE in the inputs —
 for items that ARE one of the listed tasks, and null for non-task items like Lunch, breaks,
 or household chores):
+
+**TWO RULES FOR EVERY ITEM:**
+
+1. `task` is what June reads on her phone — rewrite internal labels into plain action language
+   she can act on immediately. "GRA open design Q — voice/instance formalization" → "Work through
+   open questions about how GRA handles voice and instance attribution." No abbreviations,
+   no ALL-CAPS markers, no parenthetical codes. A plain verb phrase, scannable at a glance.
+
+2. `why` must be grounded in the Goals/Projects context above — read the goal's `reaching_for`
+   and the project's purpose, then write one sentence connecting THIS task to THAT. Do not
+   invent a rationale. Do not use project-internal jargon. If the connection is not clear from
+   the context, write what the task concretely produces ("produces a decision she can act on
+   next session") rather than a vague upward-link. No metaphors.
 
 ```json
 {
@@ -257,10 +288,10 @@ or household chores):
   "blocks": [
     {
       "label": "Morning",
-      "time": "9:00 AM – 12:00 PM",
+      "time": "09:00 – 12:00",
       "framing": "the 1-2 sentence block framing",
       "items": [
-        {"time": "9:00 – 10:30 AM", "project": "Project/thread name", "task": "the specific next action", "why": "short why-here phrase", "ref": "T1"}
+        {"time": "09:00 – 10:30", "project": "Project/thread name", "task": "plain action phrase June can act on", "why": "one sentence grounded in her actual goal — what this produces or moves", "ref": "T1"}
       ]
     }
   ],
@@ -278,24 +309,56 @@ and the items in schedule order. No prose before or after — just the block.
 
 # --- context assembly (reuses daily_plan, minus the interactive input/print) -
 
-def build_context(capacity=None, start_time=None):
+def build_context(capacity=None, start_time=None, end_time=None):
     """Load active items + compute the clock schedule, returning the full prompt context.
 
     Mirrors daily_plan.run() but with NO blocking input() and NO printing: capacity is
     ambient (passed in or None), never a front-door gate (SYNTHESIS: offer, don't gate).
-    Returns (full_context_str, tasks) — tasks is handed back so the caller can log what
-    surfaced for the neglect/rhythm learning loop.
+    Returns (full_context_str, tasks, start_time) — tasks handed back for the neglect loop.
+
+    Default start: 10:00 (if current time is before 10 AM, plan starts at 10).
+    Default end: 18:00. Tasks that don't fit before end_time overflow into still_here.
     """
     sid = g.get_space_id()
     goals, projects, tasks, strategies, today_recurrings = dp.load_active_items(sid)
     neglected = dp.load_neglected()
 
-    start_time = start_time or dp._round_to_5(dt.datetime.now())
+    now = dt.datetime.now().replace(second=0, microsecond=0)
+    if start_time is None:
+        day_start = now.replace(hour=10, minute=0)
+        base = now if now >= day_start else day_start
+        # Ceil to nearest 30 min so the plan runs on :00/:30 marks
+        excess = base.minute % 30
+        start_time = base if excess == 0 else base + dt.timedelta(minutes=30 - excess)
+        start_time = start_time.replace(second=0, microsecond=0)
+    if end_time is None:
+        end_time = now.replace(hour=18, minute=0, second=0, microsecond=0)
+
     meals = dp.default_meal_anchors(today_recurrings, start_time)
     all_anchors = today_recurrings + meals
-    task_items = [{"name": t["name"], "duration_min": t.get("duration_min")} for t in tasks]
-    scheduled = dp.build_schedule(task_items, all_anchors, start_time)
+    # Sort tasks by project so consecutive same-project tasks are scheduled
+    # together (enables the renderer's grouping). Project ORDER varies daily
+    # via a date seed — prevents the plan repeating the same order every day.
+    # Unlinked tasks (household chores, standalone items) sort last.
+    # TODO: replace with the selection engine (neglect + stakes + capacity).
+    import hashlib
+    _seed = hashlib.md5(dt.date.today().isoformat().encode()).hexdigest()
+    def _project_key(t):
+        projs = t.get("linked_projects") or []
+        proj = projs[0] if projs else ""
+        order = int(hashlib.md5((proj + _seed).encode()).hexdigest()[:4], 16)
+        return (1 if not proj else 0, order)
+    task_items = [{"name": t["name"], "duration_min": t.get("duration_min")}
+                  for t in sorted(tasks, key=_project_key)]
+    scheduled = dp.build_schedule(task_items, all_anchors, start_time, end_time=end_time)
     schedule_block = dp.format_schedule_blocks(scheduled)
+
+    scheduled_names = {s["name"] for s in scheduled}
+    overflow = [t for t in tasks if t["name"] not in scheduled_names]
+    if overflow:
+        schedule_block += f"\n\n### Didn't fit before {end_time.strftime('%H:%M')} — put these in still_here\n"
+        for t in overflow:
+            schedule_block += f"  - {t['name']}\n"
 
     context_block = dp.format_context(
         goals, projects, tasks, strategies, today_recurrings, neglected, capacity)
@@ -403,6 +466,7 @@ def _resolve_ids(plan, ref_map, tasks):
     no id at all. No match -> the item simply carries no id and shows no done-affordance.
     """
     by_name = {_norm(t["name"]): t["id"] for t in tasks}
+    context_by_id = {t["id"]: (t.get("context") or "").strip() for t in tasks}
     for block in plan.get("blocks", []):
         for item in block.get("items", []):
             ref = item.pop("ref", None)  # consume the token; the overlay only needs the id
@@ -411,6 +475,12 @@ def _resolve_ids(plan, ref_map, tasks):
                 tid = by_name.get(_norm(item.get("task")))
             if tid:
                 item["id"] = tid
+                # Carry the task's stored description (its Context field) onto the item so the
+                # overlay can show it on expand. Empty for most tasks until the weed writes one;
+                # the overlay only renders the slot when there's text.
+                desc = context_by_id.get(tid)
+                if desc:
+                    item["description"] = desc
     return plan
 
 

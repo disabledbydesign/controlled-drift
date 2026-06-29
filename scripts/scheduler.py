@@ -8,9 +8,10 @@ DEFAULT_DURATION_MIN = 30
 def _dur(item):
     return item.get("duration_min") or DEFAULT_DURATION_MIN
 
-def schedule(items, start):
+def schedule(items, start, end_time=None):
     """items: list of {"name", "duration_min", "fixed_time": datetime|None, ...}. start: datetime.
     Fixed-time items are anchors placed at their clock time; flexible items flow around them.
+    end_time: if set, flexible tasks are not started at or after this time (anchors always placed).
     Returns each item (copied) with start_time/end_time added."""
     anchors = sorted(
         ({**it, "start_time": it["fixed_time"],
@@ -25,6 +26,8 @@ def schedule(items, start):
     for anchor in anchors:
         # place flexible items that fully fit before this anchor begins
         while fi < len(flexible):
+            if end_time and cursor >= end_time:
+                break
             end = cursor + dt.timedelta(minutes=_dur(flexible[fi]))
             if end <= anchor["start_time"]:
                 placed = dict(flexible[fi]); placed["start_time"] = cursor; placed["end_time"] = end
@@ -35,6 +38,8 @@ def schedule(items, start):
         cursor = max(cursor, anchor["end_time"])
     # remaining flexible items after the last anchor
     while fi < len(flexible):
+        if end_time and cursor >= end_time:
+            break
         end = cursor + dt.timedelta(minutes=_dur(flexible[fi]))
         placed = dict(flexible[fi]); placed["start_time"] = cursor; placed["end_time"] = end
         out.append(placed); cursor = end; fi += 1

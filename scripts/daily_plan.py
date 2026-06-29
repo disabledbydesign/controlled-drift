@@ -370,7 +370,7 @@ def default_meal_anchors(today_recurrings, start_time):
     return anchors
 
 
-def build_schedule(llm_ordered_items, all_anchors, start_time=None):
+def build_schedule(llm_ordered_items, all_anchors, start_time=None, end_time=None):
     """Merge LLM-proposed task order with fixed anchors (Recurring + meal defaults).
     llm_ordered_items: list of {"name", "duration_min", ...} in proposed order.
     all_anchors: today_recurrings + default_meal_anchors (both have fixed_time).
@@ -391,12 +391,12 @@ def build_schedule(llm_ordered_items, all_anchors, start_time=None):
         if ft is not None and ft < start_time:
             # Time passed — drop the anchor so it flows into the current queue.
             # Label it so the LLM and June know it was scheduled earlier.
-            item["name"] = f"{item['name']} (was {_round_to_5(ft).strftime('%-I:%M %p').lstrip('0')})"
+            item["name"] = f"{item['name']} (was {_round_to_5(ft).strftime('%H:%M')})"
             del item["fixed_time"]
             item["_overdue"] = True
         anchor_items.append(item)
     all_items = list(llm_ordered_items) + anchor_items
-    return schedule(all_items, start_time)
+    return schedule(all_items, start_time, end_time=end_time)
 
 
 def _round_to_5(t):
@@ -432,7 +432,7 @@ def format_schedule_blocks(scheduled):
         blocks.setdefault(label, []).append(item)
 
     def _fmt_time(t):
-        return _round_to_5(t).strftime("%I:%M %p").lstrip("0")
+        return _round_to_5(t).strftime("%H:%M")
 
     lines = []
     lines.append("## Pre-computed clock schedule — your output skeleton")
