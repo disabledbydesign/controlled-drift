@@ -65,8 +65,6 @@ _DEFAULT_ACTIONS = {
                 "else. Don't ask me to decide anything."
             ),
         },
-        # "add" focuses the open text field instead of generating — no payload.
-        {"id": "add", "label": "Add something", "payload": None},
     ],
 }
 
