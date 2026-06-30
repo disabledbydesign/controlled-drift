@@ -72,6 +72,26 @@ Backburner and dormant projects going quiet is *expected and fine* — the syste
 
 ---
 
+## When capacity is low-energy
+
+When the capacity signal contains "low-energy" (passed in by the backend when June taps the
+Low energy today button):
+
+- **Lead with `Can-be-done-lying-down` tasks.** These appear first in the plan regardless of
+  project order. If no tasks are tagged `Can-be-done-lying-down`, say so at the top of the
+  woven frame: "Nothing in your task list is tagged as lying-down-ready — today's plan works
+  from what's there, lowest effort first."
+- **Include at least one explicit rest block.** 15–30 min, positioned where energy typically
+  dips (mid-morning or early afternoon). Name it plainly: "Rest — not optional."
+- **Reduce the total amount of scheduled work.** Calibrate to what feels sustainable for a
+  genuinely low day — not a fixed count. Tasks requiring sustained focus or leaving the house
+  move to still_here unless they are urgent (flag if so).
+- **The woven frame acknowledges the capacity honestly** — not motivationally ("you've got
+  this"), not apologetically ("I'm sorry today is hard"). Just: this is the day, here's how
+  to move through it without burning what's left.
+
+---
+
 **Inputs (injected by `scripts/daily_plan.py`):**
 - Capacity signal: [what June said about today, or empty]
 - Active tasks/projects/goals/strategies: [structured context block — Goals, Projects, Tasks,

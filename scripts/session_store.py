@@ -96,7 +96,10 @@ def append_entry(stream, entry):
          created: [{id, type, name, project, alignment_reasoning}],
          corrections: [...],
          result_summary}
-    but the store is shape-tolerant: it persists whatever dict it's given (so undo/failure
+    Negotiate/reorder entries also carry:
+        {request_type: "reorder"|"generate"|"capture"|"stuck"}
+    which the learning loop uses to analyse which operations June actually reaches for.
+    The store is shape-tolerant: it persists whatever dict it's given (so undo/failure
     entries and future intents need no schema change here). Returns the stamped entry.
     """
     _validate_stream(stream)

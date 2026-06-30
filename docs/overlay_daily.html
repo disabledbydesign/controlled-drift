@@ -527,6 +527,30 @@ textarea.ask-field:focus { border-color: var(--gold); }
 }
 .ask-send:hover { background: rgba(212,169,106,0.2); }
 
+/* ── op toggle (Reorder / Generate above freetext) ── */
+.op-toggle {
+  display: flex;
+  gap: 5px;
+  margin-bottom: 7px;
+}
+.op-btn {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  color: var(--text-dimmer);
+  font-size: 10px;
+  font-family: inherit;
+  padding: 3px 9px;
+  cursor: pointer;
+  letter-spacing: 0.04em;
+  transition: all 0.12s;
+}
+.op-btn.active {
+  background: rgba(212,169,106,0.12);
+  border-color: rgba(212,169,106,0.35);
+  color: var(--gold);
+}
+
 /* ── MAP tab ── */
 .map-section {
   padding: 13px 14px;
@@ -792,6 +816,10 @@ textarea.add-field:focus { border-color: var(--gold); }
 
     <div class="ask-section">
       <div class="ask-label">or tell me what you need</div>
+      <div class="op-toggle">
+        <button id="op-reorder" class="op-btn active" onclick="setOp('reorder')">Reorder</button>
+        <button id="op-generate" class="op-btn" onclick="setOp('generate')">Generate</button>
+      </div>
       <div class="ask-row">
         <textarea class="ask-field" id="ask-field"
           placeholder="e.g. I only have 30 min and need to stay horizontal…"></textarea>
@@ -912,23 +940,36 @@ async function loadActions() {
 }
 
 function handlePreset(preset) {
-  if (!preset.payload) {                 // e.g. "add" — UI-only, no generation
+  if (!preset.payload && preset.operation !== 'generate') {  // "add" — UI-only, no generation
     document.getElementById('ask-field').focus();
     return;
   }
-  generate('/api/negotiate', { preset_id: preset.id });
+  if (preset.operation === 'generate') {
+    generate('/api/refresh', { capacity: preset.capacity_flag });
+  } else {
+    generate('/api/negotiate', { preset_id: preset.id });
+  }
 }
 
 function handleRefresh() {
   generate('/api/refresh', {});
 }
 
+let _freeTextOp = 'reorder';
+
+function setOp(op) {
+  _freeTextOp = op;
+  document.getElementById('op-reorder').classList.toggle('active', op === 'reorder');
+  document.getElementById('op-generate').classList.toggle('active', op === 'generate');
+}
+
 function sendRequest() {
   const field = document.getElementById('ask-field');
   const msg = field.value.trim();
   if (!msg) return;
-  generate('/api/negotiate', { message: msg });
+  generate('/api/negotiate', { message: msg, operation: _freeTextOp });
   field.value = '';
+  setOp('reorder');  // reset to default after each send
 }
 
 // ── API calls ──────────────────────────────────────────────────────────────

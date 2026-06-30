@@ -41,6 +41,11 @@ _DEFAULT_ACTIONS = {
         {
             "id": "low-energy",
             "label": "Low energy today",
+            # operation="generate": triggers a fresh plan generation with the capacity flag,
+            # so the LLM selects from the full task list (prioritizing Can-be-done-lying-down
+            # tasks) rather than reordering what's already on screen.
+            "operation": "generate",
+            "capacity_flag": "low-energy",
             "payload": (
                 "Capacity is low today. Please reframe the plan: shorter sessions, "
                 "lower-stakes tasks first, rest built in. Keep the time-block format. "
@@ -50,6 +55,7 @@ _DEFAULT_ACTIONS = {
         {
             "id": "quick-wins",
             "label": "Quick wins first",
+            "operation": "reorder",
             "payload": (
                 "Reorder to lead with quick wins — shorter tasks I can finish fast to "
                 "build momentum for the harder work later. Explain why this order works "
@@ -59,11 +65,19 @@ _DEFAULT_ACTIONS = {
         {
             "id": "stuck",
             "label": "I'm stuck",
+            "operation": "reorder",
             "payload": (
                 "I'm stuck and can't start. Offer one very small, concrete first step I "
                 "can take right now — something doable in five minutes. Hold everything "
                 "else. Don't ask me to decide anything."
             ),
+        },
+        {
+            "id": "add",
+            "label": "+ Add",
+            # UI-only: the server returns the current plan synchronously; the overlay
+            # uses this to focus the Add tab textarea rather than starting a generation.
+            "operation": "reorder",
         },
     ],
 }
@@ -189,15 +203,38 @@ def set_gen_status(state, error=None):
 # --- actions (variable button schema) ---------------------------------------
 
 def load_actions():
-    """Return the button schema, seeding the default on first run."""
+    """Return the button schema, seeding the default on first run.
+
+    Also migrates an existing on-disk actions.json that is missing `operation` / `capacity_flag`
+    fields (added when intent-routing landed). Presets are merged by id from _DEFAULT_ACTIONS so
+    new fields propagate without requiring a manual file delete.
+    """
     try:
         with open(_actions_path()) as f:
-            return json.load(f)
+            data = json.load(f)
     except (FileNotFoundError, json.JSONDecodeError):
+        data = None
+
+    if data is None:
         _ensure_dir()
         with open(_actions_path(), "w") as f:
             json.dump(_DEFAULT_ACTIONS, f, indent=2)
         return _DEFAULT_ACTIONS
+
+    # Migrate: if any preset is missing `operation`, merge from _DEFAULT_ACTIONS by id.
+    defaults_by_id = {p["id"]: p for p in _DEFAULT_ACTIONS["presets"]}
+    changed = False
+    for preset in data.get("presets", []):
+        pid = preset.get("id")
+        if pid in defaults_by_id and "operation" not in preset:
+            preset["operation"] = defaults_by_id[pid]["operation"]
+            if "capacity_flag" in defaults_by_id[pid]:
+                preset["capacity_flag"] = defaults_by_id[pid]["capacity_flag"]
+            changed = True
+    if changed:
+        with open(_actions_path(), "w") as f:
+            json.dump(data, f, indent=2)
+    return data
 
 
 def find_preset(action_id):

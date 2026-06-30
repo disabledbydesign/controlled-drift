@@ -586,9 +586,10 @@ def generate_plan(capacity=None, source="generate"):
     return saved
 
 
-def negotiate(message, kind):
-    """Renegotiate the current plan from June's request (a preset payload or freetext).
+def reorder(message, kind):
+    """Reorder/reframe the current plan from June's request (a preset payload or freetext).
 
+    Works on the existing cached plan — no new task selection from Anytype.
     `kind` labels the correction for the learning log: 'preset:<id>' or 'freetext'.
     Logs the before/after plan so the rhythm + duration loops have the delta. Also
     re-surfaces (the renegotiated plan is what she's now working from).
@@ -678,7 +679,7 @@ if __name__ == "__main__":
     import argparse
     ap = argparse.ArgumentParser(description="Generate / renegotiate the daily plan (headless)")
     ap.add_argument("--capacity", default=None, help="optional ambient capacity signal")
-    ap.add_argument("--negotiate", default=None, help="a renegotiation message (freetext)")
+    ap.add_argument("--reorder", default=None, help="a reorder/renegotiation message (freetext)")
     ap.add_argument("--dry-context", action="store_true",
                     help="just print the assembled context, no LLM call (cheap check)")
     args = ap.parse_args()
@@ -687,8 +688,8 @@ if __name__ == "__main__":
         ctx, tasks, st = build_context(capacity=args.capacity)
         print(ctx)
         print(f"\n[{len(tasks)} tasks would be logged as surfaced]")
-    elif args.negotiate:
-        saved = negotiate(args.negotiate, kind="freetext")
+    elif args.reorder:
+        saved = reorder(args.reorder, kind="freetext")
         print(json.dumps(saved, indent=2))
     else:
         saved = generate_plan(capacity=args.capacity)

@@ -121,13 +121,13 @@ def test_generate_plan_caches_and_logs_surfaced(tmp_path, monkeypatch):
     assert not corrections                                          # fresh gen ≠ a correction
 
 
-def test_negotiate_logs_correction_with_kind_and_before_after(tmp_path, monkeypatch):
+def test_reorder_logs_correction_with_kind_and_before_after(tmp_path, monkeypatch):
     surfaced, corrections = _stub_pipeline(monkeypatch, tmp_path)
     plan_store.save_plan({"woven_frame": "old"}, source="morning")  # a "before" exists
-    pg.negotiate("go gentle", kind="preset:low-energy")
+    pg.reorder("go gentle", kind="preset:quick-wins")
     assert len(corrections) == 1
     kind, before, after = corrections[0]
-    assert kind == "preset:low-energy"
+    assert kind == "preset:quick-wins"
     assert before["woven_frame"] == "old"          # before captured
     assert after["woven_frame"] == "a calm frame"  # after captured
     assert surfaced                                # renegotiated plan also re-surfaces

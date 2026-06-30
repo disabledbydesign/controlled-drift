@@ -201,7 +201,12 @@ class Handler(BaseHTTPRequestHandler):
     def do_POST(self):
         if self.path == "/api/refresh":
             # Async: kick off the generation, return immediately; the overlay polls /api/status.
-            started = _start_generation(lambda: plan_generate.generate_plan(source="refresh"))
+            # Optional `capacity` in the request body (e.g. from the freetext toggle or a
+            # generate-dispatched preset) is passed through to plan generation.
+            body = self._read_json_body()
+            capacity = (body.get("capacity") or "").strip() or None
+            started = _start_generation(
+                lambda: plan_generate.generate_plan(capacity=capacity, source="refresh"))
             self._send(202, {"state": "running", "started": started})
             return
 
@@ -213,19 +218,57 @@ class Handler(BaseHTTPRequestHandler):
                 if not preset:
                     self._send(400, {"error": f"unknown preset {preset_id!r}"})
                     return
+                operation = preset.get("operation", "reorder")
                 payload = preset.get("payload")
-                if not payload:
+                if not payload and operation != "generate":
                     # e.g. "add" — a UI-only action; nothing to generate (synchronous).
                     self._send(200, plan_store.load_plan() or {"empty": True})
                     return
-                started = _start_generation(
-                    lambda: plan_generate.negotiate(payload, kind=f"preset:{preset_id}"))
+                if operation == "generate":
+                    # Preset signals a fresh generation (e.g. low-energy) — select from the
+                    # full task list with the capacity flag, not just reorder the existing plan.
+                    cap = preset.get("capacity_flag") or None
+                    started = _start_generation(
+                        lambda: plan_generate.generate_plan(
+                            capacity=cap, source=f"preset:{preset_id}"))
+                    session_store.append_entry("negotiate", {
+                        "intent": "generate",
+                        "raw_input": f"[preset:{preset_id}]",
+                        "request_type": "generate",
+                        "result_summary": f"fresh generation triggered (capacity={cap})",
+                    })
+                else:
+                    started = _start_generation(
+                        lambda: plan_generate.reorder(payload, kind=f"preset:{preset_id}"))
+                    session_store.append_entry("negotiate", {
+                        "intent": "reorder",
+                        "raw_input": f"[preset:{preset_id}]",
+                        "request_type": "reorder",
+                        "result_summary": f"reorder triggered",
+                    })
                 self._send(202, {"state": "running", "started": started})
                 return
             message = (body.get("message") or "").strip()
             if message:
-                started = _start_generation(
-                    lambda: plan_generate.negotiate(message, kind="freetext"))
+                operation = (body.get("operation") or "reorder").strip()
+                if operation == "generate":
+                    started = _start_generation(
+                        lambda: plan_generate.generate_plan(source="freetext-generate"))
+                    session_store.append_entry("negotiate", {
+                        "intent": "generate",
+                        "raw_input": message,
+                        "request_type": "generate",
+                        "result_summary": "freetext-triggered fresh generation",
+                    })
+                else:
+                    started = _start_generation(
+                        lambda: plan_generate.reorder(message, kind="freetext"))
+                    session_store.append_entry("negotiate", {
+                        "intent": "reorder",
+                        "raw_input": message,
+                        "request_type": "reorder",
+                        "result_summary": "freetext reorder",
+                    })
                 self._send(202, {"state": "running", "started": started})
                 return
             self._send(400, {"error": "negotiate needs preset_id or message"})

@@ -26,14 +26,14 @@ def live_server(tmp_path, monkeypatch):
     monkeypatch.setattr(orient_map, "render_map", lambda name: "GOAL: test map\n  stream")
     # generation: record calls, return a canned plan
     calls = []
-    def fake_generate_plan(source="generate"):
-        calls.append(("generate_plan", source))
+    def fake_generate_plan(source="generate", capacity=None):
+        calls.append(("generate_plan", source, capacity))
         return plan_store.save_plan({"woven_frame": "fresh", "blocks": [], "still_here": []}, source=source)
-    def fake_negotiate(message, kind):
-        calls.append(("negotiate", kind, message))
+    def fake_reorder(message, kind):
+        calls.append(("reorder", kind, message))
         return plan_store.save_plan({"woven_frame": "renegotiated", "blocks": [], "still_here": []}, source=kind)
     monkeypatch.setattr(plan_generate, "generate_plan", fake_generate_plan)
-    monkeypatch.setattr(plan_generate, "negotiate", fake_negotiate)
+    monkeypatch.setattr(plan_generate, "reorder", fake_reorder)
 
     # capture: record the call + write a real session entry (to the sandbox) so the receipt
     # route returns something — mirrors what the real capture() does.
@@ -178,29 +178,65 @@ def test_refresh_generates_and_caches(live_server):
     status, body = _post(base, "/api/refresh", {})
     assert status == 202 and body["state"] == "running"   # async: returns at once, no blocking
     _wait_idle(base)                                       # background generation completes
-    assert ("generate_plan", "refresh") in calls
+    assert any(c[:2] == ("generate_plan", "refresh") for c in calls)
     _, plan = _get(base, "/api/plan")
     assert json.loads(plan)["woven_frame"] == "fresh"
 
 
-def test_negotiate_preset_looks_up_payload_and_tags_kind(live_server):
+def test_negotiate_preset_reorder_tags_kind(live_server):
     base, calls = live_server
-    status, body = _post(base, "/api/negotiate", {"preset_id": "low-energy"})
+    status, body = _post(base, "/api/negotiate", {"preset_id": "quick-wins"})
     assert status == 202 and body["state"] == "running"
     _wait_idle(base)
-    kind = [c for c in calls if c[0] == "negotiate"][0][1]
-    assert kind == "preset:low-energy"
+    reorder_calls = [c for c in calls if c[0] == "reorder"]
+    assert reorder_calls and reorder_calls[0][1] == "preset:quick-wins"
     _, plan = _get(base, "/api/plan")
     assert json.loads(plan)["woven_frame"] == "renegotiated"
 
 
-def test_negotiate_freetext(live_server):
+def test_negotiate_preset_generate_dispatches_to_generate_plan(live_server):
+    base, calls = live_server
+    status, body = _post(base, "/api/negotiate", {"preset_id": "low-energy"})
+    assert status == 202 and body["state"] == "running"
+    _wait_idle(base)
+    # low-energy has operation=generate: must call generate_plan, NOT reorder
+    gen_calls = [c for c in calls if c[0] == "generate_plan"]
+    assert gen_calls, "expected generate_plan to be called for low-energy preset"
+    assert gen_calls[0][2] == "low-energy"           # capacity_flag passed through
+    assert not any(c[0] == "reorder" for c in calls)
+    # session log has request_type=generate
+    _, txt = _get(base, "/api/session?stream=negotiate")
+    entries = json.loads(txt)["entries"]
+    assert any(e.get("request_type") == "generate" for e in entries)
+
+
+def test_negotiate_freetext_reorder(live_server):
     base, calls = live_server
     status, body = _post(base, "/api/negotiate", {"message": "only 30 minutes today"})
     assert status == 202 and body["state"] == "running"
     _wait_idle(base)
-    call = [c for c in calls if c[0] == "negotiate"][0]
+    call = [c for c in calls if c[0] == "reorder"][0]
     assert call[1] == "freetext" and "30 minutes" in call[2]
+
+
+def test_negotiate_freetext_generate_dispatches_to_generate_plan(live_server):
+    base, calls = live_server
+    status, body = _post(base, "/api/negotiate",
+                         {"message": "fresh start please", "operation": "generate"})
+    assert status == 202 and body["state"] == "running"
+    _wait_idle(base)
+    gen_calls = [c for c in calls if c[0] == "generate_plan"]
+    assert gen_calls, "expected generate_plan for freetext operation=generate"
+    assert not any(c[0] == "reorder" for c in calls)
+
+
+def test_refresh_with_capacity_passes_through(live_server):
+    base, calls = live_server
+    status, body = _post(base, "/api/refresh", {"capacity": "low-energy"})
+    assert status == 202 and body["state"] == "running"
+    _wait_idle(base)
+    gen_calls = [c for c in calls if c[0] == "generate_plan"]
+    assert gen_calls and gen_calls[0][2] == "low-energy"
 
 
 def test_status_idle_to_landed(live_server):
@@ -212,7 +248,7 @@ def test_status_idle_to_landed(live_server):
 
 def test_generation_error_surfaces_in_status(live_server, monkeypatch):
     base, calls = live_server
-    def boom(source="generate"):
+    def boom(source="generate", capacity=None):
         raise RuntimeError("kaboom")
     monkeypatch.setattr(plan_generate, "generate_plan", boom)   # overrides the fixture's fake
     _post(base, "/api/refresh", {})
@@ -232,7 +268,7 @@ def test_negotiate_add_preset_does_not_generate(live_server):
     # "add" has no payload — it's UI-only; the server must not run a generation.
     status, body = _post(base, "/api/negotiate", {"preset_id": "add"})
     assert status == 200
-    assert not any(c[0] == "negotiate" for c in calls)
+    assert not any(c[0] in ("reorder", "generate_plan") for c in calls)
 
 
 def test_negotiate_unknown_preset_400(live_server):
