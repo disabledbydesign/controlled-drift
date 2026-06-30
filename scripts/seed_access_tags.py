@@ -18,7 +18,7 @@ Keys at the prompt:
 import sys, os
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
-import daily_plan
+import plan_generate
 import gsdo_objects as o
 import gsdo_anytype as g
 from anytype_test import call
@@ -46,7 +46,6 @@ _LEAVING_HOUSE_SIGNALS = {
 def _propose_tags(name, context=""):
     """Return a list of suggested tag names based on keywords in the task name + context."""
     text = (name + " " + context).lower()
-    words = set(text.split())
     proposed = []
     if any(sig in text for sig in _LYING_DOWN_SIGNALS):
         proposed.append(TAG_LYING_DOWN)
@@ -65,17 +64,14 @@ def _prompt(question):
 
 def _current_access_tags(task):
     """Return the task's existing access-condition values, or []."""
-    props = task.get("properties", {})
-    access = props.get("Access conditions") or props.get("access") or []
-    if isinstance(access, list):
-        return access
-    return []
+    access = task.get("access") or []
+    return access if isinstance(access, list) else []
 
 
 def main():
     print("Loading active tasks from Anytype…")
     try:
-        context_str, tasks, _ = daily_plan.build_context()
+        context_str, tasks, _ = plan_generate.build_context()
     except Exception as e:
         print(f"ERROR loading tasks: {e}")
         sys.exit(1)
@@ -89,7 +85,8 @@ def main():
     for task in tasks:
         tid = task.get("id")
         name = task.get("name") or "(unnamed)"
-        project = task.get("project") or ""
+        linked_projects = task.get("linked_projects") or []
+        project = linked_projects[0] if linked_projects else ""
         context_text = task.get("context") or ""
         existing = _current_access_tags(task)
         proposed = _propose_tags(name, context_text)
