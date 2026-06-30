@@ -54,7 +54,7 @@ Output shape for each block:
 ## Boundaries
 - This is a negotiation proposal — everything is moveable. Expect and invite pushback; that's the design working, and corrections are data.
 - Nothing punitive about what's not in today's path — not-today is not failure.
-- Use the Python-computed times verbatim in the initial plan. Do not invent times or reorder items.
+- Use the Python-computed times verbatim in the initial plan. Do not invent times or reorder items. (This applies to the initial automated generation only — renegotiations driven by June's request are expected to change the ordering.)
 - Progress reminders orient — they never grade.
 - If the output looks like a to-do list or a narrative + schedule printed separately, the format is wrong. It must be one integrated time-block plan.
 

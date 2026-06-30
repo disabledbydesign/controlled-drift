@@ -269,7 +269,7 @@ omit/null if none; `ref` is the task-reference token — see TASK REFERENCE in t
 for items that ARE one of the listed tasks, and null for non-task items like Lunch, breaks,
 or household chores):
 
-**TWO RULES FOR EVERY ITEM:**
+**THREE RULES FOR EVERY ITEM:**
 
 1. `task` is what June reads on her phone — rewrite internal labels into plain action language
    she can act on immediately. "GRA open design Q — voice/instance formalization" → "Work through
@@ -280,7 +280,12 @@ or household chores):
    and the project's purpose, then write one sentence connecting THIS task to THAT. Do not
    invent a rationale. Do not use project-internal jargon. If the connection is not clear from
    the context, write what the task concretely produces ("produces a decision she can act on
-   next session") rather than a vague upward-link. No metaphors.
+   next session") rather than a vague upward-link. No metaphors. Omit/null for interstitial items.
+
+3. `interstitial`: set to true if this is a quick between-task action that doesn't need a full
+   time block — trash, recycling, laundry switch, a 5-minute errand, anything ≤ 15 min where
+   June returns to her desk right after. These render as slim in-line markers in the schedule,
+   not full work blocks. No `why` for interstitial items. Set false (or omit) for all focused work.
 
 ```json
 {
@@ -291,7 +296,8 @@ or household chores):
       "time": "09:00 – 12:00",
       "framing": "the 1-2 sentence block framing",
       "items": [
-        {"time": "09:00 – 10:30", "project": "Project/thread name", "task": "plain action phrase June can act on", "why": "one sentence grounded in her actual goal — what this produces or moves", "ref": "T1"}
+        {"time": "09:00 – 10:30", "project": "Project/thread name", "task": "plain action phrase June can act on", "why": "one sentence grounded in her actual goal — what this produces or moves", "ref": "T1", "interstitial": false},
+        {"time": "10:30 – 10:35", "project": null, "task": "Take out recycling", "why": null, "ref": null, "interstitial": true}
       ]
     }
   ],
@@ -385,6 +391,24 @@ def _build_task_refs(tasks):
     return ref_map, "\n".join(lines)
 
 
+def _format_current_plan(plan):
+    """Compact summary of the displayed plan — passed to the LLM when renegotiating so it
+    knows WHAT it's changing. Without this, 'move X to later' is unresolvable: the LLM
+    has a fresh deterministic schedule that may not match what June sees on screen."""
+    if not plan:
+        return None
+    lines = []
+    for block in plan.get("blocks", []):
+        lines.append(f"### {block.get('label', '?')} ({block.get('time', '?')})")
+        for item in block.get("items", []):
+            proj = item.get("project", "")
+            task = item.get("task", "")
+            t = item.get("time", "")
+            prefix = f"[{proj}] " if proj else ""
+            lines.append(f"  - {t}: {prefix}{task}")
+    return "\n".join(lines) if lines else None
+
+
 def _format_session_history(history):
     """Render recent negotiate turns so a follow-up adjustment ('and move job search later')
     resolves against what June already asked for today. Oldest→newest, compact."""
@@ -400,7 +424,7 @@ def _format_session_history(history):
 
 
 def _assemble_prompt(full_context, start_time, capacity=None, extra=None, task_table=None,
-                     history=None):
+                     history=None, current_plan=None):
     """Build the full prompt: the daily_list.md template + an authoritative inputs section
     holding the real data, + the JSON contract (+ any negotiation note).
 
@@ -445,7 +469,29 @@ def _assemble_prompt(full_context, start_time, capacity=None, extra=None, task_t
         parts += ["", "## EARLIER ADJUSTMENTS THIS SESSION (for follow-up context)", "",
                   history_text]
     if extra:
-        parts += ["", "## JUNE'S REQUEST FOR THIS PLAN", "", extra]
+        if current_plan:
+            parts += [
+                "",
+                "## CURRENT PLAN ON SCREEN (what June is looking at right now)",
+                "",
+                "This is the plan already displayed to June. She is asking to change it.",
+                "Use this to understand what she means by 'move X' or 'put Y first' — her",
+                "request is relative to THIS ordering, not the pre-computed schedule above.",
+                "",
+                current_plan,
+            ]
+        parts += [
+            "",
+            "## JUNE'S REQUEST — RENEGOTIATION",
+            "",
+            "**This is a renegotiation, not an initial generation.** The 'do not reorder items'",
+            "constraint in the template above applies only to the initial automated plan.",
+            "For this call: honor June's request — reorder, shift, or drop items as she asks.",
+            "Recalculate times from the current moment to make the new ordering fit the window.",
+            "Update the woven_frame and block framings to explain the new ordering rationale.",
+            "",
+            extra,
+        ]
     prompt = "\n".join(parts)
     prompt += _JSON_INSTRUCTION
     return prompt
@@ -551,8 +597,9 @@ def negotiate(message, kind):
     full_context, tasks, start_time = build_context()
     ref_map, task_table = _build_task_refs(tasks)
     history = session_store.recent_entries("negotiate")
+    current_plan_summary = _format_current_plan(before)
     prompt = _assemble_prompt(full_context, start_time, extra=message, task_table=task_table,
-                              history=history)
+                              history=history, current_plan=current_plan_summary)
     backend = os.environ.get("CD_BACKEND", "mistral")
     model = _active_model(backend)
     backend_label = f"{backend}/{model}" if model else backend

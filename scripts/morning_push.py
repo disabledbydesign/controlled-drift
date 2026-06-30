@@ -17,7 +17,7 @@ OFFERS a shape for the day — it never commands or scolds. No "you're behind", 
 Run manually to test:  python3 scripts/morning_push.py
 Scheduled by:          ~/Library/LaunchAgents/com.june.controlled-drift.morning.plist
 """
-import sys, os, subprocess, datetime as dt
+import sys, os, subprocess, time, datetime as dt
 import urllib.request
 
 sys.path.insert(0, os.path.dirname(__file__))
@@ -82,16 +82,102 @@ def _overlay_url():
     return None
 
 
-def _push_to_phone(plan):
+# Retry tuning. A background 9 AM job can afford to wait out a transient blip; tests set the
+# delay to 0 via this module constant.
+RETRY_ATTEMPTS = 3
+RETRY_DELAY_S = 5
+
+# Fallback backend, tried once if the primary (Mistral) fails every retry. `claude -p` is the
+# right choice for June's plan data: it stays on the Anthropic trust boundary (same privacy ladder
+# tier as Mistral — no third-party routing of her health/finance task names), and it's already
+# proven to run headless here via the durable claude_token. It's slow (~160s), but a background
+# fallback can afford that, and a FRESH plan beats yesterday's stale one.
+FALLBACK_BACKEND = "claude"
+
+
+def _generate_with_retry(attempts=None, delay=None):
+    """Generate the morning plan, retrying transient failures. The 9 AM run competes with whatever
+    else is using the network; a single 'connection reset' shouldn't cost June her whole morning
+    push when the same call succeeds seconds later. Returns the plan, or None if every attempt
+    failed. Each failure is logged (never silent).
+
+    Defaults are read from the module constants at CALL time (not bound at def time), so tests can
+    zero the delay by setting RETRY_DELAY_S."""
+    attempts = RETRY_ATTEMPTS if attempts is None else attempts
+    delay = RETRY_DELAY_S if delay is None else delay
+    last = None
+    for i in range(1, attempts + 1):
+        try:
+            return plan_generate.generate_plan(source="morning")
+        except Exception as e:
+            last = e
+            print(f"[morning_push] generation attempt {i}/{attempts} failed: {e}", file=sys.stderr)
+            if i < attempts:
+                time.sleep(delay)
+    print(f"[morning_push] generation failed after {attempts} attempts: {last}", file=sys.stderr)
+    return None
+
+
+def _generate_on_fallback():
+    """Second-chance generation on the fallback backend when the primary fails every retry. Keeps
+    June's personal plan data on the Anthropic trust boundary (no third-party routing); slow, but a
+    background fallback can afford it, and a fresh plan beats a stale cached one. One attempt;
+    returns the plan or None. Switches CD_BACKEND for just this call, then restores it."""
+    saved = os.environ.get("CD_BACKEND")
+    os.environ["CD_BACKEND"] = FALLBACK_BACKEND
+    try:
+        plan = plan_generate.generate_plan(source="morning")
+        print(f"[morning_push] primary failed — fresh plan from fallback backend ({FALLBACK_BACKEND})",
+              file=sys.stderr)
+        return plan
+    except Exception as e:
+        print(f"[morning_push] fallback backend ({FALLBACK_BACKEND}) failed too: {e}", file=sys.stderr)
+        return None
+    finally:
+        if saved is None:
+            os.environ.pop("CD_BACKEND", None)
+        else:
+            os.environ["CD_BACKEND"] = saved
+
+
+def _push_failure_to_phone():
+    """When there's NO plan to send (generation failed AND no cache), the failure must still reach
+    June's PHONE — a Mac-only notification is invisible to someone reading in bed. Honest, calm,
+    permission-granting: it tells her the system tried and how to retry, never blames."""
+    topic = _ntfy_topic()
+    if not topic:
+        return False
+    body = "Couldn't build a plan this morning (a network hiccup). Tap to open the overlay and retry when you're ready."
+    try:
+        req = urllib.request.Request(f"https://ntfy.sh/{topic}",
+                                     data=body.encode("utf-8"), method="POST")
+        req.add_header("Title", "Controlled Drift")
+        req.add_header("Tags", "cloud")
+        overlay = _overlay_url()
+        if overlay:
+            req.add_header("Click", overlay)
+        urllib.request.urlopen(req, timeout=10)
+        return True
+    except Exception as e:
+        print(f"[morning_push] failure-notice push failed: {e}", file=sys.stderr)
+        return False
+
+
+def _push_to_phone(plan, stale=False):
     """Push the plan to June's phone via ntfy (free, open-source pub/sub) — the part she
     reads in bed as she wakes. Best-effort: a push failure must never lose the cached plan.
+
+    `stale=True` means generation failed and this is the LAST cached plan, not a fresh one —
+    the body says so plainly (its clock times may be off) so June isn't misled, and can tap to
+    rebuild. A clearly-labelled stale plan beats silence on a bad-network morning.
 
     Sends the woven frame + this morning's moves as a readable body, in permission-granting
     register. The topic is a private unguessable secret (only her phone is subscribed)."""
     topic = _ntfy_topic()
     if not topic:
         return False
-    lines = [(plan.get("woven_frame") or "").strip(), ""]
+    preface = ["Couldn't refresh this morning — here's your last plan (times may be off; tap to rebuild).", ""] if stale else []
+    lines = preface + [(plan.get("woven_frame") or "").strip(), ""]
     blocks = plan.get("blocks", [])
     if blocks:
         b = blocks[0]
@@ -104,8 +190,8 @@ def _push_to_phone(plan):
     try:
         req = urllib.request.Request(f"https://ntfy.sh/{topic}",
                                      data=body.encode("utf-8"), method="POST")
-        req.add_header("Title", "Today, if you want it")   # ASCII title; body carries UTF-8
-        req.add_header("Tags", "sunrise")
+        req.add_header("Title", "Yesterday's plan" if stale else "Today, if you want it")
+        req.add_header("Tags", "cloud" if stale else "sunrise")
         # Tap the notification → open the live overlay (not just the cached text).
         overlay = _overlay_url()
         if overlay:
@@ -134,19 +220,35 @@ def _first_line_summary(plan):
 
 
 def run():
-    """Generate the morning plan, cache it, and offer it via notification."""
-    try:
-        plan = plan_generate.generate_plan(source="morning")
-    except Exception as e:
-        # Don't fire a cheerful notification on failure — surface the problem honestly,
-        # and leave yesterday's cache untouched (generate_plan only writes on success).
-        _notify("Controlled Drift", "Couldn't build this morning's plan — open the overlay to retry.")
-        print(f"[morning_push] generation failed: {e}", file=sys.stderr)
-        return 1
+    """Generate the morning plan, cache it, and offer it via notification.
+
+    Resilience is load-bearing here — this is the keystone, and June reads it on her PHONE in bed.
+    A transient network failure must not turn into silence. So: retry generation; if it still
+    fails, fall back to the last cached plan (clearly labelled stale); only if there's truly
+    nothing, send an honest failure notice — to the PHONE, not just the Mac."""
+    stale = False
+    plan = _generate_with_retry()
+    if plan is None:
+        # Primary (Mistral) failed every retry. Try a fresh plan on the fallback backend before
+        # settling for a stale one — a right-for-today plan is worth the extra latency.
+        plan = _generate_on_fallback()
+    if plan is None:
+        # Both backends failed. Fall back to the last good plan rather than nothing.
+        cached = plan_store.load_plan()
+        if cached and not cached.get("empty"):
+            plan, stale = cached, True
+            print("[morning_push] generation failed — falling back to last cached plan", file=sys.stderr)
+        else:
+            # Nothing to send. Surface it honestly, and make sure it reaches her PHONE.
+            _notify("Controlled Drift", "Couldn't build this morning's plan — open the overlay to retry.")
+            pushed = _push_failure_to_phone()
+            print(f"[morning_push] no plan to send; failure notice to phone: "
+                  f"{'sent' if pushed else 'skipped/failed'}", file=sys.stderr)
+            return 1
 
     summary = _first_line_summary(plan)
     # Permission-granting: "here's a possible shape", not "do this".
-    _notify("Today, if you want it", summary)
+    _notify("Yesterday's plan" if stale else "Today, if you want it", summary)
     if notify:
         try:
             notify.ding()
@@ -154,10 +256,11 @@ def run():
             pass
 
     # The keystone of the keystone: push to June's phone so she reads it in bed.
-    pushed = _push_to_phone(plan)
+    pushed = _push_to_phone(plan, stale=stale)
 
     ts = dt.datetime.now().strftime("%A %B %d — %I:%M %p")
-    print(f"[morning_push] plan generated + cached at {ts}")
+    state = "last cached (stale)" if stale else "generated + cached"
+    print(f"[morning_push] plan {state} at {ts}")
     print(f"[morning_push] notification: {summary}")
     print(f"[morning_push] phone push: {'sent' if pushed else 'skipped (no ntfy topic) / failed'}")
     return 0

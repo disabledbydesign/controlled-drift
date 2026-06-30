@@ -111,6 +111,54 @@ def test_unknown_route_404(live_server):
         assert e.code == 404
 
 
+def test_get_manifest(live_server):
+    base, _ = live_server
+    status, body = _get(base, "/manifest.webmanifest")
+    assert status == 200
+    manifest = json.loads(body)
+    assert manifest["display"] == "standalone" and manifest["short_name"] == "Drift"
+
+
+def test_get_settings_reports_backend_and_resolved_options(live_server):
+    base, _ = live_server
+    status, body = _get(base, "/api/settings")
+    data = json.loads(body)
+    assert status == 200
+    ids = [o["id"] for o in data["options"]]
+    assert data["backend"] in ids
+    assert "mistral" in ids and "claude" in ids
+    # each option reports the real mechanism + concrete model (not marketing copy)
+    mistral = next(o for o in data["options"] if o["id"] == "mistral")
+    assert mistral["model"] == "mistral-large-latest" and "Mistral API" in mistral["mechanism"]
+    openrouter = next(o for o in data["options"] if o["id"] == "openrouter")
+    assert openrouter["model"] == "anthropic/claude-sonnet-4"   # pinned, NOT "many models"
+
+
+def test_post_settings_switches_backend_and_persists(live_server, monkeypatch, tmp_path):
+    # monkeypatch records CD_BACKEND's pre-test value and restores it on teardown, even though
+    # the handler mutates os.environ directly — so this test can't leak the backend choice.
+    monkeypatch.setenv("CD_BACKEND", "mistral")
+    base, _ = live_server
+    status, data = _post(base, "/api/settings", {"backend": "claude"})
+    assert status == 200 and data["backend"] == "claude"
+    # the next GET reflects it (live, no restart)
+    _, body = _get(base, "/api/settings")
+    assert json.loads(body)["backend"] == "claude"
+    # and it persisted to the sandboxed settings.json (atomic write target)
+    saved = json.loads((tmp_path / "settings.json").read_text())
+    assert saved["backend"] == "claude"
+
+
+def test_post_settings_rejects_unknown_backend(live_server, monkeypatch):
+    monkeypatch.setenv("CD_BACKEND", "mistral")
+    base, _ = live_server
+    status, data = _post(base, "/api/settings", {"backend": "gpt4"})
+    assert status == 400 and "unknown backend" in data["error"]
+    # a rejected switch must NOT change the live backend
+    _, body = _get(base, "/api/settings")
+    assert json.loads(body)["backend"] == "mistral"
+
+
 # --- POST routes ------------------------------------------------------------
 
 def _wait_idle(base, timeout=5.0):
