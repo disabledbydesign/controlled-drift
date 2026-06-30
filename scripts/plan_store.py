@@ -78,6 +78,7 @@ _DEFAULT_ACTIONS = {
             # UI-only: the server returns the current plan synchronously; the overlay
             # uses this to focus the Add tab textarea rather than starting a generation.
             "operation": "reorder",
+            "payload": None,
         },
     ],
 }
