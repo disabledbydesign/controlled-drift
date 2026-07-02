@@ -25,6 +25,13 @@ def build_project():
                                       ["Steady", "Sprint", "Hyperfixation",
                                        "Needs Clarifying", "Backburner", "Done"])
     p_eng_notes   = g.ensure_property("Engagement notes", "text")   # open: thresholds, cadence, conditions
+    # Obligation vs wellbeing — set directly on the Project (June thinks of a project
+    # AS obligation or hobby; not derived from the goal). The axis is income/survival-
+    # relevance: creative work that EARNS (e.g. leather cuffs) is Obligation; creative
+    # work that doesn't is Wellbeing. Structurally separates the two sides everywhere they
+    # surface: neglect may be offered on the Obligation side; the Wellbeing side is never
+    # nagged (only ever surfaced as under-rest/under-play).
+    p_side        = g.ensure_property("Side", "select", ["Obligation", "Wellbeing"])
     # Arc ordering — dependency-vs-sequence refinement (guard #6: June needs to understand why).
     # Depends on: hard dependency links (X can't start until Y is done; enforced in orient_map.py).
     # Arc position rationale: full plain-language reasoning for where this stream sits in the arc.
@@ -34,7 +41,7 @@ def build_project():
     key = g.ensure_type("Project", "Projects",
                         [p_goal_link, p_description, p_reaching, p_deadline,
                          p_parent, p_excitement, p_docs, p_affective, p_barriers,
-                         p_context, p_engagement, p_eng_notes, p_depends, p_arc_why])
+                         p_context, p_engagement, p_eng_notes, p_side, p_depends, p_arc_why])
     print(f"[ok] Project type ready: key={key}")
     return key
 
