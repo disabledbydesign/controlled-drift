@@ -10,8 +10,39 @@ formats an `objects` relation as a list of ids; the read side hands back id/name
 """
 import sys, os
 sys.path.insert(0, os.path.dirname(__file__))
+import gsdo_anytype as g
 import gsdo_objects
 import signal_log
+
+
+def resolve_project_names_to_ids(names, objects=None):
+    """Resolve project display-names -> Anytype ids for the Foreground/Paused relations.
+
+    The write side of a Focus Period needs ids (the objects relation is a list of ids);
+    June speaks names. Raises on an unknown name — never silently drops a project she named.
+    `objects` may be passed (already-fetched) for testing; otherwise fetched live.
+
+    Payload recipe (what author_focus_period's `properties` looks like):
+      {"Period start": "2026-06-30", "Period end": "2026-07-06", "Intent": "...",
+       "Availability start"/"Availability end": ISO date, "Availability note": "...",
+       "Days off"/"Days on": "2026-07-03, 2026-07-04",  # CSV or JSON array
+       "Output format": "Auto"|"Clock schedule"|"Priority list", "Workday end": "22:00",
+       "Foreground projects": [<id>, ...], "Paused projects": [<id>, ...]}
+    """
+    if objects is None:
+        objects = g.fetch_all_objects(g.get_space_id())
+    by_name = {}
+    for o in objects:
+        t = o.get("type")
+        tk = t.get("key") if isinstance(t, dict) else t
+        if tk == "gsdo_project" and o.get("name"):
+            by_name[o["name"]] = o["id"]
+    ids = []
+    for n in names:
+        if n not in by_name:
+            raise ValueError(f"project {n!r} not found — can't foreground/pause it")
+        ids.append(by_name[n])
+    return ids
 
 
 def author_focus_period(raw_text, name, properties, source="config_authoring"):

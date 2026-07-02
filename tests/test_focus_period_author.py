@@ -24,3 +24,22 @@ def test_author_correction_uses_correction_source(tmp_path, monkeypatch):
     fpa.author_focus_period("actually paused cuffs this week", "Week of Jun 30",
                             {"Intent": "x"}, source="config_correction")
     assert signal_log.read_signals()[0]["source"] == "config_correction"
+
+
+_FAKE_OBJS = [
+    {"type": {"key": "gsdo_project"}, "id": "id-job", "name": "Job Search"},
+    {"type": {"key": "gsdo_project"}, "id": "id-cuffs", "name": "Leather cuffs"},
+    {"type": {"key": "gsdo_goal"}, "id": "id-goal", "name": "Job Search"},  # a goal named the same — ignored
+]
+
+
+def test_resolve_project_names_to_ids():
+    assert fpa.resolve_project_names_to_ids(["Job Search"], objects=_FAKE_OBJS) == ["id-job"]
+    assert fpa.resolve_project_names_to_ids(["Leather cuffs", "Job Search"], objects=_FAKE_OBJS) \
+        == ["id-cuffs", "id-job"]
+
+
+def test_resolve_raises_on_unknown_project():
+    import pytest
+    with pytest.raises(ValueError):
+        fpa.resolve_project_names_to_ids(["Nonexistent"], objects=_FAKE_OBJS)
