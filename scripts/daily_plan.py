@@ -20,7 +20,7 @@ from anytype_test import call
 import gsdo_anytype as g
 from datetime_seam import recurring_items_for_today
 from neglect import query_neglected
-from scheduler import schedule
+from scheduler import schedule, DEFAULT_DURATION_MIN
 from surface_log import log_surfaced_batch
 from plan_corrections_log import log_correction
 
@@ -370,6 +370,58 @@ def default_meal_anchors(today_recurrings, start_time):
     return anchors
 
 
+BREAK_WORK_MIN = 120      # a break after ~2h of focused work
+BREAK_DURATION_MIN = 15   # a short (<20 min) break block
+
+# Items that are themselves a break from focused/sitting work — they RESET the
+# "time since last break" counter, so a break is never scheduled on top of lunch or
+# a walk (June: "they don't need to account for things that are already breaks —
+# walks, lunch, etc."). Detected by the meal-anchor flag, an existing break, or name.
+_REST_KEYWORDS = ("lunch", "dinner", "breakfast", "meal", "walk", "nap", "rest",
+                  "break", "stretch", "meditat", "relax", "coffee")
+
+
+def _is_rest_item(item):
+    if item.get("_break") or item.get("_default_anchor"):
+        return True
+    name = (item.get("name") or "").lower()
+    return any(k in name for k in _REST_KEYWORDS)
+
+
+def _compute_break_anchors(scheduled, start_time, end_time=None,
+                           work_min_between=BREAK_WORK_MIN, break_min=BREAK_DURATION_MIN):
+    """From a break-LESS scheduled timeline, return break blocks (fixed-time anchors)
+    that punctuate extended stretches of actual work. A break only appears when there
+    has been ~work_min_between minutes of real work AND more work follows. Rest items
+    (meals, walks, naps — see _is_rest_item) reset the counter, and if a rest is
+    already coming up next it serves as the break — so breaks never pile onto lunch or
+    a walk. Breaks become real time-blocks when the schedule is rebuilt with them.
+    """
+    items = sorted(scheduled, key=lambda it: it["start_time"])
+    anchors = []
+    work_since_break = 0
+    for idx, it in enumerate(items):
+        if _is_rest_item(it):
+            work_since_break = 0
+            continue
+        work_since_break += it.get("duration_min") or DEFAULT_DURATION_MIN
+        if work_since_break < work_min_between:
+            continue
+        rest_of_day = items[idx + 1:]
+        if not any(not _is_rest_item(x) for x in rest_of_day):
+            continue                     # no real work left — don't end the day on a break
+        if _is_rest_item(rest_of_day[0]):
+            work_since_break = 0         # the next item is already a break — let it serve
+            continue
+        brk_time = it["end_time"]
+        if end_time and brk_time >= end_time:
+            break
+        anchors.append({"name": "Break — stand, stretch, move",
+                        "duration_min": break_min, "fixed_time": brk_time, "_break": True})
+        work_since_break = 0
+    return anchors
+
+
 def build_schedule(llm_ordered_items, all_anchors, start_time=None, end_time=None):
     """Merge LLM-proposed task order with fixed anchors (Recurring + meal defaults).
     llm_ordered_items: list of {"name", "duration_min", ...} in proposed order.
@@ -395,8 +447,15 @@ def build_schedule(llm_ordered_items, all_anchors, start_time=None, end_time=Non
             del item["fixed_time"]
             item["_overdue"] = True
         anchor_items.append(item)
-    all_items = list(llm_ordered_items) + anchor_items
-    return schedule(all_items, start_time, end_time=end_time)
+    base_items = list(llm_ordered_items) + anchor_items
+    # First pass: schedule without breaks to see where lunch/walks actually land.
+    scheduled = schedule(base_items, start_time, end_time=end_time)
+    break_anchors = _compute_break_anchors(scheduled, start_time, end_time)
+    if not break_anchors:
+        return scheduled
+    # Second pass: rebuild with the breaks placed as fixed-time anchors, so a break
+    # only lands after a real stretch of work and never on top of an existing break.
+    return schedule(base_items + break_anchors, start_time, end_time=end_time)
 
 
 def _round_to_5(t):
