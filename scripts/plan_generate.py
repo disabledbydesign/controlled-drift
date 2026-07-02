@@ -549,6 +549,33 @@ def _resolve_ids(plan, ref_map, tasks):
     return plan
 
 
+def _ensure_all_tasks_accounted(plan, tasks):
+    """Force every active task to appear somewhere in the output — scheduled or in still_here.
+
+    Nothing requires the model to place every input task in `blocks` OR name it in
+    `still_here` — it can simply omit one, and nothing catches that: the task is untouched in
+    Anytype, but June sees a shorter plan with no trace of what's missing or why (the
+    2026-07-02 phone-call/dinner/drive-to-SF incident — all three vanished from a generation
+    with no error, no log entry pointing at them). Run this AFTER `_resolve_ids` (which threads
+    real ids onto scheduled items), as a deterministic set-difference — no model judgment. A
+    duplicate mention (the model already named it in still_here under different wording) costs
+    nothing; a silent drop costs June's trust that the plan is honest about what's there.
+    """
+    placed_ids = {item.get("id")
+                  for block in plan.get("blocks", [])
+                  for item in block.get("items", [])}
+    still_here = plan.setdefault("still_here", [])
+    covered_labels = {_norm(sh.get("label")) for sh in still_here if sh.get("label")}
+    for t in tasks:
+        if t["id"] in placed_ids or _norm(t["name"]) in covered_labels:
+            continue
+        still_here.append({
+            "label": t["name"],
+            "note": "not addressed in this plan — added automatically so it isn't lost",
+        })
+    return plan
+
+
 # --- parsing the model output ----------------------------------------------
 
 def parse_plan(model_text):
@@ -594,6 +621,7 @@ def generate_plan(capacity=None, source="generate", extra=None):
         model_text = generate(prompt)
         plan = parse_plan(model_text)
         _resolve_ids(plan, ref_map, tasks)
+        _ensure_all_tasks_accounted(plan, tasks)
     except Exception as e:
         generation_log.log_generation(
             backend=backend_label, duration_s=time.monotonic() - t0,
@@ -636,6 +664,7 @@ def reorder(message, kind):
         model_text = generate(prompt)
         plan = parse_plan(model_text)
         _resolve_ids(plan, ref_map, tasks)
+        _ensure_all_tasks_accounted(plan, tasks)
     except Exception as e:
         generation_log.log_generation(
             backend=backend_label, duration_s=time.monotonic() - t0,

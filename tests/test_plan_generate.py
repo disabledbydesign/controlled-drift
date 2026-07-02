@@ -73,6 +73,41 @@ def test_parse_plan_fills_missing_keys():
     assert plan["blocks"] == [] and plan["still_here"] == []
 
 
+# --- the silent-drop regression (2026-07-02: phone call, dinner, SF drive) --
+
+def test_ensure_all_tasks_accounted_appends_missing_task():
+    """REGRESSION: a task the model placed nowhere (not in blocks, not in still_here) used to
+    vanish with no trace — the task was untouched in Anytype but June's plan just didn't show
+    it, silently. This asserts the deterministic backstop catches it."""
+    tasks = [{"id": "t1", "name": "Task One"}, {"id": "t2", "name": "Call the surgeon"}]
+    plan = {"blocks": [{"items": [{"id": "t1", "task": "do the thing"}]}],
+            "still_here": []}
+    pg._ensure_all_tasks_accounted(plan, tasks)
+    labels = {sh["label"] for sh in plan["still_here"]}
+    assert "Call the surgeon" in labels          # the dropped task got caught
+    assert "Task One" not in labels              # the placed task wasn't duplicated
+
+
+def test_ensure_all_tasks_accounted_skips_task_already_in_still_here():
+    """If the model already named the task in still_here (even under its own label), don't
+    add a redundant second entry — only truly-uncovered tasks get force-appended."""
+    tasks = [{"id": "t1", "name": "Call the surgeon"}]
+    plan = {"blocks": [], "still_here": [{"label": "Call the surgeon", "note": "later today"}]}
+    pg._ensure_all_tasks_accounted(plan, tasks)
+    assert len(plan["still_here"]) == 1
+
+
+def test_generate_plan_never_drops_a_task_silently(tmp_path, monkeypatch):
+    """End-to-end: _CANNED's plan only places/names one of the two stubbed tasks — after
+    generate_plan() runs, both must be accounted for somewhere in the saved plan."""
+    _stub_pipeline(monkeypatch, tmp_path)
+    saved = pg.generate_plan(source="morning")
+    scheduled_ids = {item.get("id") for b in saved.get("blocks", []) for item in b.get("items", [])}
+    still_here_labels = {sh.get("label") for sh in saved.get("still_here", [])}
+    for t in ({"id": "t1", "name": "Task One"}, {"id": "t2", "name": "Task Two"}):
+        assert t["id"] in scheduled_ids or t["name"] in still_here_labels
+
+
 # --- the data-injection regression (tonight's bug) --------------------------
 
 def test_assemble_prompt_includes_the_real_data():
