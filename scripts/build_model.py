@@ -7,9 +7,11 @@ from build_project import build_project
 from build_task import build_task
 from build_recurring import build_recurring
 from build_strategy import build_strategy
+from build_focus_period import build_focus_period
 import verify_model
 
 if __name__ == "__main__":
     build_goal(); build_project(); build_task(); build_recurring(); build_strategy()
+    build_focus_period()
     print("\n== VERIFY ==")
     sys.exit(0 if verify_model.verify() else 1)
