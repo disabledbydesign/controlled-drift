@@ -635,6 +635,14 @@ def generate_plan(capacity=None, source="generate", extra=None):
         structural=generation_log.check_plan(plan, n_input_tasks=len(tasks)),
     )
     saved = plan_store.save_plan(plan, source=source)
+    # Learning loop: durable snapshot of the full generated plan — the planned side of
+    # planned-vs-actual (a future loop diffs it against Log Day). Best-effort; never break
+    # a generation over a snapshot write.
+    try:
+        import plan_snapshot_log
+        plan_snapshot_log.log_plan_snapshot(saved, source=source)
+    except Exception:
+        pass
     # Learning loop: every generation records what surfaced (neglect/rhythm history).
     if tasks:
         log_surfaced_batch([{"id": t["id"], "name": t["name"], "type": "task"} for t in tasks])
