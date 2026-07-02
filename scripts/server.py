@@ -185,13 +185,16 @@ class Handler(BaseHTTPRequestHandler):
             return
 
         if urlparse(self.path).path == "/api/session":
-            # The Add tab's receipt: recent capture (or negotiate) turns, so June can SEE what
-            # she's done this session without holding it — and undo from there.
+            # The Add tab's receipt: EVERY capture (or negotiate) turn this session, so June can
+            # SEE what she's done without holding it — and undo from there. Uses receipt_entries
+            # (no token trim) — recent_entries() would silently drop older turns once a session's
+            # JSON gets big, which is exactly the "did my tasks get undone?" confusion from
+            # 2026-07-01. recent_entries() stays reserved for what gets fed to the LLM as history.
             stream = (parse_qs(urlparse(self.path).query).get("stream", ["capture"])[0])
             if stream not in session_store.STREAMS:
                 self._send(400, {"error": f"unknown stream {stream!r}"})
                 return
-            self._send(200, {"stream": stream, "entries": session_store.recent_entries(stream)})
+            self._send(200, {"stream": stream, "entries": session_store.receipt_entries(stream)})
             return
 
         self._send(404, {"error": f"no route {self.path}"})
@@ -227,10 +230,13 @@ class Handler(BaseHTTPRequestHandler):
                 if operation == "generate":
                     # Preset signals a fresh generation (e.g. low-energy) — select from the
                     # full task list with the capacity flag, not just reorder the existing plan.
+                    # payload is also passed as `extra`: until 2026-07-02 only capacity_flag (a
+                    # short flag string) reached the model — the preset's actual instructional
+                    # text ("shorter sessions, lower-stakes tasks first...") was silently dropped.
                     cap = preset.get("capacity_flag") or None
                     started = _start_generation(
                         lambda: plan_generate.generate_plan(
-                            capacity=cap, source=f"preset:{preset_id}"))
+                            capacity=cap, source=f"preset:{preset_id}", extra=payload))
                     session_store.append_entry("negotiate", {
                         "intent": "generate",
                         "raw_input": f"[preset:{preset_id}]",
@@ -252,8 +258,12 @@ class Handler(BaseHTTPRequestHandler):
             if message:
                 operation = (body.get("operation") or "reorder").strip()
                 if operation == "generate":
+                    # THE BUG (found 2026-07-02): this used to call generate_plan(source=...)
+                    # with no way for `message` to reach the model at all — June's freetext was
+                    # logged to session history but never made it into the generation prompt, so
+                    # naming a task explicitly here had zero effect on what the plan produced.
                     started = _start_generation(
-                        lambda: plan_generate.generate_plan(source="freetext-generate"))
+                        lambda: plan_generate.generate_plan(source="freetext-generate", extra=message))
                     session_store.append_entry("negotiate", {
                         "intent": "generate",
                         "raw_input": message,

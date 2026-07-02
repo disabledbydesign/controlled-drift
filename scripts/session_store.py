@@ -154,21 +154,29 @@ def _within_window(entry, cutoff):
         return True
 
 
-def recent_entries(stream, hours=DEFAULT_WINDOW_HOURS, token_budget=DEFAULT_TOKEN_BUDGET,
-                   include_failures=False):
-    """The bounded conversation history for a stream, oldest→newest, for the next prompt.
-
-    Two bounds, both load-bearing: the time window stops a prior day bleeding in; the token
-    budget keeps the prompt from growing without limit as turns accumulate — oldest entries
-    drop first. Failure entries are excluded by default (they're for the health view, not the
-    conversation); pass include_failures=True to see them.
-    """
+def _entries_in_window(stream, hours, include_failures):
     _validate_stream(stream)
     cutoff = dt.datetime.now() - dt.timedelta(hours=hours)
-    rows = [e for e in load_log()["entries"]
+    return [e for e in load_log()["entries"]
             if e.get("stream") == stream
             and _within_window(e, cutoff)
             and (include_failures or e.get("intent") != "failure")]
+
+
+def recent_entries(stream, hours=DEFAULT_WINDOW_HOURS, token_budget=DEFAULT_TOKEN_BUDGET,
+                   include_failures=False):
+    """The bounded conversation history for a stream, oldest→newest, for the next PROMPT.
+
+    Two bounds, both load-bearing FOR AN LLM CALL: the time window stops a prior day bleeding
+    in; the token budget keeps the prompt from growing without limit as turns accumulate —
+    oldest entries drop first. Failure entries are excluded by default (they're for the health
+    view, not the conversation); pass include_failures=True to see them.
+
+    ⚠️ Do NOT use this for a user-facing receipt/history view — the token-budget trim silently
+    drops older entries once a session's turns get verbose, which reads to June as "my earlier
+    tasks got removed" (that exact confusion, 2026-07-01). Use receipt_entries() for that.
+    """
+    rows = _entries_in_window(stream, hours, include_failures)
 
     # Drop oldest until the running token estimate fits the budget. Walk newest→oldest keeping
     # what fits, then restore chronological order for the prompt.
@@ -181,6 +189,17 @@ def recent_entries(stream, hours=DEFAULT_WINDOW_HOURS, token_budget=DEFAULT_TOKE
         used += cost
     kept.reverse()
     return kept
+
+
+def receipt_entries(stream, hours=24, include_failures=False):
+    """Every turn in the window, oldest→newest — the honest "added this session" view.
+
+    Unlike recent_entries(), this has NO token budget: it's read by June, not fed to a model,
+    so nothing should silently vanish because the JSON got big. A generous 24h window (not
+    DEFAULT_WINDOW_HOURS=8) so a receipt spanning late night into morning doesn't cut itself
+    off mid-session either.
+    """
+    return _entries_in_window(stream, hours, include_failures)
 
 
 def failures(stream=None, hours=None):

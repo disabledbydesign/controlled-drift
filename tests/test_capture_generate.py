@@ -38,8 +38,9 @@ def _stub(monkeypatch, tmp_path, canned=_CANNED, getobj=None):
     projects = [{"id": "p1", "name": "Build Controlled Drift"}]
     tasks = [{"id": "t1", "name": "SSRC grant application"}]
     recurrings = []
+    strategies = []
     monkeypatch.setattr(cg, "_load_weed_context",
-                        lambda: ("sid", goals, projects, tasks, recurrings))
+                        lambda: ("sid", goals, projects, tasks, recurrings, strategies))
     # The real LLM emits a fenced ```json block; the mock mirrors that.
     monkeypatch.setattr(cg.plan_generate, "generate",
                         lambda prompt: "```json\n" + canned + "\n```")
@@ -96,6 +97,12 @@ def test_capture_creates_links_and_skips(tmp_path, monkeypatch):
     assert by_name["Call surgeon"]["Task status"] == "Ready"
     assert by_name["Call surgeon"]["Linked Projects"] == ["p1"]
     assert by_name["Meditate"]["Project link"] == ["p1"]
+
+    # The model's stated reasoning gets written to Context at creation time — it used to be
+    # silently dropped (item.get("context") checked a key the JSON contract never emits; the
+    # gate only ever produces "reasoning"), so June never saw why something landed where it did
+    # once the session receipt aged out (found 2026-07-02).
+    assert by_name["Call surgeon"]["Context"] == "concrete next step"
 
     # The created record carries the resolved project NAME + the reasoning (guard #6).
     surgeon = next(c for c in result["created"] if c["name"] == "Call surgeon")

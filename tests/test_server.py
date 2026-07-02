@@ -26,8 +26,8 @@ def live_server(tmp_path, monkeypatch):
     monkeypatch.setattr(orient_map, "render_map", lambda name: "GOAL: test map\n  stream")
     # generation: record calls, return a canned plan
     calls = []
-    def fake_generate_plan(source="generate", capacity=None):
-        calls.append(("generate_plan", source, capacity))
+    def fake_generate_plan(source="generate", capacity=None, extra=None):
+        calls.append(("generate_plan", source, capacity, extra))
         return plan_store.save_plan({"woven_frame": "fresh", "blocks": [], "still_here": []}, source=source)
     def fake_reorder(message, kind):
         calls.append(("reorder", kind, message))
@@ -203,6 +203,9 @@ def test_negotiate_preset_generate_dispatches_to_generate_plan(live_server):
     gen_calls = [c for c in calls if c[0] == "generate_plan"]
     assert gen_calls, "expected generate_plan to be called for low-energy preset"
     assert gen_calls[0][2] == "low-energy"           # capacity_flag passed through
+    # the preset's instructional payload text must reach the model too (bug fixed 2026-07-02:
+    # only capacity_flag used to arrive, the richer payload text was silently dropped)
+    assert "shorter sessions" in gen_calls[0][3]
     assert not any(c[0] == "reorder" for c in calls)
     # session log has request_type=generate
     _, txt = _get(base, "/api/session?stream=negotiate")
@@ -227,6 +230,10 @@ def test_negotiate_freetext_generate_dispatches_to_generate_plan(live_server):
     _wait_idle(base)
     gen_calls = [c for c in calls if c[0] == "generate_plan"]
     assert gen_calls, "expected generate_plan for freetext operation=generate"
+    # THE core bug (2026-07-02): June's freetext message used to never reach generate_plan at
+    # all for the "generate" operation — it was logged to session history but the model building
+    # the plan never saw it, so naming a task explicitly had zero effect on the output.
+    assert gen_calls[0][3] == "fresh start please"
     assert not any(c[0] == "reorder" for c in calls)
 
 

@@ -424,7 +424,7 @@ def _format_session_history(history):
 
 
 def _assemble_prompt(full_context, start_time, capacity=None, extra=None, task_table=None,
-                     history=None, current_plan=None):
+                     history=None, current_plan=None, request_kind="reorder"):
     """Build the full prompt: the daily_list.md template + an authoritative inputs section
     holding the real data, + the JSON contract (+ any negotiation note).
 
@@ -480,18 +480,37 @@ def _assemble_prompt(full_context, start_time, capacity=None, extra=None, task_t
                 "",
                 current_plan,
             ]
-        parts += [
-            "",
-            "## JUNE'S REQUEST — RENEGOTIATION",
-            "",
-            "**This is a renegotiation, not an initial generation.** The 'do not reorder items'",
-            "constraint in the template above applies only to the initial automated plan.",
-            "For this call: honor June's request — reorder, shift, or drop items as she asks.",
-            "Recalculate times from the current moment to make the new ordering fit the window.",
-            "Update the woven_frame and block framings to explain the new ordering rationale.",
-            "",
-            extra,
-        ]
+        if request_kind == "generate":
+            # A FRESH generation with June's words attached (freetext-generate, or a preset like
+            # low-energy). Until 2026-07-02 this text was computed and logged but never reached
+            # this prompt at all — the model built the plan blind to what she'd just said, which
+            # is why naming a task explicitly here had zero effect on the output.
+            parts += [
+                "",
+                "## JUNE'S REQUEST — CONTEXT FOR THIS GENERATION",
+                "",
+                "June said this when asking for today's plan. This is a FRESH generation from",
+                "the full active list above (not a renegotiation of an existing plan) — but her",
+                "words are the strongest signal for what matters today. If she names a task,",
+                "project, or concern here, it must show up in the output: either as a block item,",
+                "or named explicitly in still_here with a real reason tied to what she said. Do",
+                "not drop something she just named without accounting for it somewhere.",
+                "",
+                extra,
+            ]
+        else:
+            parts += [
+                "",
+                "## JUNE'S REQUEST — RENEGOTIATION",
+                "",
+                "**This is a renegotiation, not an initial generation.** The 'do not reorder items'",
+                "constraint in the template above applies only to the initial automated plan.",
+                "For this call: honor June's request — reorder, shift, or drop items as she asks.",
+                "Recalculate times from the current moment to make the new ordering fit the window.",
+                "Update the woven_frame and block framings to explain the new ordering rationale.",
+                "",
+                extra,
+            ]
     prompt = "\n".join(parts)
     prompt += _JSON_INSTRUCTION
     return prompt
@@ -554,11 +573,19 @@ def parse_plan(model_text):
 
 # --- the two public entry points --------------------------------------------
 
-def generate_plan(capacity=None, source="generate"):
-    """Fresh generation (morning push / refresh). Writes cache, logs what surfaced."""
+def generate_plan(capacity=None, source="generate", extra=None):
+    """Fresh generation (morning push / refresh / freetext-generate / a generate-preset).
+
+    `extra` is what June said when asking for this generation (freetext message, or a preset's
+    payload text) — optional, since a plain refresh or the morning push has none. Threaded into
+    the prompt with request_kind="generate" framing (distinct from reorder()'s renegotiation
+    framing below): a fresh generation still selects from the whole active list, but her words
+    are the strongest signal for what to prioritize. Writes cache, logs what surfaced.
+    """
     full_context, tasks, start_time = build_context(capacity=capacity)
     ref_map, task_table = _build_task_refs(tasks)
-    prompt = _assemble_prompt(full_context, start_time, capacity=capacity, task_table=task_table)
+    prompt = _assemble_prompt(full_context, start_time, capacity=capacity, task_table=task_table,
+                              extra=extra, request_kind="generate")
     backend = os.environ.get("CD_BACKEND", "mistral")
     model = _active_model(backend)
     backend_label = f"{backend}/{model}" if model else backend

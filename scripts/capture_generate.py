@@ -64,15 +64,16 @@ _CHARS_PER_TOKEN = 4
 
 def _load_weed_context():
     """Load the whole space and split by type — Goals/Projects for alignment + link targets,
-    Tasks/Recurring for the dedup check. This is the documented weeding-gate load path
-    (fetch_all_objects + filter by type key), which paginates and handles auth."""
+    Tasks/Recurring/Strategies for the dedup check. This is the documented weeding-gate load
+    path (fetch_all_objects + filter by type key), which paginates and handles auth."""
     sid = g.get_space_id()
     objs = g.fetch_all_objects(sid)
     goals = [o for o in objs if o.get("type", {}).get("key") == "gsdo_goal"]
     projects = [o for o in objs if o.get("type", {}).get("key") == "gsdo_project"]
     tasks = [o for o in objs if o.get("type", {}).get("key") == "task"]
     recurrings = [o for o in objs if o.get("type", {}).get("key") == "gsdo_recurring"]
-    return sid, goals, projects, tasks, recurrings
+    strategies = [o for o in objs if o.get("type", {}).get("key") == "gsdo_strategy"]
+    return sid, goals, projects, tasks, recurrings, strategies
 
 
 def _build_ref_table(goals, projects):
@@ -93,14 +94,20 @@ def _build_ref_table(goals, projects):
     return ref_map, id2name, "\n".join(lines)
 
 
-def _format_dedup_list(tasks, recurrings):
-    """Existing Task/Recurring names so the LLM can spot a same-subject duplicate (the cross-type,
-    different-name dupe the weeding gate warns about) and mark it skip rather than recreate it."""
+def _format_dedup_list(tasks, recurrings, strategies=()):
+    """Existing Task/Recurring/Strategy names so the LLM can spot a same-subject duplicate (the
+    cross-type, different-name dupe the weeding gate warns about) and mark it skip rather than
+    recreate it. Strategies were missing from this list entirely until 2026-07-02 — a same
+    Strategy said across separate capture turns could never be recognized as a duplicate, since
+    the LLM was never shown existing Strategies to check against (root cause of a same-text
+    Strategy created 3x)."""
     lines = []
     for t in tasks:
         lines.append(f"  - {t.get('name')}  (Task)")
     for r in recurrings:
         lines.append(f"  - {r.get('name')}  (Recurring)")
+    for s in strategies:
+        lines.append(f"  - {s.get('name')}  (Strategy)")
     return "\n".join(lines) if lines else "  (none yet)"
 
 
@@ -256,8 +263,13 @@ def _creation_props(type_name, item, link_id):
     link_prop = _LINK_PROP.get(type_name)
     if link_prop and link_id:
         props[link_prop] = [link_id]
-    if item.get("context"):
-        props["Context"] = item["context"]
+    # The weeding-gate JSON contract emits "reasoning" (why this landed where it did), never a
+    # "context" key — writing from item.get("context") was dead code (always None) since the
+    # gate was built, so no captured item of any type ever got its Context field filled in and
+    # the model's stated reasoning vanished once it aged out of the session receipt. Reasoning
+    # IS the intended Context content (found 2026-07-02, alongside a Strategy created with none).
+    if item.get("reasoning"):
+        props["Context"] = item["reasoning"]
     return props
 
 
@@ -312,9 +324,9 @@ def capture(text):
     if not text:
         raise ValueError("capture: empty text")
 
-    sid, goals, projects, tasks, recurrings = _load_weed_context()
+    sid, goals, projects, tasks, recurrings, strategies = _load_weed_context()
     ref_map, id2name, ref_table = _build_ref_table(goals, projects)
-    dedup_list = _format_dedup_list(tasks, recurrings)
+    dedup_list = _format_dedup_list(tasks, recurrings, strategies)
     history = session_store.recent_entries("capture")
     prompt = _assemble_prompt(text, ref_table, dedup_list, history)
 
@@ -396,9 +408,10 @@ if __name__ == "__main__":
     ap.add_argument("--dry-prompt", action="store_true", help="print the assembled prompt, no LLM")
     args = ap.parse_args()
     if args.dry_prompt:
-        sid, goals, projects, tasks, recurrings = _load_weed_context()
+        sid, goals, projects, tasks, recurrings, strategies = _load_weed_context()
         ref_map, id2name, ref_table = _build_ref_table(goals, projects)
-        print(_assemble_prompt(args.text, ref_table, _format_dedup_list(tasks, recurrings),
+        print(_assemble_prompt(args.text, ref_table,
+                               _format_dedup_list(tasks, recurrings, strategies),
                                session_store.recent_entries("capture")))
     else:
         print(json.dumps(capture(args.text), indent=2))
