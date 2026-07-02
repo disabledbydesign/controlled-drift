@@ -674,8 +674,8 @@ def generate_plan(capacity=None, source="generate", extra=None):
     try:
         import plan_snapshot_log
         plan_snapshot_log.log_plan_snapshot(saved, source=source)
-    except Exception:
-        pass
+    except Exception as e:
+        print(f"[warn] plan snapshot not written: {e}", file=sys.stderr)  # honest, non-breaking
     # Learning loop: every generation records what surfaced (neglect/rhythm history).
     if tasks:
         log_surfaced_batch([{"id": t["id"], "name": t["name"], "type": "task"} for t in tasks])
