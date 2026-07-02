@@ -315,6 +315,32 @@ and the items in schedule order. No prose before or after — just the block.
 
 # --- context assembly (reuses daily_plan, minus the interactive input/print) -
 
+def select_and_order_tasks(tasks, period):
+    """Order tasks foreground-first and DROP paused-project tasks (the period overrides the
+    enduring engagement). With no period, preserves the prior date-seeded hash order exactly —
+    unchanged behavior. Matching is by the period's resolved foreground/paused project NAMES
+    (themselves resolved from stored ids in load_active_items) against each task's linked_projects.
+    This is the real reprioritization the addendum wants — not just a prose hint to the model."""
+    import hashlib
+    fg = set((period or {}).get("foreground") or [])
+    paused = set((period or {}).get("paused") or [])
+
+    def _proj(t):
+        projs = t.get("linked_projects") or []
+        return projs[0] if projs else ""
+
+    kept = [t for t in tasks if _proj(t) not in paused]
+    seed = hashlib.md5(dt.date.today().isoformat().encode()).hexdigest()
+
+    def _key(t):
+        proj = _proj(t)
+        order = int(hashlib.md5((proj + seed).encode()).hexdigest()[:4], 16)
+        # foreground first; within that, linked-before-unlinked (unchanged); then hash order
+        return (0 if proj in fg else 1, 1 if not proj else 0, order)
+
+    return sorted(kept, key=_key)
+
+
 def build_context(capacity=None, start_time=None, end_time=None):
     """Load active items + compute the clock schedule, returning the full prompt context.
 
@@ -326,8 +352,10 @@ def build_context(capacity=None, start_time=None, end_time=None):
     Default end: 18:00. Tasks that don't fit before end_time overflow into still_here.
     """
     sid = g.get_space_id()
-    goals, projects, tasks, strategies, today_recurrings = dp.load_active_items(sid)
+    goals, projects, tasks, strategies, today_recurrings, period_ctx = dp.load_active_items(sid)
     neglected = dp.load_neglected()
+    period = period_ctx["period"]
+    is_off, in_window = period_ctx["is_off"], period_ctx["in_window"]
 
     now = dt.datetime.now().replace(second=0, microsecond=0)
     if start_time is None:
@@ -338,36 +366,41 @@ def build_context(capacity=None, start_time=None, end_time=None):
         start_time = base if excess == 0 else base + dt.timedelta(minutes=30 - excess)
         start_time = start_time.replace(second=0, microsecond=0)
     if end_time is None:
-        end_time = now.replace(hour=18, minute=0, second=0, microsecond=0)
+        # Workday-end override: a sprint period widens the day (e.g. till 22:00), a gentle one
+        # narrows it. Falls back to 18:00. The scheduler already honors end_time. This restores
+        # the addendum's "a period can be MORE, not less" — the field is now actually applied.
+        import focus_period as fp
+        if period and period.get("workday_end"):
+            wh, wm = fp.parse_hhmm(period["workday_end"])
+            end_time = now.replace(hour=wh, minute=wm, second=0, microsecond=0)
+        else:
+            end_time = now.replace(hour=18, minute=0, second=0, microsecond=0)
 
     meals = dp.default_meal_anchors(today_recurrings, start_time)
     all_anchors = today_recurrings + meals
-    # Sort tasks by project so consecutive same-project tasks are scheduled
-    # together (enables the renderer's grouping). Project ORDER varies daily
-    # via a date seed — prevents the plan repeating the same order every day.
-    # Unlinked tasks (household chores, standalone items) sort last.
-    # TODO: replace with the selection engine (neglect + stakes + capacity).
-    import hashlib
-    _seed = hashlib.md5(dt.date.today().isoformat().encode()).hexdigest()
-    def _project_key(t):
-        projs = t.get("linked_projects") or []
-        proj = projs[0] if projs else ""
-        order = int(hashlib.md5((proj + _seed).encode()).hexdigest()[:4], 16)
-        return (1 if not proj else 0, order)
-    task_items = [{"name": t["name"], "duration_min": t.get("duration_min")}
-                  for t in sorted(tasks, key=_project_key)]
+    # Task selection: foreground projects (period override) sort first; paused-project tasks
+    # are dropped. With no period this preserves the prior date-seeded hash order exactly.
+    ordered = select_and_order_tasks(tasks, period)
+    task_items = [{"name": t["name"], "duration_min": t.get("duration_min")} for t in ordered]
     scheduled = dp.build_schedule(task_items, all_anchors, start_time, end_time=end_time)
     schedule_block = dp.format_schedule_blocks(scheduled)
 
     scheduled_names = {s["name"] for s in scheduled}
-    overflow = [t for t in tasks if t["name"] not in scheduled_names]
+    overflow = [t for t in ordered if t["name"] not in scheduled_names]  # ordered, not paused-dropped
     if overflow:
         schedule_block += f"\n\n### Didn't fit before {end_time.strftime('%H:%M')} — put these in still_here\n"
         for t in overflow:
             schedule_block += f"  - {t['name']}\n"
 
     context_block = dp.format_context(
-        goals, projects, tasks, strategies, today_recurrings, neglected, capacity)
+        goals, projects, tasks, strategies, today_recurrings, neglected, capacity,
+        period=period, is_off=is_off, in_window=in_window)
+    if period is None:
+        context_block += ("\n\n## No active focus period\n"
+                          "- There's no configuration for this stretch. If today's plan feels "
+                          "off, June may want to set a focus period — offer it, gently, once.")
+    # NOTE (Phase 6): resolve_output_shape(period, in_window) chooses clock vs priority here;
+    # the phone priority-list renderer + JSON contract land in Phase 6. v1 overlay = clock only.
     full_context = context_block + "\n" + schedule_block
     return full_context, tasks, start_time
 

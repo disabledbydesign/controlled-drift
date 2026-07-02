@@ -73,6 +73,10 @@ def load_active_items(sid):
             if engagement == "Done":
                 continue  # Done projects are invisible in the daily plan
 
+            # Obligation vs wellbeing — read by display name like Engagement (Anytype-generated key).
+            side_tag = pvn("Side", "select") or {}
+            side = side_tag.get("name") if isinstance(side_tag, dict) else None
+
             parent_proj_ids = pv("gsdo_parent_project", "objects") or []
             parent_project_id = parent_proj_ids[0] if parent_proj_ids else None
 
@@ -83,6 +87,7 @@ def load_active_items(sid):
                               "deadline": pv("gsdo_deadline", "date"),
                               "engagement": engagement,
                               "engagement_notes": pvn("Engagement notes", "text"),
+                              "side": side,
                               "parent_project_id": parent_project_id})
 
         elif tkey == "task":
@@ -121,7 +126,27 @@ def load_active_items(sid):
             recurrings.append(obj)
 
     today_recurrings = recurring_items_for_today(recurrings)
-    return goals, projects, tasks, strategies, today_recurrings
+
+    # Focus Period + resolved calendar facts — loaded HERE, the one seam both the terminal
+    # (run) and live (plan_generate.build_context) paths call, so the feature reaches every
+    # surface from one place, not just the terminal path. Reuses `data` — no second fetch.
+    import focus_period as fp
+    today = dt.date.today()
+    period = fp.load_active_focus_period(data, today)
+    if period:
+        # Resolve foreground/paused project ids -> current names from the authoritative
+        # projects list (rename-safe: the stored link is the id; the name is resolved live).
+        # The relation reads back as id strings, so the name comes from here, not the stored value.
+        id_to_name = {p["id"]: p["name"] for p in projects}
+        def _resolve(pairs):
+            return [id_to_name.get(i) or n for i, n in pairs if (i in id_to_name) or n]
+        period["foreground"] = _resolve(period.get("foreground_pairs", []))
+        period["paused"] = _resolve(period.get("paused_pairs", []))
+    weekly_off = fp.load_day_off_defaults()
+    period_ctx = {"period": period,
+                  "is_off": fp.is_day_off(period, weekly_off, today),
+                  "in_window": fp.in_availability_window(period, today)}
+    return goals, projects, tasks, strategies, today_recurrings, period_ctx
 
 
 def load_neglected(days=3):
@@ -135,13 +160,33 @@ def load_neglected(days=3):
 
 # --- Context formatting for the LLM ----------------------------------------
 
-def format_context(goals, projects, tasks, strategies, today_recurrings, neglected, capacity):
+def format_context(goals, projects, tasks, strategies, today_recurrings, neglected, capacity,
+                   period=None, is_off=False, in_window=False):
     """Build the context block that gets injected into the daily_list.md prompt."""
     lines = []
 
     lines.append(f"Current time: {dt.datetime.now().strftime('%A %B %d, %Y — %I:%M %p')}")
     lines.append(f"Capacity signal: {capacity or '(none given)'}")
     lines.append("")
+
+    if period:
+        lines.append("## This period — the configuration June authored")
+        lines.append(f"- {period.get('name') or '(unnamed period)'}")
+        if period.get("intent"):
+            lines.append(f"- Intent: {period['intent']}")
+        if is_off:
+            lines.append("- Today is marked a DAY OFF — plan rest/protected time, not survival "
+                         "work (unless June says otherwise or a hard deadline conflicts).")
+        if in_window and period.get("availability_note"):
+            lines.append(f"- Availability today: {period['availability_note']}")
+        if period.get("foreground"):
+            lines.append(f"- Foreground this period: {', '.join(period['foreground'])}")
+        if period.get("paused"):
+            lines.append(f"- Paused this period: {', '.join(period['paused'])}")
+        if period.get("days_off_error"):
+            lines.append("- A day-off setting couldn't be read — check it; today was planned "
+                         "as a normal work day.")
+        lines.append("")
 
     if strategies:
         lines.append("## Active strategies")
@@ -174,10 +219,17 @@ def format_context(goals, projects, tasks, strategies, today_recurrings, neglect
                      " Backburner → only if neglected; Needs Clarifying → flag it)")
         lines.append("(sub-projects are indented under their parent)")
 
+        fg = set((period or {}).get("foreground") or [])
+        paused = set((period or {}).get("paused") or [])
+
         def _project_line(p, indent=""):
             eng = p.get("engagement") or "Steady"
             eng_notes = p.get("engagement_notes") or ""
             line = f"{indent}- {p['name']} [{eng}]"
+            if p.get("side"):
+                line += f" | side: {p['side']}"
+            if p["name"] in paused:
+                line += " [paused this period]"
             if eng_notes:
                 line += f" | {eng_notes}"
             rf = p.get("reaching_for") or ""
@@ -191,9 +243,12 @@ def format_context(goals, projects, tasks, strategies, today_recurrings, neglect
                 line += f" | affective: {aff}"
             return line
 
-        # Build tree: top-level projects first, then sub-projects nested under parent
+        # Build tree: top-level projects first, then sub-projects nested under parent.
+        # Foreground projects (period override) sort to the front — a display nicety; the
+        # real reprioritization is in task selection (plan_generate.select_and_order_tasks).
         project_by_id = {p["id"]: p for p in projects}
         top_level = [p for p in projects if not p.get("parent_project_id")]
+        top_level.sort(key=lambda p: (p["name"] not in fg, p["name"]))
         children_by_parent: dict = {}
         for p in projects:
             pid = p.get("parent_project_id")
@@ -518,6 +573,29 @@ def format_schedule_blocks(scheduled):
     return "\n".join(lines)
 
 
+PRIORITY_LIST_CAP = 6
+
+def format_priority_list(ordered_items, period=None):
+    """Fragmented-day output: a priority-ordered short list to pull from, no clock times.
+    Python owns the order (foreground-first, from select_and_order_tasks); the model only
+    adds plain framing. ADHD-friendly: few items, plain language, no clock pressure.
+    (Addendum §"when the day has no fixed shape".)"""
+    lines = ["## Today — a priority list to pull from (no fixed times)"]
+    note = (period or {}).get("availability_note")
+    if note:
+        lines.append(f"_Availability: {note}_")
+    lines.append("When you get some time, start at the top and take the next one that fits:")
+    lines.append("")
+    shown = ordered_items[:PRIORITY_LIST_CAP]
+    for i, it in enumerate(shown, 1):
+        dur = it.get("duration_min")
+        lines.append(f"{i}. {it['name']}" + (f" (~{dur}min)" if dur else ""))
+    remainder = len(ordered_items) - len(shown)
+    if remainder > 0:
+        lines.append(f"\n(+{remainder} more held for later — nothing to worry about today.)")
+    return "\n".join(lines)
+
+
 # --- Anytype writes ----------------------------------------------------------
 
 def update_last_surfaced(sid, item_ids):
@@ -535,9 +613,13 @@ def update_last_surfaced(sid, item_ids):
 # --- Main -------------------------------------------------------------------
 
 def run():
+    import focus_period as fp
+    import plan_generate
     sid = g.get_space_id()
-    goals, projects, tasks, strategies, today_recurrings = load_active_items(sid)
+    goals, projects, tasks, strategies, today_recurrings, period_ctx = load_active_items(sid)
     neglected = load_neglected()
+    period = period_ctx["period"]
+    is_off, in_window = period_ctx["is_off"], period_ctx["in_window"]
 
     print("\n=== Controlled Drift — Daily Plan ===\n")
     try:
@@ -545,17 +627,32 @@ def run():
     except EOFError:
         capacity = ""
 
-    # Compute the clock-time schedule FIRST so it can be part of the LLM's context.
-    # Python owns times and order; the LLM adds narrative framing around the skeleton.
+    # Python owns order + which shape; the LLM adds narrative framing around the skeleton.
+    # Foreground drives selection; paused-project tasks are dropped.
     start_time = _round_to_5(dt.datetime.now())
-    meals = default_meal_anchors(today_recurrings, start_time)
-    all_anchors = today_recurrings + meals
-    task_items = [{"name": t["name"], "duration_min": t.get("duration_min")} for t in tasks]
-    scheduled = build_schedule(task_items, all_anchors, start_time)
-    schedule_block = format_schedule_blocks(scheduled)
+    ordered = plan_generate.select_and_order_tasks(tasks, period)
+    shape = fp.resolve_output_shape(period, in_window)
+    scheduled = []
+    if shape == "priority":
+        # Fragmented day → a priority-list-to-pull-from, no clock times (the /drift chat-flow
+        # output shape; the phone-overlay version lands in Phase 6).
+        meals = []
+        all_anchors = today_recurrings
+        schedule_block = format_priority_list(ordered, period)
+    else:
+        meals = default_meal_anchors(today_recurrings, start_time)
+        all_anchors = today_recurrings + meals
+        task_items = [{"name": t["name"], "duration_min": t.get("duration_min")} for t in ordered]
+        scheduled = build_schedule(task_items, all_anchors, start_time)
+        schedule_block = format_schedule_blocks(scheduled)
 
     context_block = format_context(
-        goals, projects, tasks, strategies, today_recurrings, neglected, capacity)
+        goals, projects, tasks, strategies, today_recurrings, neglected, capacity,
+        period=period, is_off=is_off, in_window=in_window)
+    if period is None:
+        context_block += ("\n\n## No active focus period\n"
+                          "- No configuration for this stretch — if the plan feels off, June "
+                          "may want to set one. Offer gently, once.")
 
     # Combine context + schedule skeleton so the LLM receives both
     full_context = context_block + "\n" + schedule_block

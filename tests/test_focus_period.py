@@ -59,6 +59,12 @@ def test_parse_keeps_object_id_name_pairs():
     assert fp.parse_focus_period(o)["foreground_pairs"] == [("p1", "Job Search")]
 
 
+def test_parse_object_relation_from_id_strings():
+    # Anytype returns an objects relation as a list of id STRINGS on read-back (live shape).
+    o = _obj([{"name": "Foreground projects", "objects": ["p1", "p2"]}])
+    assert fp.parse_focus_period(o)["foreground_pairs"] == [("p1", None), ("p2", None)]
+
+
 def test_parse_hhmm():
     assert fp.parse_hhmm("22:00") == (22, 0)
     assert fp.parse_hhmm("9:30") == (9, 30)

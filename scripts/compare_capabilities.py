@@ -78,7 +78,7 @@ conference before the early-bird deadline.
 def _load_alignment_context():
     """Load Goals + Projects + Tasks from Anytype for the weeding gate alignment step."""
     sid = g.get_space_id()
-    goals, projects, tasks, strategies, _ = dp.load_active_items(sid)
+    goals, projects, tasks, strategies, _, _ = dp.load_active_items(sid)
     lines = ["## Existing Goals, Projects, and Tasks (for alignment and dedup)\n"]
     for goal in goals:
         lines.append(f"GOAL: {goal.get('name', '(unnamed)')}")
@@ -121,7 +121,7 @@ def build_stuck_prompt():
     """Stuck-support prompt: stopgap payload + current task context for specificity."""
     # Load minimal task context so the model can give a specific step, not a generic one
     sid = g.get_space_id()
-    _, _, tasks, _, _ = dp.load_active_items(sid)
+    _, _, tasks, _, _, _ = dp.load_active_items(sid)
     task_lines = "\n".join(
         f"- {t.get('name', '(unnamed)')} [{t.get('project_name', '')}]"
         for t in tasks[:10]

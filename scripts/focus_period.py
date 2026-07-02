@@ -71,12 +71,19 @@ def _parse_date_list(props, name):
 
 
 def _objects_pairs(props, name):
-    """Return [(id, name), ...] for an objects relation — KEEP the id (rename-safe linkage).
-    The id is the stable link; the name is resolved to the current value later (load path)."""
+    """Return [(id, name-or-None), ...] for an objects relation — KEEP the id (rename-safe).
+    Anytype returns this relation as a list of id STRINGS on read-back (verified live
+    2026-07-02); other shapes may give dicts. Handle both. The name is resolved from the
+    live projects list later (the load path), since the string-id form carries no name."""
     p = props.get(name) or {}
     objs = p.get("objects") or []
-    return [(o.get("id"), o.get("name")) for o in objs
-            if isinstance(o, dict) and o.get("id")]
+    out = []
+    for o in objs:
+        if isinstance(o, dict) and o.get("id"):
+            out.append((o["id"], o.get("name")))
+        elif isinstance(o, str) and o:
+            out.append((o, None))
+    return out
 
 
 def parse_focus_period(obj):
