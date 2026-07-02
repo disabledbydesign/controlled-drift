@@ -10,6 +10,7 @@ Recurring schedule is defined by:
   interval_unit  (select key: "day" | "week" | "month" | "as_needed")
   interval_count (number: N, default 1)
   day_of_week    (multi_select of tag names e.g. ["Wed"])  — weekly anchor
+  day_of_month   (number 1-31)                             — monthly anchor
   time_of_day    (text "HH:MM")                            — clock time when set
 
 Scheduling logic:
@@ -17,9 +18,13 @@ Scheduling logic:
             available, else today. Without a past anchor, daily items are scheduled today.
   week/N  — if day_of_week is set, recurs on those weekdays. If not set, recurs weekly
             (any day — treated as today for scheduling purposes in v1).
-  month/1 — not yet implemented in v1; returns None.
+  month/N — recurs on day_of_month each month (clamped to the last day for short months,
+            so "31" fires on Feb 28/29). If day_of_month is unset, returns None (no anchor
+            to guess from). v1 fires monthly regardless of N — every-N-months needs a stored
+            start anchor we don't yet keep; count>1 is treated as monthly until then.
   as_needed / None — not scheduled; returns None.
 """
+import calendar
 import datetime as dt
 import zoneinfo
 
@@ -101,7 +106,14 @@ def today_fixed_time(item, today=None):
         return None
 
     if unit == "month":
-        # Not implemented in v1 — post-v1 when interval_anchor_day is added
+        dom = item.get("day_of_month")
+        if not dom:
+            return None
+        dom = int(dom)
+        last_day = calendar.monthrange(today.year, today.month)[1]
+        target = min(dom, last_day)  # clamp so "31" fires on the last day of short months
+        if today.day == target:
+            return dt.datetime.combine(today, clock)
         return None
 
     return None
@@ -130,6 +142,7 @@ def recurring_items_for_today(anytype_objects, today=None):
             "interval_unit":  (pval("interval_unit", "select") or {}).get("name"),
             "interval_count": pval("interval_count", "number"),
             "day_of_week":    pval("gsdo_day_of_week", "multi_select") or [],
+            "day_of_month":   pval("day_of_month", "number"),
             "time_of_day":    pval("gsdo_time_of_day", "text"),
             "duration_min":   pval("gsdo_duration_min", "number"),
         }

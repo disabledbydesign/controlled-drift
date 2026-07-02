@@ -13,6 +13,7 @@ def build_recurring():
     # time-anchor fields (fixed appointments, e.g. weekly therapy):
     p_dow     = g.ensure_property("Day of week", "multi_select",
                                   ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"])
+    p_dom     = g.ensure_property("Day of month", "number")   # 1-31 anchor for monthly items
     p_tod     = g.ensure_property("Time of day", "text")      # "HH:MM"
     p_dur     = g.ensure_property("Duration min", "number")   # reused from Task
     # interval model: {unit, count} replaces the coarse Frequency select as the canonical
@@ -22,7 +23,7 @@ def build_recurring():
     p_icount  = g.ensure_property("Interval count", "number")
     key = g.ensure_type("Recurring", "Recurring",
                         [p_freq, p_target, p_tgt_txt, p_project, p_context,
-                         p_dow, p_tod, p_dur, p_iunit, p_icount])
+                         p_dow, p_dom, p_tod, p_dur, p_iunit, p_icount])
     print(f"[ok] Recurring type ready: key={key}")
     return key
 
