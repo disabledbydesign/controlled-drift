@@ -34,9 +34,42 @@ def _value_field(prop, value):
     if fmt == "objects":      return {"key": key, "objects": value if isinstance(value, list) else [value]}
     raise ValueError(f"unsupported format {fmt!r} for property {prop.get('name')!r}")
 
-def create_object(type_key, name, body=None, properties=None):
-    """Low-level: create an object of type_key. properties: {prop_name_or_key: value}."""
+def _norm_name(s):
+    """Normalize a name for exact-duplicate matching: whitespace-collapsed, case-folded."""
+    import re
+    return re.sub(r"\s+", " ", (s or "").strip().lower())
+
+def find_existing(type_key, name):
+    """Id of an existing object of the SAME type with the same normalized name, or None.
+
+    Exact match only (case/whitespace-insensitive) — a near-miss name still creates. A false
+    dedup (silently reusing the wrong object) is worse than a rare true duplicate, so this
+    only catches the unambiguous case: literally the same name, same type.
+    """
     sid = g.get_space_id()
+    target = _norm_name(name)
+    for o in g.fetch_all_objects(sid):
+        if o.get("type", {}).get("key") == type_key and _norm_name(o.get("name")) == target:
+            return o["id"]
+    return None
+
+def create_object(type_key, name, body=None, properties=None):
+    """Low-level: create an object of type_key. properties: {prop_name_or_key: value}.
+
+    Dedup guard (added 2026-07-02): before creating, checks for an existing object of the same
+    type with the same normalized name and returns its id instead of creating a new one.
+    Confirmed empirically (2026-07-02) that neither this function nor the live Anytype API
+    deduped by name on their own — two creates with an identical name produced two distinct
+    objects. That gap meant the memory pass's content-hash state file was the ONLY guard against
+    a repeat create; if it were ever lost or deleted, a re-run had nothing to stop it recreating
+    everything (the exact Strategy-triplication failure this system already hit once for real).
+    This makes gsdo_objects.create the actual "one source of truth" dedup backstop the daily
+    memory pass plan assumed already existed.
+    """
+    sid = g.get_space_id()
+    existing_id = find_existing(type_key, name)
+    if existing_id:
+        return existing_id
     props = []
     for pname, value in (properties or {}).items():
         if value is None:

@@ -62,3 +62,25 @@ def test_unknown_select_option_raises():
         oid = o.create("Task", "__should not persist__",
                        properties={"Task status": "Nonsense"})
         _delete(oid)  # safety if it wrongly succeeded
+
+def test_create_dedups_on_exact_name_same_type():
+    """Two create() calls with the identical name + type return the SAME id, not two objects.
+
+    Guards against the 3x-duplicate failure (a real prior incident: a Strategy got created 3x
+    because nothing in the write layer caught a repeat name). Confirmed empirically 2026-07-02
+    that neither this function nor the live Anytype API deduped by name before this guard.
+    """
+    oid1 = oid2 = oid3 = None
+    try:
+        name = "__test dedup task (gsdo-test)__"
+        oid1 = o.create("Task", name, properties={"Task status": "Ready"})
+        oid2 = o.create("Task", name, properties={"Task status": "Ready"})
+        assert oid1 == oid2
+
+        # A different name must NOT be caught by the guard (no false dedup).
+        oid3 = o.create("Task", "__test dedup task different (gsdo-test)__",
+                        properties={"Task status": "Ready"})
+        assert oid3 != oid1
+    finally:
+        for oid in {oid1, oid2, oid3} - {None}:
+            _delete(oid)
