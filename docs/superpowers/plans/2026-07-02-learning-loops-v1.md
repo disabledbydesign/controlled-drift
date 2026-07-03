@@ -6,7 +6,9 @@
 
 **Revised 2026-07-03 (June's catch):** Task 5 originally also proposed a "capacity-surfacing-amount" loop that would write a Note suggesting fewer/more items on low/high-completion days. Cut from this plan — see Task 5 for the full reasoning. Task 5 is now capture-only, same shape as Task 3.
 
-**Revised 2026-07-03 (critic-swarm pass):** Task 4's wiring into the live capture path is held back — build and test the bias math, don't integrate it yet (see Task 4). Task 3's Engagement lookup is corrected to match this codebase's established name-based convention (see Task 3). Task 3 also still carries an **open design question from June, unresolved — see the callout inside Task 3** — this plan is not "complete" until that's answered.
+**Revised 2026-07-03 (critic-swarm pass):** Task 4's wiring into the live capture path is held back — build and test the bias math, don't integrate it yet (see Task 4). Task 3's Engagement lookup is corrected to match this codebase's established name-based convention (see Task 3). Task 3's open design question (overlay task-editing) is resolved — deferred as its own future thread, see the ✅ callout inside Task 3.
+
+**Revised 2026-07-03 (June's second catch):** Tasks 1, 2, 3, and 5 each gained a real live-verification step (real backend, real Anytype, real log files — not just mocked tests) before their commit step. June's point: things that only need a script run and a file read are automatable, not manual homework to hand her afterward — so the build-loop now does this itself as part of each task, cleans up or reverts anything it touched, and only asks for her eyes on the one thing that's genuinely hers to judge (how it actually looks/feels on her phone, if she wants to check that too — optional, not a correctness gate).
 
 **Architecture:** Each loop is a small standalone script under the new `scripts/learning_loops/` package (this repo's first subpackage — everything else in `scripts/` is flat, so this is a deliberate, requested exception, not a unilateral restructure), reading from the append-only logs this project already writes (`generation_log.jsonl`, `surface_log.jsonl`) or a fresh snapshot-diff against live Anytype state. Nothing here auto-changes June's data or behavior without her confirmation — every task in this plan writes to a durable log; none integrate into a live behavior path in this pass (Task 4's bias math is built and tested standalone, not wired in — see Task 4). Task 1 stays in `scripts/capture_generate.py` — it's a capture-pipeline fix the loops turned out to depend on, not a loop itself (see Task 4 for the dependency).
 
@@ -144,7 +146,22 @@ Expected: all PASS, including the new test.
 Run: `python3 -m pytest tests/ -q`
 Expected: all PASS, one more than whatever the count was before this task (this branch has parallel work landing on it — don't hardcode a baseline, compare before/after).
 
-- [ ] **Step 7: Commit**
+- [ ] **Step 7: Verify live — real backend, real Anytype, then clean up**
+
+Mocked tests prove the code path; they don't prove the real LLM backend actually produces sensible duration guesses. Run this for real:
+
+```bash
+python3 -c "
+import sys; sys.path.insert(0, 'scripts')
+import capture_generate as cg
+result = cg.capture('quick 5 minute call with the pharmacy about a prescription refill')
+print(result)
+"
+```
+
+Check the created Task's `Duration min` property directly (via `gsdo_anytype.fetch_all_objects` or the Anytype app) — expect a small number (~5–15), not blank and not the flat 30 the old fallback always produced. **Then delete the test object** (`gsdo_anytype`'s delete path, or the Anytype app) — this created a real object in June's live space; tests/dev runs never leave artifacts there.
+
+- [ ] **Step 8: Commit**
 
 ```bash
 git add scripts/capture_generate.py tests/test_capture_generate.py
@@ -304,7 +321,11 @@ Expected: all 4 PASS.
 Run: `python3 -m pytest tests/ -q`
 Expected: all PASS. (Added 2026-07-03 — this step was missing even though the plan's own Global Constraints require it after every task.)
 
-- [ ] **Step 6: Commit**
+- [ ] **Step 6: Verify live — real data, read-only, no cleanup needed**
+
+Run: `python3 scripts/dedup_report.py --days 30` against June's real `generation_log.jsonl`. Confirm it doesn't crash on real (possibly messier-than-synthetic) log data, and that the output reads as a coherent digest — not garbled formatting, not every entry misattributed to the same name. Purely read-only; nothing to revert.
+
+- [ ] **Step 7: Commit**
 
 ```bash
 git add scripts/learning_loops/__init__.py scripts/learning_loops/dedup_report.py tests/learning_loops/test_dedup_report.py
@@ -506,7 +527,33 @@ Expected: all 3 PASS.
 Run: `python3 -m pytest tests/ -q`
 Expected: all PASS. (Added 2026-07-03 — this step was missing even though the plan's own Global Constraints require it after every task.)
 
-- [ ] **Step 6: Commit**
+- [ ] **Step 6: Verify live — the actual fix, against real Anytype, then revert**
+
+This is the highest-priority live check in the whole plan: the previous version of this exact task had a bug (wrong property-lookup convention) that would have shipped with all-green mocked tests and silently logged zero real corrections, forever. Mocked tests alone can't prove the fix — they'd pass just as easily if the fix were subtly wrong in some other way. Verify against the real space:
+
+```bash
+python3 -c "
+import sys; sys.path.insert(0, 'scripts')
+import gsdo_anytype as g, engagement_watch as ew
+sid = g.get_space_id()
+print('BEFORE:', ew.check_for_corrections(sid=sid))   # establishes the snapshot, first run
+"
+```
+
+Then pick one real Project, note its current Engagement, and change it to a different value directly in the Anytype app (or via `gsdo_objects.update(project_id, properties={'Engagement': 'Backburner'})` — pick any value different from its current one). Run:
+
+```bash
+python3 -c "
+import sys; sys.path.insert(0, 'scripts')
+import gsdo_anytype as g, engagement_watch as ew
+sid = g.get_space_id()
+print('AFTER:', ew.check_for_corrections(sid=sid))
+"
+```
+
+Check `scripts/data/engagement_corrections_log.jsonl` for a new line with the project's real id/name and the correct old/new values. **Then set the project's Engagement back to what it was before this test** — this is a real field on a real object, and reverting it costs nothing but leaves no trace, matching the discipline everywhere else in this repo.
+
+- [ ] **Step 7: Commit**
 
 ```bash
 git add scripts/learning_loops/engagement_watch.py tests/learning_loops/test_engagement_watch.py
@@ -850,7 +897,24 @@ Expected: all PASS.
 Run: `python3 -m pytest tests/ -q`
 Expected: all PASS.
 
-- [ ] **Step 8: Commit**
+- [ ] **Step 8: Verify live — real generation, then restore June's actual cached plan**
+
+A real check needs a real plan generation, which has a real side effect: it overwrites June's live cached plan (`~/.controlled-drift/current_plan.json`) — unlike Tasks 1–3's live checks, there's no way to do this read-only. Snapshot and restore so nothing is left changed:
+
+```bash
+python3 -c "
+import sys; sys.path.insert(0, 'scripts')
+import plan_store, plan_generate as pg
+before = plan_store.load_plan()   # snapshot June's real current plan
+pg.generate_plan(capacity='low-energy', source='verification')
+plan_store.save_plan(before, source=before.get('source', 'restored'))   # put June's real plan back
+"
+python3 -c "import sys; sys.path.insert(0, 'scripts'); import cd_paths; print(cd_paths.data_file('surface_log.jsonl'))" | xargs tail -5
+```
+
+Confirm the tailed lines show real surfaced items tagged `"capacity": "low-energy"` (not `null`). This costs one real LLM call (~30–160s, per `plan_generate.py`'s own timeout comment) and is worth doing once, deliberately, rather than skipping because it's slower than a mock. **Confirm afterward that June's actual current plan (what she'd see if she opened the overlay right now) matches what it was before this check** — the restore step above should have already handled this, but verify rather than assume.
+
+- [ ] **Step 9: Commit**
 
 ```bash
 git add scripts/surface_log.py scripts/plan_generate.py tests/test_surface_log.py tests/test_plan_generate.py
