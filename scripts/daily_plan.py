@@ -36,6 +36,11 @@ def load_active_items(sid):
     """Load Goals, Projects, Tasks (Active/Needs-Clarifying), Strategies from Anytype."""
     data = g.fetch_all_objects(sid)
     goals, projects, tasks, strategies, recurrings = [], [], [], [], []
+    # Project id -> name, for resolving a task's Linked Projects relation. That relation reads
+    # back as a list of id STRINGS (not dicts), under the "objects" value — so it must be
+    # resolved by id here, not read as dicts. (Fixes a long-standing empty-linked_projects bug.)
+    proj_id_to_name = {o["id"]: o.get("name") for o in data
+                       if isinstance(o.get("type"), dict) and o["type"].get("key") == "gsdo_project"}
 
     for obj in data:
         t = obj.get("type")
@@ -103,9 +108,15 @@ def load_active_items(sid):
                     continue
                 access_tags = pv("gsdo_access", "multi_select") or []
                 access = [t.get("name") for t in access_tags if isinstance(t, dict)]
-                linked_proj_objs = pv("linked_projects", "object") or []
-                linked_projects = [lp.get("name") for lp in linked_proj_objs
-                                   if isinstance(lp, dict) and lp.get("name")]
+                # The relation reads back under "objects" as a list of id strings (or dicts).
+                # Resolve each to the current project name (rename-safe, by id).
+                linked_raw = pv("linked_projects", "objects") or []
+                linked_projects = []
+                for x in linked_raw:
+                    pid = x.get("id") if isinstance(x, dict) else x
+                    nm = proj_id_to_name.get(pid)
+                    if nm:
+                        linked_projects.append(nm)
                 tasks.append({"id": oid, "name": name,
                                "status": status,
                                "duration_min": pv("gsdo_duration_min", "number"),
