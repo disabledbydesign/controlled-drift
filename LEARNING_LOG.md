@@ -95,3 +95,36 @@
 
 ### Cross-stack generalization flag
 **Design specs without behavior specs are not build-ready, even when the data model is thorough.** A spec that fully designs schema and stubs all behavior subsystems produces a beautiful architecture doc that fails as a build brief. Pattern to watch for in future design-spec reviews: is the ratio of schema to behavior spec appropriate for the intended use of the document?
+
+---
+
+## 2026-07-03 — Phase 6 build plan (authoring + overlay view)
+**Artifact:** `docs/superpowers/plans/2026-07-03-phase6-authoring-and-overlay-view.md` (June's UI-layer usability keystone).
+**Stack:** design_spec (build agent + skeptical architect) + always-runs. **Author corrections to the swarm design:** cut the jargon/plain-language reviewer (agent-facing doc, not venue-facing); add the deeper system-level commitments (telos, master spec, map_and_arc, access guards) to the architect / neurodiv-UX / author-informed lenses with a per-doc WHY. **Added a non-standard lens:** neurodivergent-UX practitioner — the actual autistic phone user this is built for; none of the default design_spec personas reads as that user, and it carried the fully-open discovery load.
+
+### Convergent flags (load-bearing — multiple lenses)
+- **Mock-first-for-every-screen = the displacement pattern + tests fake density** (architect + neurodiv-UX). Resolved into a third option: mockups decide un-picturable *structure*; real-wiring builds + verifies *density*. Notably this matched what June independently reached for ("mockups of both" for the one fork she couldn't picture).
+- **Tab accretion / composed view is a second overview screen next to Map** (architect + neurodiv-UX) → tab-vs-fold-into-Today put to June as a seen choice (Task 1).
+- **6C rest-by-type = premature schema, fights signal_log's capture-only design** (architect + build agent), + don't narrate rest-type back (neurodiv-UX) → uncategorized dump; Phase 7 extracts later.
+- **Reflect-back: production unspecified + compression-vs-read-back-verification + all-or-nothing repair** (build agent + author-informed + neurodiv-UX) → three findings collapsed into ONE design (deterministic template, compressed-but-expandable-to-exact-fields, per-item fix). Best example this run of the swarm's threading value: three lenses' separate fixes were the same fix.
+- **author/see/EDIT gap** (architect + author-informed + neurodiv-UX) → edit path added (Task 4); the addendum's own worked example (mid-period caregiving shift) had nowhere to land.
+
+### Divergent flags (specialty gifts)
+- Build agent: **factual error** — plan claimed `build_context` computes `shape`; it doesn't (only a NOTE comment). Plus missing generate→author adapter, two-phase state, STREAMS gap, concurrency, 6A project-scope + payload-shape forks. The code-verification pass was decisive.
+- Neurodiv-UX: 6A modeled on the superseded `orient_map` glyph renderer; no-metaphors guard not code-enforced on new generated surfaces; shared-token retune reflows the daily-driver Today screen.
+- Author-informed: two-signal distinction re-mushed; staleness/conflict prompts dropped without an owner; "spatial-time guard" undefined label.
+
+### What June addressed vs. held
+- **Held / overruled:** the engagement enum ("Sprint," "Backburner") — June parses them fine; she is the authority on her own access, so the plain-words-layer change was dropped. (Guard still binds newly-generated prose.)
+- **Addressed:** authoring = overlay primary; adopt expandable reflect-back; rest backend-only; decide tab-vs-fold by mockups of both; all build-agent forks specified.
+- **Deferred to seeing it:** the wire-vs-mock method question and the IA question — June couldn't picture either abstractly (consistent with her documented profile: parses from concrete artifacts, not abstract choices). Resolved by design (both-jobs method) rather than by asking her again.
+
+### Persona performance notes
+- **Neurodiv-UX practitioner (new lens): the standout.** Carried the most load-bearing findings and the open discovery. For accessibility-critical / specific-user artifacts, a lens that reads *as the actual user* (not a generic a11y checklist) is worth adding to design_spec. Candidate for a reusable persona.
+- Build agent: essential — the only lens that ran the code and caught the factual error; its verify-against-source pass is what made the difference.
+- Skeptical architect: strongest structural reframe (mock-first-as-displacement, the second-overview-screen).
+- Author-informed (bloch profile, application-tuned): still useful on a build doc for drift-from-decided-design and label-without-concept, though its cut-default needed the design-spec carve-out.
+- Cold reader: mostly agent-facing-doc citation hygiene here; lower yield on an internal build doc than on a venue-facing one, but caught the forward-referenced "reflect-back."
+
+### Cross-stack generalization flag
+**For accessibility-critical or built-for-a-specific-person artifacts, add a lens that reads AS that user, oriented open (not an a11y checklist).** It outperformed the standard design_spec personas on this run and carried the discovery load. Consider a reusable `situated-user` persona for design_spec when the artifact has a known primary user.
