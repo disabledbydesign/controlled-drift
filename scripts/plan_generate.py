@@ -381,12 +381,19 @@ def build_context(capacity=None, start_time=None, end_time=None):
     # Task selection: foreground projects (period override) sort first; paused-project tasks
     # are dropped. With no period this preserves the prior date-seeded hash order exactly.
     ordered = select_and_order_tasks(tasks, period)
-    task_items = [{"name": t["name"], "duration_min": t.get("duration_min")} for t in ordered]
+    # Wellbeing-side (hobby/creative/dev) tasks are NOT scheduled individually — the system does
+    # not pick her thread. They collapse into ONE open block; obligation/neutral tasks schedule
+    # normally. (never-pick-her-threads / linear-vs-nonlinear.)
+    schedulable, wellbeing = dp.partition_by_side(ordered, projects)
+    task_items = [{"name": t["name"], "duration_min": t.get("duration_min")} for t in schedulable]
+    hobby = dp.open_hobby_block(wellbeing)
+    if hobby:
+        task_items.append({"name": hobby["name"], "duration_min": hobby["duration_min"]})
     scheduled = dp.build_schedule(task_items, all_anchors, start_time, end_time=end_time)
     schedule_block = dp.format_schedule_blocks(scheduled)
 
     scheduled_names = {s["name"] for s in scheduled}
-    overflow = [t for t in ordered if t["name"] not in scheduled_names]  # ordered, not paused-dropped
+    overflow = [t for t in schedulable if t["name"] not in scheduled_names]
     if overflow:
         schedule_block += f"\n\n### Didn't fit before {end_time.strftime('%H:%M')} — put these in still_here\n"
         for t in overflow:
@@ -402,7 +409,9 @@ def build_context(capacity=None, start_time=None, end_time=None):
     # NOTE (Phase 6): resolve_output_shape(period, in_window) chooses clock vs priority here;
     # the phone priority-list renderer + JSON contract land in Phase 6. v1 overlay = clock only.
     full_context = context_block + "\n" + schedule_block
-    return full_context, tasks, start_time
+    # Return schedulable (not all tasks): wellbeing work is the open block, so it isn't
+    # individually accounted / surfaced / ref-tokened downstream (never-pick-her-threads).
+    return full_context, schedulable, start_time
 
 
 def _build_task_refs(tasks):

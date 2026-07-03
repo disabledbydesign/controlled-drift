@@ -596,6 +596,37 @@ def format_priority_list(ordered_items, period=None):
     return "\n".join(lines)
 
 
+# --- Wellbeing-side work → an open, self-directed block ----------------------
+
+OPEN_HOBBY_BLOCK_MIN = 60
+
+def partition_by_side(tasks, projects):
+    """Split tasks into (schedulable, wellbeing).
+
+    A task is WELLBEING (hobby / creative / dev — the kind the system must NOT pick a thread
+    *within*, per the never-pick-her-threads / linear-vs-nonlinear principle) iff at least one
+    linked project is Wellbeing-side AND none is Obligation-side. Unlinked or unknown-side tasks
+    stay schedulable — never hidden when unsure. Wellbeing tasks are represented by ONE open
+    block (see open_hobby_block), not scheduled as individual items the system chose."""
+    side_by_name = {p["name"]: p.get("side") for p in projects}
+    schedulable, wellbeing = [], []
+    for t in tasks:
+        sides = [side_by_name.get(pn) for pn in (t.get("linked_projects") or [])]
+        is_well = any(s == "Wellbeing" for s in sides) and not any(s == "Obligation" for s in sides)
+        (wellbeing if is_well else schedulable).append(t)
+    return schedulable, wellbeing
+
+
+def open_hobby_block(wellbeing_tasks, duration_min=OPEN_HOBBY_BLOCK_MIN):
+    """One open, self-directed block INSTEAD of system-picked hobby tasks: the system protects
+    the time; June chooses the thread (from the Wellbeing projects shown in context / the map).
+    Returns a flexible schedule item, or None when there's no wellbeing work to protect time for."""
+    if not wellbeing_tasks:
+        return None
+    return {"name": "Fun / hobby time — your choice of what to work on",
+            "duration_min": duration_min, "fixed_time": None, "_open_block": True}
+
+
 # --- Anytype writes ----------------------------------------------------------
 
 def update_last_surfaced(sid, item_ids):
@@ -631,6 +662,9 @@ def run():
     # Foreground drives selection; paused-project tasks are dropped.
     start_time = _round_to_5(dt.datetime.now())
     ordered = plan_generate.select_and_order_tasks(tasks, period)
+    # Wellbeing-side work collapses into one open block; the system doesn't pick her thread.
+    schedulable, wellbeing = partition_by_side(ordered, projects)
+    hobby = open_hobby_block(wellbeing)
     shape = fp.resolve_output_shape(period, in_window)
     scheduled = []
     if shape == "priority":
@@ -638,11 +672,16 @@ def run():
         # output shape; the phone-overlay version lands in Phase 6).
         meals = []
         all_anchors = today_recurrings
-        schedule_block = format_priority_list(ordered, period)
+        items = [{"name": t["name"], "duration_min": t.get("duration_min")} for t in schedulable]
+        if hobby:
+            items.append({"name": hobby["name"], "duration_min": hobby["duration_min"]})
+        schedule_block = format_priority_list(items, period)
     else:
         meals = default_meal_anchors(today_recurrings, start_time)
         all_anchors = today_recurrings + meals
-        task_items = [{"name": t["name"], "duration_min": t.get("duration_min")} for t in ordered]
+        task_items = [{"name": t["name"], "duration_min": t.get("duration_min")} for t in schedulable]
+        if hobby:
+            task_items.append({"name": hobby["name"], "duration_min": hobby["duration_min"]})
         scheduled = build_schedule(task_items, all_anchors, start_time)
         schedule_block = format_schedule_blocks(scheduled)
 
