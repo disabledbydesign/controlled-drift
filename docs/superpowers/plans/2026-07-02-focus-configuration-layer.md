@@ -1200,6 +1200,16 @@ The interpretation loop is explicitly a future design session (categories emerge
 
 ---
 
+## Learned from first real use (2026-07-02) — a design refinement to build next
+
+June authored her real week through the new headless authoring generator (`focus_period_generate.py`, Phase 6 backend pulled forward). Two things surfaced that the v1 build does **not** yet handle — captured here so they aren't lost:
+
+- **Hobby / Wellbeing-side work should render as open-ended, self-directed blocks she fills — NOT specific tasks the system picks.** June: "hobbies should be framed as open-ended scheduling blocks, so I get to choose myself — this is better than the system choosing for me, poorly." This is the addendum's *never-pick-her-threads* / linear-vs-nonlinear principle, and it maps onto the **Side field**: Wellbeing-side projects → an open "fun / hobby time" block she fills from the map; Obligation-side non-foreground work → backgrounded and scheduled where it fits. **v1 gap:** `select_and_order_tasks` currently *backgrounds* hobby tasks (schedules them after foreground) but does not render an open self-directed block. The follow-up: when a Wellbeing-side project is non-foreground, emit an open block, not its individual tasks. (Belongs with Phase 7's Side-aware behavior.)
+- **"Paused" must be rare — explicit-stop only.** The first LLM authoring run over-paused (pausing every non-foreground project, which *drops* their tasks). Corrected: non-foreground ≠ paused; non-foreground projects stay present (backgrounded). The authoring prompt was tuned so pausing requires an explicit "stop X this period," default `[]`. (`select_and_order_tasks` already backgrounds correctly — the fix was the prompt, not the selection code.)
+- **Date-resolution stress test passed:** given today's date as a deterministic anchor, the LLM resolved "Saturday" → the correct calendar date (and caught a manual date error). The anchor-not-guess approach holds; the confirm step remains the safety net.
+
+---
+
 ## Strategy-coverage audit (session 24, 2026-07-02) — gaps to fold into the phases above
 
 Checked June's active Strategies against this plan. **Most are covered:** the 7 rest types → Phase 6 by-type Log Day + Phase 7 under-rest; obligation-hyperfixation → the Side field (1.2) surfaced in context (3.2); deferred-task surfacing → Phase 7 neglect pass; `learning_notes` → the strategy-lifespan hook above; mix-textures + the *linear* next-item already work at plan time. **Four gaps need placing — none is built or slated as a real task yet:**
