@@ -298,6 +298,17 @@ textarea.fe-input { resize: vertical; min-height: 64px; line-height: 1.45; }
 .woven-text.expanded { display: block; }
 
 /* ── TODAY: time blocks ── */
+/* Nonlinear → map routing (Task 7): a gentle pointer to the map for self-directed work */
+.map-pointer {
+  margin: 4px 14px 0; padding: 11px 13px;
+  border: 1px solid var(--rose-border); border-radius: 8px; background: var(--rose-bg);
+  cursor: pointer; transition: border-color .12s;
+}
+.map-pointer:hover { border-color: var(--rose-dim); }
+.map-pointer-text { display: block; font-size: 12px; color: var(--text-dim); line-height: 1.45; }
+.map-pointer-go { display: block; font-size: 12px; color: var(--rose); margin-top: 4px; }
+@media (prefers-reduced-motion: reduce) { .map-pointer { transition: none !important; } }
+
 /* Fragmented-day priority list (Task 6/6D) — a short list to pull from, no clock times */
 .priority-header {
   padding: 10px 14px; margin: 0 0 4px;
@@ -1007,6 +1018,14 @@ textarea.add-field:focus { border-color: var(--gold); }
 
     </div>
 
+    <!-- Nonlinear → map routing (Task 7): creative/self-directed work isn't scheduled or
+         thread-picked (never-pick-her-threads) — it lives on the map for June to choose. Shown
+         only when she has self-directed (Fun / hobby) work. Populated by loadMapPointer(). -->
+    <div class="map-pointer" id="map-pointer" style="display:none" onclick="goToMap()">
+      <span class="map-pointer-text">Creative and self-directed work isn't scheduled — it's yours to choose.</span>
+      <span class="map-pointer-go">Open the map to pick a thread ›</span>
+    </div>
+
     <!-- Still here, not today.
          Source: daily_list.md LLM output, final section.
          API: GET /api/plan → plan.still_here[] -->
@@ -1389,6 +1408,23 @@ async function loadPeriod() {
   } catch (_) {
     // static preview / no server — leave the slot hidden
   }
+}
+
+// ── Nonlinear → map routing (Task 7) ───────────────────────────────────────
+function goToMap() {
+  const mapTab = [...document.querySelectorAll('.tab')].find(t => t.textContent.trim() === 'Map');
+  switchTab('map', mapTab || null);
+}
+async function loadMapPointer() {
+  // Self-directed / creative work (Side = "Fun / hobby") is never scheduled or thread-picked —
+  // it lives on the map for June to choose. Show the pointer only when she has such work; the
+  // category value is read from live data (not hardcoded semantics beyond the current held-out set).
+  try {
+    const data = await (await fetch('/api/projects')).json();
+    if ((data.projects || []).some(p => p.side === 'Fun / hobby')) {
+      document.getElementById('map-pointer').style.display = 'block';
+    }
+  } catch (e) { console.warn('map pointer not loaded:', e); /* fail safe — stays hidden */ }
 }
 
 // ── Focus AUTHORING (Phase 6, Task 3/6B): speak → reflect-back → confirm ─────
@@ -2099,6 +2135,7 @@ async function setBackend(backend) {
 loadActions();
 loadPlan();
 loadPeriod();
+loadMapPointer();
 </script>
 </body>
 </html>
