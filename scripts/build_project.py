@@ -31,7 +31,7 @@ def build_project():
     # work that doesn't is Wellbeing. Structurally separates the two sides everywhere they
     # surface: neglect may be offered on the Obligation side; the Wellbeing side is never
     # nagged (only ever surfaced as under-rest/under-play).
-    p_side        = g.ensure_property("Side", "select", ["Obligation", "Wellbeing"])
+    p_side        = g.ensure_property("Side", "select", ["Obligation", "Wellbeing", "Fun / hobby"])
     # Arc ordering — dependency-vs-sequence refinement (guard #6: June needs to understand why).
     # Depends on: hard dependency links (X can't start until Y is done; enforced in orient_map.py).
     # Arc position rationale: full plain-language reasoning for where this stream sits in the arc.

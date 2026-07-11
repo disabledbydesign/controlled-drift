@@ -78,7 +78,10 @@ def load_active_items(sid):
             if engagement == "Done":
                 continue  # Done projects are invisible in the daily plan
 
-            # Obligation vs wellbeing — read by display name like Engagement (Anytype-generated key).
+            # Side: Obligation / Wellbeing / Fun / hobby — June's three categories, read by display
+            # name like Engagement (Anytype-generated key). "Fun / hobby" = self-directed
+            # creative/dev work held out of the daily plan; Obligation (must-do life+career) and
+            # Wellbeing (walks, rest, care) both stay in the day.
             side_tag = pvn("Side", "select") or {}
             side = side_tag.get("name") if isinstance(side_tag, dict) else None
 
@@ -656,11 +659,12 @@ def format_priority_list(ordered_items, period=None):
     return "\n".join(lines)
 
 
-# --- Wellbeing-side work → kept OUT of the daily plan (June, 2026-07-11) ------
-# June's decision: fun/hobby/creative/dev work stays out of the daily plan entirely, so it
-# stops crowding out obligations. Reversible — flip INCLUDE_HOBBY_BLOCK back to True to bring
-# the single open "your choice" block back. Necessary rest (walks, meals) always stays in the
-# plan regardless of side (see the _is_rest_item passthrough in partition_by_side).
+# --- "Fun / hobby" work → kept OUT of the daily plan (June, 2026-07-11) ------
+# June thinks in three categories: Obligation / Wellbeing / Fun / hobby. Only "Fun / hobby"
+# (self-directed creative/dev work) stays out of the daily plan, so it stops crowding out the
+# rest. Obligation AND Wellbeing (walks, rest, care) both stay in. Reversible — flip
+# INCLUDE_HOBBY_BLOCK back to True to bring the single open "your choice" block back. Necessary
+# rest always stays in the plan regardless of side (see the _is_rest_item passthrough below).
 
 OPEN_HOBBY_BLOCK_MIN = 60
 HOBBY_BLOCK_DEFAULT = False  # default: fun/hobby out of the plan (June toggles it in overlay Settings)
@@ -681,12 +685,12 @@ def include_hobby_block():
 def partition_by_side(tasks, projects):
     """Split tasks into (schedulable, wellbeing).
 
-    A task is WELLBEING (hobby / creative / dev — the kind the system must NOT pick a thread
-    *within*, per the never-pick-her-threads / linear-vs-nonlinear principle) iff at least one
-    linked project is Wellbeing-side AND none is Obligation-side. Unlinked or unknown-side tasks
-    stay schedulable — never hidden when unsure. **Necessary rest (walks, meals — _is_rest_item)
-    always stays schedulable regardless of side**, so exercise/rest is never dropped as "hobby."
-    Wellbeing tasks are, by default, kept out of the plan entirely (INCLUDE_HOBBY_BLOCK=False)."""
+    A task is "fun / hobby" (self-directed creative / dev — the kind the system must NOT pick a
+    thread *within*, per the never-pick-her-threads / linear-vs-nonlinear principle) iff at least
+    one linked project has Side="Fun / hobby" AND none has Side in ("Obligation", "Wellbeing").
+    Unlinked or unknown-side tasks stay schedulable — never hidden when unsure. **Necessary rest
+    (walks, meals — _is_rest_item) always stays schedulable regardless of side**, so exercise/rest
+    is never dropped as "hobby." Fun/hobby tasks are, by default, kept out (INCLUDE_HOBBY_BLOCK=False)."""
     side_by_name = {p["name"]: p.get("side") for p in projects}
     schedulable, wellbeing = [], []
     for t in tasks:
@@ -694,8 +698,8 @@ def partition_by_side(tasks, projects):
             schedulable.append(t)  # necessary rest always stays, whatever it's linked to
             continue
         sides = [side_by_name.get(pn) for pn in (t.get("linked_projects") or [])]
-        is_well = any(s == "Wellbeing" for s in sides) and not any(s == "Obligation" for s in sides)
-        (wellbeing if is_well else schedulable).append(t)
+        is_hobby = any(s == "Fun / hobby" for s in sides) and not any(s in ("Obligation", "Wellbeing") for s in sides)
+        (wellbeing if is_hobby else schedulable).append(t)
     return schedulable, wellbeing
 
 

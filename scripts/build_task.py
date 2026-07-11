@@ -20,7 +20,8 @@ def build_task():
     p_blocked    = g.ensure_property("Blocked on", "text")
     p_affective  = g.ensure_property("Affective", "text")           # reused; capacity signal, never a scalar
     p_access     = g.ensure_property("Access conditions", "multi_select",
-                                     ["Can-be-done-lying-down", "Involves-leaving-house"])
+                                     ["Can-be-done-lying-down", "Involves-leaving-house",
+                                      "Requires-talking-to-a-person"])
     p_access_nts = g.ensure_property("Access notes", "text")  # open annotations → §6 promotion loop
     p_autonomous = g.ensure_property("AI autonomous", "checkbox")
     p_docs       = g.ensure_property("Relevant docs", "text")       # reused

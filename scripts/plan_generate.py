@@ -381,9 +381,10 @@ def build_context(capacity=None, start_time=None, end_time=None):
     # Task selection: foreground projects (period override) sort first; paused-project tasks
     # are dropped. With no period this preserves the prior date-seeded hash order exactly.
     ordered = select_and_order_tasks(tasks, period)
-    # Wellbeing-side (hobby/creative/dev) tasks are kept OUT of the daily plan by default
-    # (June, 2026-07-11) so they don't crowd out obligations; necessary rest still stays.
-    # June toggles this from the overlay Settings panel (dp.include_hobby_block reads settings.json).
+    # "Fun / hobby"-side (self-directed creative/dev) tasks are kept OUT of the daily plan by
+    # default (June, 2026-07-11) so they don't crowd out Obligation + Wellbeing work; necessary
+    # rest still stays. June toggles this from the overlay Settings panel (dp.include_hobby_block
+    # reads settings.json). NB: `wellbeing` var below = the held-out Fun/hobby list (legacy name).
     schedulable, wellbeing = dp.partition_by_side(ordered, projects)
     task_items = [{"name": t["name"], "duration_min": t.get("duration_min")} for t in schedulable]
     hobby = dp.open_hobby_block(wellbeing) if dp.include_hobby_block() else None
