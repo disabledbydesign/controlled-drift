@@ -40,6 +40,7 @@ import focus_period_adapter
 import focus_period_author
 import focus_store
 import daily_plan
+import signal_log
 import gsdo_anytype as g
 import cd_paths
 
@@ -419,6 +420,25 @@ class Handler(BaseHTTPRequestHandler):
             _save_settings(settings)
             self._send(200, {"backend": os.environ.get("CD_BACKEND", "mistral"),
                              "include_hobby_block": settings.get("include_hobby_block", False)})
+            return
+
+        if self.path == "/api/logday":
+            # Log Day (Task 5/6C): June's own brain-dump of how the day actually went — NOT "report
+            # what you did." Stored faithfully + UNCATEGORIZED via signal_log (source="log_day"):
+            # no classifier, no rest-type schema carved in now — Phase 7 extracts from the raw text
+            # when it's built (the addendum defers that on purpose). Sync, no LLM. We never narrate
+            # any classification back; the client shows only a plain acknowledgment.
+            body = self._read_json_body()
+            text = (body.get("text") or "").strip()
+            if not text:
+                self._send(400, {"error": "log day needs text"})
+                return
+            try:
+                signal_log.log_signal(text, source="log_day", reference={"kind": "log_day"})
+            except Exception as e:
+                self._send(500, {"error": str(e)})
+                return
+            self._send(200, {"ok": True})
             return
 
         if self.path == "/api/capture":
