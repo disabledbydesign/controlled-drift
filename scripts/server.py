@@ -33,6 +33,7 @@ import task_actions
 import capture_generate
 import session_store
 import orient_map
+import period_view
 import cd_paths
 
 # The LLM backends the overlay can switch between live (mirrors plan_generate's accepted set).
@@ -173,6 +174,16 @@ class Handler(BaseHTTPRequestHandler):
             plan = plan_store.load_plan()
             st["plan_generated_at"] = plan.get("generated_at") if plan else None
             self._send(200, st)
+            return
+
+        if self.path == "/api/period":
+            # Read-only "see my week": the active Focus Period, rendered as a plain JSON payload
+            # the Today tab folds in. Synchronous + deterministic (no LLM, no _gen_lock) — same
+            # tier as /api/map. {"active": false} is the honest empty state when none is set.
+            try:
+                self._send(200, period_view.render_period())
+            except Exception as e:
+                self._send(500, {"error": f"period render failed: {e}"})
             return
 
         if self.path == "/api/settings":
@@ -385,7 +396,7 @@ def main():
         os.environ["CD_BACKEND"] = s["backend"]
     srv = ThreadingHTTPServer((HOST, PORT), Handler)
     print(f"Controlled Drift overlay → http://{HOST}:{PORT}")
-    print("  GET /api/plan · /api/map · /api/actions · /api/status · /api/session · /api/settings")
+    print("  GET /api/plan · /api/map · /api/period · /api/actions · /api/status · /api/session · /api/settings")
     print("  POST /api/refresh · /api/negotiate · /api/capture (async)")
     print("  POST /api/complete · /api/uncomplete · /api/capture/undo · /api/settings")
     print("  Ctrl-C to stop.")
