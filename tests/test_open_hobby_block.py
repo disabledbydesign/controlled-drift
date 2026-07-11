@@ -35,6 +35,31 @@ def test_unlinked_and_unknown_side_stay_schedulable():
     assert wellbeing == []
 
 
+def test_rest_item_stays_schedulable_even_if_wellbeing_linked():
+    # June, 2026-07-11: necessary rest (walks/exercise/meals) must never be dropped as "hobby",
+    # even when linked to a Wellbeing project. Rest is recognized by _is_rest_item keywords.
+    tasks = [{"name": "Go on a long walk", "linked_projects": ["Autograder"]},
+             {"name": "hack on autograder", "linked_projects": ["Autograder"]}]
+    schedulable, wellbeing = dp.partition_by_side(tasks, _PROJECTS)
+    assert "Go on a long walk" in [t["name"] for t in schedulable]
+    assert [t["name"] for t in wellbeing] == ["hack on autograder"]
+
+
+def test_hobby_block_off_by_default():
+    # Fun/hobby is kept out of the plan entirely by default (no settings.json in the sandbox).
+    assert dp.include_hobby_block() is False
+
+
+def test_hobby_block_reads_setting_when_on(tmp_path, monkeypatch):
+    # The overlay toggle writes {"include_hobby_block": true} to settings.json; the plan reads it.
+    import cd_paths, json, os
+    monkeypatch.setenv("CD_CONFIG_DIR", str(tmp_path))
+    os.makedirs(cd_paths.config_dir(), exist_ok=True)
+    with open(cd_paths.config_file("settings.json"), "w") as f:
+        json.dump({"include_hobby_block": True, "backend": "mistral"}, f)
+    assert dp.include_hobby_block() is True
+
+
 def test_open_block_emitted_only_when_wellbeing_work_exists():
     assert dp.open_hobby_block([]) is None
     block = dp.open_hobby_block([{"name": "hack on autograder"}])

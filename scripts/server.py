@@ -181,7 +181,8 @@ class Handler(BaseHTTPRequestHandler):
             # truth — not a hand-written description that drifts from what the backend does).
             current = os.environ.get("CD_BACKEND", "mistral")
             options = [{"id": b, **plan_generate.backend_descriptor(b)} for b in VALID_BACKENDS]
-            self._send(200, {"backend": current, "options": options})
+            self._send(200, {"backend": current, "options": options,
+                             "include_hobby_block": _load_settings().get("include_hobby_block", False)})
             return
 
         if urlparse(self.path).path == "/api/session":
@@ -319,16 +320,23 @@ class Handler(BaseHTTPRequestHandler):
             return
 
         if self.path == "/api/settings":
-            # Switch the LLM backend live — sets it for the next generation (the worker reads
-            # CD_BACKEND fresh each time) and persists so a server restart keeps the choice.
+            # Update overlay settings live — persisted so a restart keeps the choice. MERGE into
+            # the existing file (never clobber other keys: the backend choice and the hobby toggle
+            # are independent). The generation worker reads CD_BACKEND / settings.json fresh each run.
             body = self._read_json_body()
-            backend = (body.get("backend") or "").strip()
-            if backend not in VALID_BACKENDS:
-                self._send(400, {"error": f"unknown backend {backend!r}"})
-                return
-            os.environ["CD_BACKEND"] = backend
-            _save_settings({"backend": backend})
-            self._send(200, {"backend": backend})
+            settings = _load_settings()
+            if "backend" in body:
+                backend = (body.get("backend") or "").strip()
+                if backend not in VALID_BACKENDS:
+                    self._send(400, {"error": f"unknown backend {backend!r}"})
+                    return
+                os.environ["CD_BACKEND"] = backend
+                settings["backend"] = backend
+            if "include_hobby_block" in body:
+                settings["include_hobby_block"] = bool(body.get("include_hobby_block"))
+            _save_settings(settings)
+            self._send(200, {"backend": os.environ.get("CD_BACKEND", "mistral"),
+                             "include_hobby_block": settings.get("include_hobby_block", False)})
             return
 
         if self.path == "/api/capture":

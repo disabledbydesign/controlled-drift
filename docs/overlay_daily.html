@@ -899,6 +899,10 @@ textarea.add-field:focus { border-color: var(--gold); }
       <div class="settings-label">which model writes your plans</div>
       <div id="backend-options"></div>
     </div>
+    <div class="settings-section">
+      <div class="settings-label">what your daily plan includes</div>
+      <div id="hobby-toggle"></div>
+    </div>
   </div>
 
 </div>
@@ -1370,6 +1374,7 @@ document.getElementById('hdr-time').textContent =
 // marketing copy that drifts from what the backend does). We just render what it sends.
 let _currentBackend = null;
 let _backendOptions = [];
+let _includeHobby = false;
 
 async function loadSettings() {
   try {
@@ -1378,8 +1383,42 @@ async function loadSettings() {
     const data = await res.json();
     _currentBackend = data.backend;
     _backendOptions = data.options || [];
+    _includeHobby = !!data.include_hobby_block;
     renderBackends();
+    renderHobbyToggle();
   } catch (_) { /* static preview — leave panel empty */ }
+}
+
+// The hobby/fun toggle. State is legible in WORDS (on:/off: sentence), not by the dot alone —
+// so it reads without decoding a symbol. Off = creative/dev work stays out of the plan.
+function renderHobbyToggle() {
+  const detail = _includeHobby
+    ? "on: a single open “your choice of what to work on” block appears in your plan"
+    : "off: your creative and tool-building work stays out of the daily plan — rest and errands still show";
+  document.getElementById('hobby-toggle').innerHTML = `
+    <div class="backend-opt${_includeHobby ? ' selected' : ''}" onclick="toggleHobbyBlock()">
+      <span class="backend-radio"></span>
+      <span>
+        <span class="backend-name">Include hobby / fun time in my plan</span>
+        <div class="backend-detail">${detail}</div>
+      </span>
+    </div>`;
+}
+
+async function toggleHobbyBlock() {
+  try {
+    const res = await fetch('/api/settings', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ include_hobby_block: !_includeHobby }),
+    });
+    const data = await res.json();
+    if (!res.ok) { showError(data.error || "couldn't save that"); return; }
+    _includeHobby = !!data.include_hobby_block;
+    renderHobbyToggle();
+  } catch (_) {
+    showError("couldn't reach the server — is it running?");
+  }
 }
 
 function renderBackends() {
