@@ -139,7 +139,7 @@ def _stub_pipeline(monkeypatch, tmp_path):
     fake_tasks = [{"id": "t1", "name": "Task One"}, {"id": "t2", "name": "Task Two"}]
     monkeypatch.setattr(pg, "build_context",
                         lambda capacity=None, start_time=None:
-                        ("ctx", fake_tasks, dt.datetime(2026, 6, 23, 9, 0)))
+                        ("ctx", fake_tasks, dt.datetime(2026, 6, 23, 9, 0), "clock"))
     monkeypatch.setattr(pg, "generate", lambda prompt: _CANNED)
     surfaced, corrections = [], []
     monkeypatch.setattr(pg, "log_surfaced_batch", lambda items, **k: surfaced.append(items))

@@ -155,7 +155,7 @@ def build_renegotiate_prompt(kind):
             "logic for a low-energy day."
         ),
     }
-    full_context, tasks, start_time = pg.build_context()
+    full_context, tasks, start_time, _shape = pg.build_context()
     ref_map, task_table = pg._build_task_refs(tasks)
     prompt = pg._assemble_prompt(
         full_context, start_time,

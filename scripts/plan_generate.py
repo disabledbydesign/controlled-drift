@@ -228,10 +228,10 @@ def backend_descriptor(backend):
 
 def build_prompt(capacity=None, extra=None):
     """Build the full generation prompt. Public for the compare script and manual testing."""
-    full_context, tasks, start_time = build_context(capacity=capacity)
+    full_context, tasks, start_time, shape = build_context(capacity=capacity)
     ref_map, task_table = _build_task_refs(tasks)
     prompt = _assemble_prompt(full_context, start_time, capacity=capacity,
-                              extra=extra, task_table=task_table)
+                              extra=extra, task_table=task_table, shape=shape)
     return prompt, tasks, ref_map
 
 
@@ -313,6 +313,58 @@ and the items in schedule order. No prose before or after — just the block.
 """
 
 
+_JSON_INSTRUCTION_PRIORITY = """
+
+---
+
+## HOW THIS RUNS — read before producing output
+
+You are generating this plan **headless and automated** — there is **no human in the
+conversation to answer you.** Your output is written straight to a cache the overlay displays.
+Do NOT ask questions or propose to wait. Always produce the JSON block below.
+
+**TODAY IS A FRAGMENTED DAY.** June does not have fixed blocks of time — her time comes in
+unpredictable windows (caregiving, low capacity, "a couple hours, don't know when"). A clock
+schedule would be a lie today. So the output is a **priority list to pull from**, NOT a timed
+schedule: a short, ordered set of what matters most, so when a window opens she takes the next
+one that fits. **Do NOT invent clock times. Do NOT group into morning/afternoon blocks.**
+
+The order is ALREADY DECIDED (foreground-first) in the priority list in the inputs above — keep
+that order. Your job is to rewrite each item into plain language, add a grounded `why`, write a
+short warm woven frame, and a one-line `header` naming what today's shape is and why.
+
+## REQUIRED OUTPUT — THE JSON BLOCK ONLY
+
+Output **ONLY** the single fenced ```json block — nothing before or after. Use exactly this shape:
+
+- `header`: one plain sentence stating this is a fragmented day and how to use the list, e.g.
+  "Today's fragmented — a short list to pull from, no fixed times. When a window opens, start at
+  the top." No metaphors.
+- each item's `task` is plain action language June can act on immediately (no codes, no ALL-CAPS,
+  no jargon); `why` is one sentence grounded in her actual goal/project (what this produces or
+  moves — never invented); `project` is the project/thread name or null; `ref` is the task's
+  reference token from TASK REFERENCE (so she can mark it done), null if it isn't a listed task.
+- keep the list SHORT (the inputs already cap it) and in the given order — do not reorder.
+
+```json
+{
+  "shape": "priority",
+  "woven_frame": "the 2-3 sentence woven frame, plain and warm",
+  "header": "Today's fragmented — a short list to pull from, no fixed times. When a window opens, start at the top.",
+  "items": [
+    {"project": "Project/thread name", "task": "plain action phrase June can act on", "why": "one sentence grounded in her actual goal — what this produces or moves", "ref": "T1"}
+  ],
+  "still_here": [
+    {"label": "thread or item name", "note": "the concrete reassurance — its rhythm / why deferred"}
+  ]
+}
+```
+
+This JSON is the whole output. No `blocks`, no clock times — a plain priority list. No prose
+before or after — just the block.
+"""
+
+
 # --- context assembly (reuses daily_plan, minus the interactive input/print) -
 
 def select_and_order_tasks(tasks, period):
@@ -386,19 +438,32 @@ def build_context(capacity=None, start_time=None, end_time=None):
     # rest still stays. June toggles this from the overlay Settings panel (dp.include_hobby_block
     # reads settings.json). NB: `wellbeing` var below = the held-out Fun/hobby list (legacy name).
     schedulable, wellbeing = dp.partition_by_side(ordered, projects)
-    task_items = [{"name": t["name"], "duration_min": t.get("duration_min")} for t in schedulable]
-    hobby = dp.open_hobby_block(wellbeing) if dp.include_hobby_block() else None
-    if hobby:
-        task_items.append({"name": hobby["name"], "duration_min": hobby["duration_min"]})
-    scheduled = dp.build_schedule(task_items, all_anchors, start_time, end_time=end_time)
-    schedule_block = dp.format_schedule_blocks(scheduled)
 
-    scheduled_names = {s["name"] for s in scheduled}
-    overflow = [t for t in schedulable if t["name"] not in scheduled_names]
-    if overflow:
-        schedule_block += f"\n\n### Didn't fit before {end_time.strftime('%H:%M')} — put these in still_here\n"
-        for t in overflow:
-            schedule_block += f"  - {t['name']}\n"
+    # Output SHAPE (Phase 6, Task 6): a fragmented / unknown-timing day (a caregiving window, or
+    # a period that asks for a priority list) can't be expressed as a clock schedule — forcing one
+    # is the output-format-bias the addendum warns about. Python decides the shape deterministically
+    # from the structured period + window; the schedule vs priority-list body follows from it.
+    import focus_period as fp
+    shape = fp.resolve_output_shape(period, in_window)
+
+    if shape == "priority":
+        # A foreground-first list to pull from when a window opens — no clock times. Python owns
+        # the order (select_and_order_tasks already sorted foreground-first); the model only narrates.
+        schedule_block = dp.format_priority_list(schedulable, period=period)
+    else:
+        task_items = [{"name": t["name"], "duration_min": t.get("duration_min")} for t in schedulable]
+        hobby = dp.open_hobby_block(wellbeing) if dp.include_hobby_block() else None
+        if hobby:
+            task_items.append({"name": hobby["name"], "duration_min": hobby["duration_min"]})
+        scheduled = dp.build_schedule(task_items, all_anchors, start_time, end_time=end_time)
+        schedule_block = dp.format_schedule_blocks(scheduled)
+
+        scheduled_names = {s["name"] for s in scheduled}
+        overflow = [t for t in schedulable if t["name"] not in scheduled_names]
+        if overflow:
+            schedule_block += f"\n\n### Didn't fit before {end_time.strftime('%H:%M')} — put these in still_here\n"
+            for t in overflow:
+                schedule_block += f"  - {t['name']}\n"
 
     context_block = dp.format_context(
         goals, projects, tasks, strategies, today_recurrings, neglected, capacity,
@@ -407,12 +472,10 @@ def build_context(capacity=None, start_time=None, end_time=None):
         context_block += ("\n\n## No active focus period\n"
                           "- There's no configuration for this stretch. If today's plan feels "
                           "off, June may want to set a focus period — offer it, gently, once.")
-    # NOTE (Phase 6): resolve_output_shape(period, in_window) chooses clock vs priority here;
-    # the phone priority-list renderer + JSON contract land in Phase 6. v1 overlay = clock only.
     full_context = context_block + "\n" + schedule_block
     # Return schedulable (not all tasks): wellbeing work is the open block, so it isn't
     # individually accounted / surfaced / ref-tokened downstream (never-pick-her-threads).
-    return full_context, schedulable, start_time
+    return full_context, schedulable, start_time, shape
 
 
 def _build_task_refs(tasks):
@@ -467,7 +530,7 @@ def _format_session_history(history):
 
 
 def _assemble_prompt(full_context, start_time, capacity=None, extra=None, task_table=None,
-                     history=None, current_plan=None, request_kind="reorder"):
+                     history=None, current_plan=None, request_kind="reorder", shape="clock"):
     """Build the full prompt: the daily_list.md template + an authoritative inputs section
     holding the real data, + the JSON contract (+ any negotiation note).
 
@@ -490,7 +553,9 @@ def _assemble_prompt(full_context, start_time, capacity=None, extra=None, task_t
         f"- Current time: {start_time.strftime('%A %B %d, %Y — %I:%M %p')}",
         f"- Capacity signal: {capacity or '(none given)'}",
         "",
-        "### Active goals / projects / tasks / strategies + the pre-computed clock schedule",
+        ("### Active goals / projects / tasks / strategies + the pre-computed priority list"
+         if shape == "priority" else
+         "### Active goals / projects / tasks / strategies + the pre-computed clock schedule"),
         "",
         full_context,
     ]
@@ -555,7 +620,7 @@ def _assemble_prompt(full_context, start_time, capacity=None, extra=None, task_t
                 extra,
             ]
     prompt = "\n".join(parts)
-    prompt += _JSON_INSTRUCTION
+    prompt += _JSON_INSTRUCTION_PRIORITY if shape == "priority" else _JSON_INSTRUCTION
     return prompt
 
 
@@ -575,20 +640,26 @@ def _resolve_ids(plan, ref_map, tasks):
     """
     by_name = {_norm(t["name"]): t["id"] for t in tasks}
     context_by_id = {t["id"]: (t.get("context") or "").strip() for t in tasks}
-    for block in plan.get("blocks", []):
+
+    def _resolve_item(item):
+        ref = item.pop("ref", None)  # consume the token; the overlay only needs the id
+        tid = ref_map.get(ref) if ref else None
+        if not tid:
+            tid = by_name.get(_norm(item.get("task")))
+        if tid:
+            item["id"] = tid
+            # Carry the task's stored description (its Context field) onto the item so the
+            # overlay can show it on expand. Empty for most tasks until the weed writes one;
+            # the overlay only renders the slot when there's text.
+            desc = context_by_id.get(tid)
+            if desc:
+                item["description"] = desc
+
+    for block in plan.get("blocks", []):        # clock shape
         for item in block.get("items", []):
-            ref = item.pop("ref", None)  # consume the token; the overlay only needs the id
-            tid = ref_map.get(ref) if ref else None
-            if not tid:
-                tid = by_name.get(_norm(item.get("task")))
-            if tid:
-                item["id"] = tid
-                # Carry the task's stored description (its Context field) onto the item so the
-                # overlay can show it on expand. Empty for most tasks until the weed writes one;
-                # the overlay only renders the slot when there's text.
-                desc = context_by_id.get(tid)
-                if desc:
-                    item["description"] = desc
+            _resolve_item(item)
+    for item in plan.get("items", []):          # priority shape (flat)
+        _resolve_item(item)
     return plan
 
 
@@ -607,6 +678,7 @@ def _ensure_all_tasks_accounted(plan, tasks):
     placed_ids = {item.get("id")
                   for block in plan.get("blocks", [])
                   for item in block.get("items", [])}
+    placed_ids |= {item.get("id") for item in plan.get("items", [])}  # priority shape (flat)
     still_here = plan.setdefault("still_here", [])
     covered_labels = {_norm(sh.get("label")) for sh in still_here if sh.get("label")}
     for t in tasks:
@@ -636,8 +708,15 @@ def parse_plan(model_text):
     except json.JSONDecodeError as e:
         raise RuntimeError(f"model's JSON block did not parse: {e}")
     plan.setdefault("woven_frame", "")
-    plan.setdefault("blocks", [])
     plan.setdefault("still_here", [])
+    # Two shapes: a clock schedule (blocks[]) or a fragmented-day priority list (flat items[]).
+    # Pin the shape definitively so the overlay renders the right branch (never guesses).
+    if plan.get("shape") == "priority" or ("items" in plan and "blocks" not in plan):
+        plan["shape"] = "priority"
+        plan.setdefault("items", [])
+    else:
+        plan["shape"] = "clock"
+        plan.setdefault("blocks", [])
     return plan
 
 
@@ -652,10 +731,10 @@ def generate_plan(capacity=None, source="generate", extra=None):
     framing below): a fresh generation still selects from the whole active list, but her words
     are the strongest signal for what to prioritize. Writes cache, logs what surfaced.
     """
-    full_context, tasks, start_time = build_context(capacity=capacity)
+    full_context, tasks, start_time, shape = build_context(capacity=capacity)
     ref_map, task_table = _build_task_refs(tasks)
     prompt = _assemble_prompt(full_context, start_time, capacity=capacity, task_table=task_table,
-                              extra=extra, request_kind="generate")
+                              extra=extra, request_kind="generate", shape=shape)
     backend = os.environ.get("CD_BACKEND", "mistral")
     model = _active_model(backend)
     backend_label = f"{backend}/{model}" if model else backend
@@ -701,12 +780,12 @@ def reorder(message, kind):
     re-surfaces (the renegotiated plan is what she's now working from).
     """
     before = plan_store.load_plan()
-    full_context, tasks, start_time = build_context()
+    full_context, tasks, start_time, shape = build_context()
     ref_map, task_table = _build_task_refs(tasks)
     history = session_store.recent_entries("negotiate")
     current_plan_summary = _format_current_plan(before)
     prompt = _assemble_prompt(full_context, start_time, extra=message, task_table=task_table,
-                              history=history, current_plan=current_plan_summary)
+                              history=history, current_plan=current_plan_summary, shape=shape)
     backend = os.environ.get("CD_BACKEND", "mistral")
     model = _active_model(backend)
     backend_label = f"{backend}/{model}" if model else backend
@@ -792,7 +871,7 @@ if __name__ == "__main__":
     args = ap.parse_args()
 
     if args.dry_context:
-        ctx, tasks, st = build_context(capacity=args.capacity)
+        ctx, tasks, st, _shape = build_context(capacity=args.capacity)
         print(ctx)
         print(f"\n[{len(tasks)} tasks would be logged as surfaced]")
     elif args.reorder:

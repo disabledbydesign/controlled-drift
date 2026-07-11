@@ -298,6 +298,15 @@ textarea.fe-input { resize: vertical; min-height: 64px; line-height: 1.45; }
 .woven-text.expanded { display: block; }
 
 /* ── TODAY: time blocks ── */
+/* Fragmented-day priority list (Task 6/6D) — a short list to pull from, no clock times */
+.priority-header {
+  padding: 10px 14px; margin: 0 0 4px;
+  font-size: 12px; color: var(--text-dim); line-height: 1.45;
+  border-bottom: 1px solid var(--border);
+}
+.priority-list .plan-item { margin: 0 14px; }
+.priority-item .item-time { display: none; }   /* no clock time in this shape */
+
 .plan-blocks {
   padding: 0;
   border-bottom: 1px solid var(--border);
@@ -1746,8 +1755,16 @@ function renderPlan(plan) {
   if (plan.woven_frame) {
     document.getElementById('woven-frame-text').textContent = plan.woven_frame;
   }
-  if (plan.blocks) {
-    const container = document.getElementById('plan-blocks');
+  const container = document.getElementById('plan-blocks');
+  if (plan.shape === 'priority') {
+    // Fragmented day: a plain header naming the shape (so the switch from a clock schedule is
+    // never silent) + a short, ordered, no-clock list to pull from. Done-affordance is the same
+    // ○/✓ as clock items.
+    const items = (plan.items || []).map(renderPriorityItem).join('');
+    container.innerHTML =
+      (plan.header ? `<div class="priority-header">${esc(plan.header)}</div>` : '') +
+      `<div class="priority-list">${items}</div>`;
+  } else if (plan.blocks) {
     container.innerHTML = plan.blocks.map(block => {
       const itemsHtml = groupByProject(block.items || []).map(renderGroup).join('');
       return `
@@ -1775,6 +1792,22 @@ function renderPlan(plan) {
         ${esc(s.label)}
       </div>`).join('');
   }
+}
+
+// A single priority-list item (Task 6/6D): no clock time, same done-affordance as clock items.
+function renderPriorityItem(it) {
+  const done = it.done ? ' done' : '';
+  return `
+    <div class="plan-item priority-item${done}" onclick="if(!event.target.closest('.item-check'))this.classList.toggle('open')">
+      <div class="item-top">
+        ${it.id ? `<button class="item-check" title="${it.done ? 'undo' : 'mark done'}" onclick="toggleItem('${esc(it.id)}', this)"></button>` : '<span class="check-gap"></span>'}
+        <span class="item-label">
+          ${it.project ? `<span class="item-project">${esc(it.project)}</span><span class="item-sep"> · </span>` : ''}
+          <span class="item-task">${esc(it.task)}</span>
+        </span>
+      </div>
+      ${it.why ? `<div class="item-why">${esc(it.why)}</div>` : ''}
+    </div>`;
 }
 
 function esc(s) {
