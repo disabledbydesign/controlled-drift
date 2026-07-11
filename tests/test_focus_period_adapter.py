@@ -1,11 +1,11 @@
 # tests/test_focus_period_adapter.py — the generate->author adapter + reflect-back template.
 # Pure over inputs (name->id resolution takes a fake objects list), so these run offline and
 # write nothing to Anytype.
-import sys, os
+import sys, os, datetime as dt
 import pytest
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "scripts"))
 from focus_period_adapter import (to_write_properties, missing_required, reflect_back,
-                                  _fmt_range, _csv)
+                                  period_to_fields, _fmt_range, _csv)
 
 PROJECTS = [
     {"id": "p1", "name": "Academic positions", "type": {"key": "gsdo_project"}},
@@ -139,3 +139,59 @@ def test_paused_and_workday_only_shown_when_present():
     r_full = reflect_back(_fields(paused_projects=["Reframe paper"], workday_end="23:00"))
     keys = {i["key"] for i in r_full["items"]}
     assert "paused" in keys and "workday_end" in keys
+
+
+# --- Task 4: period_to_fields (stored period -> editable fields) --------------
+
+def test_period_to_fields_converts_dates_and_resolved_names():
+    period = {
+        "id": "fp1", "name": "Week of Jun 29",
+        "start": dt.date(2026, 6, 29), "end": dt.date(2026, 7, 6),
+        "intent": "jobs", "availability_start": dt.date(2026, 7, 4),
+        "availability_end": dt.date(2026, 7, 6), "availability_note": "caregiving",
+        "days_off": ["2026-07-05"], "days_on": [], "output_format": "Auto",
+        "workday_end": None, "foreground": ["Academic positions"], "paused": [],
+    }
+    f = period_to_fields(period)
+    assert f["start_date"] == "2026-06-29" and f["end_date"] == "2026-07-06"  # dates -> ISO
+    assert f["availability_start"] == "2026-07-04"
+    assert f["foreground_projects"] == ["Academic positions"]                # resolved names
+    assert f["output_format"] == "Auto"
+    # round-trips cleanly back through the reflect template
+    assert missing_required(f) == []
+
+
+def test_period_to_fields_tolerates_missing_dates():
+    f = period_to_fields({"name": "x", "start": None, "end": None})
+    assert f["start_date"] is None and f["end_date"] is None
+    assert missing_required(f) == ["start date", "end date"]
+
+
+# --- Task 4: reflect_back diff (changed vs stayed) ---------------------------
+
+def test_reflect_diff_marks_only_changed_items():
+    original = _fields()
+    changed = _fields(end_date="2026-07-07")           # moved the end date
+    r = reflect_back(changed, original=original)
+    assert r["is_edit"] is True
+    by_key = {i["key"]: i for i in r["items"]}
+    assert by_key["dates"]["changed"] is True          # dates changed
+    assert by_key["foreground"]["changed"] is False    # foreground untouched
+    assert by_key["intent"]["changed"] is False
+
+
+def test_reflect_diff_flags_foreground_and_availability_changes():
+    original = _fields()
+    changed = _fields(foreground_projects=["Academic positions"],  # dropped one
+                      availability_start="2026-07-05")              # moved window
+    r = reflect_back(changed, original=original)
+    by_key = {i["key"]: i for i in r["items"]}
+    assert by_key["foreground"]["changed"] is True
+    assert by_key["availability"]["changed"] is True
+    assert by_key["dates"]["changed"] is False
+
+
+def test_reflect_without_original_has_no_changed_flags():
+    r = reflect_back(_fields())
+    assert r["is_edit"] is False
+    assert all("changed" not in i for i in r["items"])

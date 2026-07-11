@@ -234,6 +234,7 @@ body {
 .reflect-val-wrap { display: flex; align-items: baseline; gap: 6px; justify-content: flex-end; text-align: right; }
 .reflect-value { font-size: 12px; color: var(--text); }
 .reflect-value.missing { color: var(--rose); }
+.reflect-changed { font-size: 10px; color: var(--gold); text-transform: uppercase; letter-spacing: .06em; margin-right: 6px; }
 .reflect-fix { font-size: 11px; color: var(--gold); background: none; border: none; font-family: inherit; cursor: pointer; padding: 0; flex-shrink: 0; }
 .reflect-actions { border-top: 1px solid var(--border); padding: 10px 14px; display: flex; gap: 8px; align-items: center; justify-content: flex-end; }
 .reflect-confirm { background: var(--gold-dim); border: 1px solid var(--gold); border-radius: 8px; color: var(--gold); font-size: 13px; font-family: inherit; padding: 7px 14px; cursor: pointer; min-height: 36px; transition: background .12s, color .12s; }
@@ -852,7 +853,7 @@ textarea.add-field:focus { border-color: var(--gold); }
       <div class="focus-header">
         <span class="focus-period-name" id="focus-name"></span>
         <span class="focus-dates" id="focus-dates"></span>
-        <button class="focus-edit-btn" onclick="focusNotYet()" aria-label="Edit focus period">Edit</button>
+        <button class="focus-edit-btn" onclick="openEditing()" aria-label="Edit focus period">Edit</button>
       </div>
       <div class="focus-alert" id="focus-alert" style="display:none">
         <span class="focus-alert-mark">Now</span>
@@ -871,7 +872,7 @@ textarea.add-field:focus { border-color: var(--gold); }
           <div class="period-card-header">
             <span class="period-card-dates" id="focus-card-dates"></span>
             <span class="period-card-badge">Now</span>
-            <button class="period-card-edit" onclick="focusNotYet()">Edit</button>
+            <button class="period-card-edit" onclick="openEditing()">Edit</button>
           </div>
           <p class="period-card-intent" id="focus-card-intent" onclick="this.classList.toggle('expanded')"></p>
           <p class="period-card-front" id="focus-card-front" style="display:none"><strong>In front:</strong> <span id="focus-card-front-list"></span></p>
@@ -897,7 +898,7 @@ textarea.add-field:focus { border-color: var(--gold); }
     <!-- Authoring panel (Task 3/6B): speak → reflect-back → confirm. Hidden until opened. -->
     <div class="focus-author" id="focus-author" style="display:none">
       <button class="author-back" onclick="closeAuthoring()">‹ Back</button>
-      <p class="author-label">What focus period do you want to set up? Say it in your own words.</p>
+      <p class="author-label" id="author-label">What focus period do you want to set up? Say it in your own words.</p>
       <textarea class="author-field" id="author-text" placeholder="e.g. jobs first this week, caregiving starts Saturday, Sunday off, working late Monday…"></textarea>
       <div class="author-send-row">
         <button class="author-send" id="author-send" onclick="structurePeriod()">Structure this →</button>
@@ -1347,8 +1348,9 @@ async function loadPeriod() {
 
 // ── Focus AUTHORING (Phase 6, Task 3/6B): speak → reflect-back → confirm ─────
 let _authFields = null, _authRaw = "", _projectsCache = null, _pickerSel = [], _pickerFilter = "All";
+let _editMode = false, _editId = null, _editOriginal = null;
 
-function openAuthoring() {
+function _showAuthorPanel() {
   document.getElementById('focus-slot').style.display = 'none';
   document.getElementById('focus-empty').style.display = 'none';
   document.getElementById('focus-author').style.display = 'block';
@@ -1358,7 +1360,36 @@ function openAuthoring() {
   document.getElementById('reflect-mount').innerHTML = '';
   document.getElementById('editor-mount').innerHTML = '';
   document.getElementById('author-send').disabled = false;
+}
+
+function openAuthoring() {
+  _editMode = false; _editId = null; _editOriginal = null;
   _authFields = null; _authRaw = '';
+  document.getElementById('author-label').textContent =
+    'What focus period do you want to set up? Say it in your own words.';
+  document.getElementById('author-send').textContent = 'Structure this →';
+  _showAuthorPanel();
+}
+
+// Task 4: edit the active period. Loads its current fields so June can fix any field directly
+// (route A, no LLM) OR describe a broad change to revise by voice (route B, diff-guarded).
+async function openEditing() {
+  _showAuthorPanel();
+  document.getElementById('author-send').textContent = 'Apply this change →';
+  document.getElementById('author-label').textContent =
+    'Edit this period — fix any field below, or describe a change in your words.';
+  document.getElementById('author-status').textContent = 'Loading the current period…';
+  try {
+    const r = await (await fetch('/api/focus/edit-fields')).json();
+    if (!r.active) { openAuthoring(); return; }  // nothing to edit → fall back to create
+    _editMode = true; _editId = r.id; _authFields = r.fields;
+    _editOriginal = JSON.parse(JSON.stringify(r.fields));  // snapshot for the diff
+    document.getElementById('author-status').textContent = '';
+    renderReflect(r.reflect);
+  } catch (_) {
+    document.getElementById('author-status').textContent = "Couldn't load the period.";
+    document.getElementById('author-status').classList.add('error');
+  }
 }
 function closeAuthoring() { loadPeriod(); }  // restores slot or empty-entry
 
@@ -1373,9 +1404,9 @@ async function structurePeriod() {
   if (!text) { _authStatus('Say a few words about the period first.'); return; }
   _authRaw = text;
   document.getElementById('author-send').disabled = true;
-  _authStatus('Structuring your week…');
+  _authStatus(_editMode ? 'Applying your change…' : 'Structuring your week…');
   try {
-    const res = await fetch('/api/focus/author', {
+    const res = await fetch(_editMode ? '/api/focus/edit' : '/api/focus/author', {
       method: 'POST', headers: {'Content-Type': 'application/json'},
       body: JSON.stringify({text})
     });
@@ -1405,6 +1436,8 @@ async function pollFocusAuth(tries) {
       const r = await (await fetch('/api/focus/result')).json();
       if (r && !r.empty) {
         _authFields = r.fields || {}; _authRaw = r.raw_text || _authRaw;
+        if (r.original) _editOriginal = r.original;   // edit result carries the pre-change snapshot
+        if (r.id) _editId = r.id;
         _authStatus('');
         renderReflect(r.reflect);
         return;
@@ -1422,32 +1455,38 @@ function renderReflect(reflect) {
   const blocking = reflect.blocking || [];
   const rows = (reflect.items || []).map(it => {
     const missing = (it.key === 'dates' && blocking.length);
+    const changed = it.changed ? '<span class="reflect-changed">changed</span>' : '';
     return `<div class="reflect-item">
       <span class="reflect-field">${esc(it.label)}</span>
       <span class="reflect-val-wrap">
-        <span class="reflect-value${missing ? ' missing' : ''}">${esc(it.display)}</span>
+        ${changed}<span class="reflect-value${missing ? ' missing' : ''}">${esc(it.display)}</span>
         <button class="reflect-fix" onclick="openFieldEditor('${it.key}')">fix</button>
       </span></span></div>`;
   }).join('');
   const blockMsg = blocking.length
     ? `<div class="reflect-blocking">Still need: ${esc(blocking.join(', '))} — tap “fix” on Dates to add it.</div>` : '';
+  const isEdit = reflect.is_edit || _editMode;
+  const summaryLine = isEdit ? `${esc(reflect.summary)} — save these changes?`
+                             : `${esc(reflect.summary)} — right?`;
+  const saveLabel = isEdit ? 'Save changes' : 'Looks right — save';
   document.getElementById('reflect-mount').innerHTML = `
     <div class="reflect-box">
-      <div class="reflect-summary">${esc(reflect.summary)} — right?</div>
+      <div class="reflect-summary">${summaryLine}</div>
       ${blockMsg}
       <div class="reflect-items">${rows}</div>
       <div class="reflect-actions">
-        <button class="reflect-confirm" id="reflect-save" onclick="savePeriod()" ${blocking.length ? 'disabled' : ''}>Looks right — save</button>
+        <button class="reflect-confirm" id="reflect-save" onclick="savePeriod()" ${blocking.length ? 'disabled' : ''}>${saveLabel}</button>
       </div>
     </div>`;
 }
 
 async function refreshReflect() {
-  // re-render the deterministic reflect after a per-field fix (server template, no LLM)
+  // re-render the deterministic reflect after a per-field fix (server template, no LLM).
+  // In edit mode pass the original snapshot so the "changed" diff recomputes.
   try {
     const r = await fetch('/api/focus/reflect', {
       method: 'POST', headers: {'Content-Type': 'application/json'},
-      body: JSON.stringify({fields: _authFields})
+      body: JSON.stringify({fields: _authFields, original: _editMode ? _editOriginal : null})
     });
     renderReflect(await r.json());
   } catch (_) { /* keep the current view */ }
@@ -1574,9 +1613,9 @@ async function savePeriod() {
   if (btn) btn.disabled = true;
   _authStatus('Saving…');
   try {
-    const r = await fetch('/api/focus/commit', {
+    const r = await fetch(_editMode ? '/api/focus/update' : '/api/focus/commit', {
       method: 'POST', headers: {'Content-Type': 'application/json'},
-      body: JSON.stringify({fields: _authFields, raw_text: _authRaw})
+      body: JSON.stringify({fields: _authFields, raw_text: _authRaw, id: _editId})
     });
     const data = await r.json();
     if (data.blocked) { _authStatus('Still need: ' + data.blocked.join(', '), true); if (btn) btn.disabled = false; return; }

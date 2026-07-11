@@ -99,7 +99,49 @@ def to_write_properties(fields, objects=None):
     return name, props
 
 
-def reflect_back(fields):
+def _iso(d):
+    """A date object (or None) -> ISO string (or None). For turning a stored period back into
+    the generate-style fields dict the edit flow works on."""
+    return d.isoformat() if d else None
+
+
+def period_to_fields(period):
+    """Inverse of the write path: a loaded period (daily_plan/load_active_items shape, with
+    `foreground`/`paused` resolved to current NAMES and dates as date objects) -> the flat,
+    generate-style fields dict the reflect-back + per-field editors operate on. This is what
+    seeds an EDIT: June starts from the period's current state, not a blank slate."""
+    p = period or {}
+    return {
+        "name": p.get("name") or "",
+        "start_date": _iso(p.get("start")),
+        "end_date": _iso(p.get("end")),
+        "intent": p.get("intent") or "",
+        "availability_start": _iso(p.get("availability_start")),
+        "availability_end": _iso(p.get("availability_end")),
+        "availability_note": p.get("availability_note") or "",
+        "days_off": list(p.get("days_off") or []),
+        "days_on": list(p.get("days_on") or []),
+        "output_format": p.get("output_format") or "Auto",
+        "workday_end": p.get("workday_end"),
+        "foreground_projects": list(p.get("foreground") or []),
+        "paused_projects": list(p.get("paused") or []),
+    }
+
+
+# fields whose change the diff reflect-back should mark (the ones a reflect item represents)
+_ITEM_FIELDS = {
+    "foreground": ("foreground_projects",),
+    "dates": ("start_date", "end_date"),
+    "availability": ("availability_start", "availability_end"),
+    "days_off": ("days_off",),
+    "output_format": ("output_format",),
+    "intent": ("intent",),
+    "paused": ("paused_projects",),
+    "workday_end": ("workday_end",),
+}
+
+
+def reflect_back(fields, original=None):
     """A deterministic confirmation payload over the structured fields — NOT a second LLM call.
 
     Shape (rendered by the overlay): a compressed `summary` (uses the label the generate step
@@ -134,8 +176,17 @@ def reflect_back(fields):
         items.append({"key": "workday_end", "label": "Working until", "edit": "text",
                       "display": f["workday_end"]})
 
+    # Edit mode: mark which items CHANGED vs the period's original state, so an unintended
+    # change (an LLM revision that clobbered an unrelated field) is visible before anything
+    # writes — the confirm gate for a spoken edit is this diff, not blind trust.
+    if original is not None:
+        for it in items:
+            it["changed"] = any((original or {}).get(k) != f.get(k)
+                                for k in _ITEM_FIELDS.get(it["key"], ()))
+
     return {
         "summary": (f.get("name") or "Your focus period"),
         "items": items,
         "blocking": missing_required(f),
+        "is_edit": original is not None,
     }

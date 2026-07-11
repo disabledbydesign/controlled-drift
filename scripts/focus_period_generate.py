@@ -23,13 +23,23 @@ def project_names():
             and o.get("name")]
 
 
-def build_authoring_prompt(raw_text, today, names):
+def build_authoring_prompt(raw_text, today, names, current=None):
     weekday = today.strftime("%A")
     proj_lines = "\n".join("  - " + n for n in names)
+    # Edit mode: the LLM REVISES an existing period rather than authoring from scratch. It gets the
+    # current fields and must keep everything the change doesn't touch — the diff the reflect-back
+    # shows is the safety, so a clobbered field is visible before it writes.
+    edit_block = ""
+    if current is not None:
+        edit_block = f"""
+This is an EDIT of an existing period. Here is its CURRENT configuration as JSON:
+{json.dumps(current, indent=2)}
+Apply ONLY the change her words describe. KEEP every other field exactly as it is above (same dates, foreground, availability, etc. unless she changes them). Output the FULL updated configuration.
+"""
     return f"""You structure a person's spoken description of their week into a "Focus Period" configuration for her task system.
 
 TODAY IS {weekday}, {today.isoformat()}. Resolve EVERY relative date ("Saturday", "this week", "next week", "later this week") from THIS anchor. The current date is given — do not guess it; just do the arithmetic from it.
-
+{edit_block}
 Her projects (use these EXACT names for foreground/paused; only pick ones she clearly implies — leave empty if unsure):
 {proj_lines}
 
@@ -62,10 +72,11 @@ def parse_fields(model_text):
     return json.loads(raw)
 
 
-def generate_focus_period(raw_text, today=None, names=None):
+def generate_focus_period(raw_text, today=None, names=None, current=None):
     """Structure raw_text into proposed Focus Period fields (a dict). Does NOT create anything —
-    June confirms first. Python supplies the date anchor; the LLM structures + resolves dates."""
+    June confirms first. Python supplies the date anchor; the LLM structures + resolves dates.
+    `current` (a fields dict) puts it in EDIT mode: revise that period, keeping untouched fields."""
     today = today or dt.date.today()
     names = names if names is not None else project_names()
-    prompt = build_authoring_prompt(raw_text, today, names)
+    prompt = build_authoring_prompt(raw_text, today, names, current=current)
     return parse_fields(plan_generate.generate(prompt))

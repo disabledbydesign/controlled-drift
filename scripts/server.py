@@ -241,6 +241,22 @@ class Handler(BaseHTTPRequestHandler):
             self._send(200, r if r is not None else {"empty": True})
             return
 
+        if self.path == "/api/focus/edit-fields":
+            # Seed an EDIT (Task 4): the active period's current state as editable fields, so June
+            # starts from what's there (route A: direct per-field fixes, no LLM). No period -> honest.
+            try:
+                _goals, _projects, *_rest, period_ctx = daily_plan.load_active_items(g.get_space_id())
+                period = period_ctx.get("period")
+                if not period:
+                    self._send(200, {"active": False})
+                    return
+                fields = focus_period_adapter.period_to_fields(period)
+                self._send(200, {"active": True, "id": period.get("id"), "fields": fields,
+                                 "reflect": focus_period_adapter.reflect_back(fields)})
+            except Exception as e:
+                self._send(500, {"error": f"edit-fields failed: {e}"})
+            return
+
         if self.path == "/api/settings":
             # The settings view reads this: which backend is live, and for each option the real
             # routing mechanism + concrete model (computed by plan_generate, so the UI shows the
@@ -458,7 +474,8 @@ class Handler(BaseHTTPRequestHandler):
             # synchronous, NO LLM — keeps the reflect template single-source (Python) instead of
             # duplicating date/label formatting in the client.
             body = self._read_json_body()
-            self._send(200, focus_period_adapter.reflect_back(body.get("fields") or {}))
+            self._send(200, focus_period_adapter.reflect_back(
+                body.get("fields") or {}, original=body.get("original")))
             return
 
         if self.path == "/api/focus/commit":
@@ -492,6 +509,69 @@ class Handler(BaseHTTPRequestHandler):
                 parsed = focus_period.parse_focus_period(obj) if obj else None
                 if not parsed or not (parsed["start"] and parsed["end"]):
                     self._send(500, {"error": "period did not persist correctly on read-back"})
+                    return
+            except Exception as e:
+                self._send(500, {"error": f"read-back failed: {e}"})
+                return
+            focus_store.clear()
+            self._send(200, {"ok": True, "id": oid, "name": name})
+            return
+
+        if self.path == "/api/focus/edit":
+            # Route B (Task 4): a broad SPOKEN revision. Async — load the active period, let the LLM
+            # apply the change against it (keeping untouched fields), and reflect back a DIFF (changed
+            # vs stayed) so a clobbered field is visible before anything writes.
+            body = self._read_json_body()
+            text = (body.get("text") or "").strip()
+            if not text:
+                self._send(400, {"error": "editing needs text"})
+                return
+            def _job(t=text):
+                _goals, projects, *_rest, period_ctx = daily_plan.load_active_items(g.get_space_id())
+                period = period_ctx.get("period")
+                if not period:
+                    raise RuntimeError("no active period to edit")
+                current = focus_period_adapter.period_to_fields(period)
+                names = [p["name"] for p in projects]
+                new_fields = focus_period_generate.generate_focus_period(t, names=names, current=current)
+                reflect = focus_period_adapter.reflect_back(new_fields, original=current)
+                focus_store.save_result({"raw_text": t, "fields": new_fields, "original": current,
+                                         "id": period.get("id"), "reflect": reflect})
+            started = _start_focus_generation(_job)
+            self._send(202, {"state": "running", "started": started})
+            return
+
+        if self.path == "/api/focus/update":
+            # Confirm an edit -> UPDATE IN PLACE (Task 4). Same guards as commit, but updates the
+            # existing object (v1 choice) instead of creating a new one.
+            body = self._read_json_body()
+            fields = body.get("fields") or {}
+            raw_text = (body.get("raw_text") or "").strip()
+            oid = (body.get("id") or "").strip()
+            if not oid:
+                self._send(400, {"error": "update needs the period id"})
+                return
+            blocking = focus_period_adapter.missing_required(fields)
+            if blocking:
+                self._send(200, {"blocked": blocking})
+                return
+            try:
+                objects = g.fetch_all_objects(g.get_space_id())
+                name, props = focus_period_adapter.to_write_properties(fields, objects=objects)
+                focus_period_author.update_focus_period(oid, raw_text, name, props,
+                                                        source="config_correction")
+            except ValueError as e:
+                self._send(400, {"error": str(e)})
+                return
+            except Exception as e:
+                self._send(500, {"error": str(e)})
+                return
+            try:
+                data = g.fetch_all_objects(g.get_space_id())
+                obj = next((o for o in data if o.get("id") == oid), None)
+                parsed = focus_period.parse_focus_period(obj) if obj else None
+                if not parsed or not (parsed["start"] and parsed["end"]):
+                    self._send(500, {"error": "edit did not persist correctly on read-back"})
                     return
             except Exception as e:
                 self._send(500, {"error": f"read-back failed: {e}"})

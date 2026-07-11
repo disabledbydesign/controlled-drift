@@ -52,3 +52,13 @@ def author_focus_period(raw_text, name, properties, source="config_authoring"):
     signal_log.log_signal(raw_text, source=source,
                           reference={"kind": "focus_period", "id": oid, "name": name})
     return oid
+
+
+def update_focus_period(object_id, raw_text, name, properties, source="config_correction"):
+    """Update an existing Focus Period IN PLACE (v1 choice — the period object is short-lived;
+    archive-on-lapse is Phase 8) and log June's words as a correction signal. Returns object_id.
+    The caller resolves project names -> ids first, same as the create path."""
+    gsdo_objects.update(object_id, name=name, properties=properties)
+    signal_log.log_signal(raw_text, source=source,
+                          reference={"kind": "focus_period", "id": object_id, "name": name})
+    return object_id
