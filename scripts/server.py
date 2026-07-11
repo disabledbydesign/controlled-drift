@@ -423,22 +423,29 @@ class Handler(BaseHTTPRequestHandler):
             return
 
         if self.path == "/api/logday":
-            # Log Day (Task 5/6C): June's own brain-dump of how the day actually went — NOT "report
-            # what you did." Stored faithfully + UNCATEGORIZED via signal_log (source="log_day"):
-            # no classifier, no rest-type schema carved in now — Phase 7 extracts from the raw text
-            # when it's built (the addendum defers that on purpose). Sync, no LLM. We never narrate
-            # any classification back; the client shows only a plain acknowledgment.
+            # Log (Task 5/6C, extended): June's own faithful record — how the day went AND/OR an
+            # issue she hits in real time to come back to later. She picks which via `tags` (multi-
+            # select: "day", "issue", or both) — a light label, NOT a classifier. Stored verbatim +
+            # uncategorized via signal_log (source="log_day"); the tags ride in reference so a later
+            # "review my issues" pass can find them, and Phase 7 still extracts from the raw text.
+            # Sync, no LLM. We never narrate a classification back — only a plain acknowledgment.
             body = self._read_json_body()
             text = (body.get("text") or "").strip()
             if not text:
-                self._send(400, {"error": "log day needs text"})
+                self._send(400, {"error": "log needs text"})
                 return
+            # keep only known tags; tolerate a malformed (non-list) value; default to the day if
+            # none came through (never lose the entry over a tag)
+            raw_tags = body.get("tags")
+            tags = ([t for t in raw_tags if t in ("day", "issue")]
+                    if isinstance(raw_tags, list) else []) or ["day"]
             try:
-                signal_log.log_signal(text, source="log_day", reference={"kind": "log_day"})
+                signal_log.log_signal(text, source="log_day",
+                                      reference={"kind": "log_day", "tags": tags})
             except Exception as e:
                 self._send(500, {"error": str(e)})
                 return
-            self._send(200, {"ok": True})
+            self._send(200, {"ok": True, "tags": tags})
             return
 
         if self.path == "/api/capture":

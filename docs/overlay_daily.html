@@ -742,7 +742,10 @@ pre.map-output .done-line { color: var(--text-dimmer); opacity: 0.6; }
 .add-mode-toggle { display: flex; gap: 6px; padding: 12px 14px 0; }
 .add-mode-btn { background: var(--surface); border: 1px solid var(--border); border-radius: 6px; color: var(--text-dimmer); font-size: 12px; font-family: inherit; padding: 6px 14px; cursor: pointer; min-height: 34px; transition: background .12s, color .12s, border-color .12s; }
 .add-mode-btn.active { background: var(--gold-dim); border-color: var(--gold); color: var(--gold); }
-@media (prefers-reduced-motion: reduce) { .add-mode-btn { transition: none !important; } }
+.logday-tags { display: flex; gap: 6px; margin: 0 0 8px; }
+.logday-tag { background: var(--surface); border: 1px solid var(--border); border-radius: 14px; color: var(--text-dimmer); font-size: 12px; font-family: inherit; padding: 5px 13px; cursor: pointer; min-height: 32px; transition: background .12s, color .12s, border-color .12s; }
+.logday-tag.active { background: var(--rose-dim); border-color: var(--rose); color: var(--text); }
+@media (prefers-reduced-motion: reduce) { .add-mode-btn, .logday-tag { transition: none !important; } }
 
 textarea.add-field {
   flex: 1;
@@ -1077,7 +1080,7 @@ textarea.add-field:focus { border-color: var(--gold); }
   <div class="tab-panel" id="tab-add">
     <div class="add-mode-toggle">
       <button class="add-mode-btn active" id="mode-task-btn" onclick="setAddMode('task')">Add task</button>
-      <button class="add-mode-btn" id="mode-logday-btn" onclick="setAddMode('logday')">Log day</button>
+      <button class="add-mode-btn" id="mode-logday-btn" onclick="setAddMode('logday')">Log</button>
     </div>
 
     <!-- MODE: add a task / weed a tangle -->
@@ -1103,17 +1106,22 @@ textarea.add-field:focus { border-color: var(--gold); }
       </div>
     </div>
 
-    <!-- MODE: log the day (Task 5/6C) — a faithful, uncategorized dump, never a report -->
+    <!-- MODE: log (Task 5/6C) — a faithful, uncategorized dump: the day AND/OR an issue in the
+         moment, tagged by what it is (multi-select). Never a report, never classified back. -->
     <div id="add-mode-logday" style="display:none">
       <div class="add-section">
-        <div class="add-label">how did today actually go? just say it — no need to report</div>
+        <div class="add-label">log the day, or an issue as it comes up</div>
+        <div class="logday-tags" id="logday-tags">
+          <button type="button" class="logday-tag active" data-tag="day" onclick="toggleLogTag(this)">The day</button>
+          <button type="button" class="logday-tag" data-tag="issue" onclick="toggleLogTag(this)">An issue</button>
+        </div>
         <div class="add-row">
           <textarea class="add-field" id="logday-field"
-            placeholder="e.g. barely worked, migraine most of the day, did the dishes and rested on the couch…"></textarea>
+            placeholder="the day: barely worked, migraine, rested on the couch… — or an issue: the low-energy plan didn't feel right"></textarea>
           <button class="ask-send" onclick="logDay()">Log</button>
         </div>
-        <div class="add-hint">Just for you — a record of the day in your own words. Nothing here is
-          graded, sorted, or judged.</div>
+        <div class="add-hint">Just for you — a faithful record in your own words. Tap what this is
+          (both is fine). Nothing here is graded, sorted, or judged.</div>
       </div>
       <div class="add-status" id="logday-status"></div>
     </div>
@@ -1794,23 +1802,32 @@ function setAddMode(mode) {
   document.getElementById('mode-logday-btn').classList.toggle('active', !isTask);
 }
 
-// Log Day: a faithful, uncategorized dump. Sync, no LLM. We show back ONLY a plain
-// acknowledgment in her own framing — never a classification (being told what KIND of day/rest
-// it was is aversive; any reading of the text stays entirely backend, for Phase 7).
+// Log: a faithful, uncategorized dump — the day AND/OR an issue in the moment, tagged by what
+// it is (multi-select, both is fine). Sync, no LLM. We show back ONLY a plain acknowledgment in
+// her framing — never a classification (being told what KIND of day/rest it was is aversive; any
+// reading of the text stays entirely backend, for Phase 7).
+function toggleLogTag(btn) { btn.classList.toggle('active'); }
+
 async function logDay() {
   const field = document.getElementById('logday-field');
   const text = (field.value || '').trim();
   const status = document.getElementById('logday-status');
-  if (!text) { status.className = 'add-status show'; status.textContent = 'Say a little about the day first.'; return; }
+  const tags = [...document.querySelectorAll('#logday-tags .logday-tag.active')].map(b => b.dataset.tag);
+  if (!text) { status.className = 'add-status show'; status.textContent = 'Say a little first.'; return; }
+  if (!tags.length) { status.className = 'add-status show'; status.textContent = 'Tap “The day”, “An issue”, or both first.'; return; }
   status.className = 'add-status show'; status.textContent = 'logging…';
   try {
     const res = await fetch('/api/logday', {
       method: 'POST', headers: {'Content-Type': 'application/json'},
-      body: JSON.stringify({text})
+      body: JSON.stringify({text, tags})
     });
     if (!res.ok) { status.className = 'add-status show error'; status.textContent = "couldn't save — try again"; return; }
     field.value = '';
-    status.className = 'add-status show'; status.textContent = 'Got it — logged, just as you said.';
+    status.className = 'add-status show';
+    // an issue is something to return to — acknowledge that; otherwise the plain day-log ack
+    status.textContent = tags.includes('issue')
+      ? 'Got it — logged. You can come back to it.'
+      : 'Got it — logged, just as you said.';
   } catch (_) {
     status.className = 'add-status show error'; status.textContent = "couldn't reach the server";
   }
