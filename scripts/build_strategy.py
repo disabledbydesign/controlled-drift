@@ -9,8 +9,12 @@ def build_strategy():
     p_what_for = g.ensure_property("What for", "text")
     p_learning = g.ensure_property("Learning notes", "text")
     p_context  = g.ensure_property("Context", "text")  # reused
+    # When a strategy applies. "Always" = read into every daily plan (the general strategies).
+    # A state value ("Low energy", …) = a TRIGGERED strategy, pulled in only when that state is
+    # active (e.g. the Low-energy button) — so state-specific rules don't colour every plan.
+    p_applies  = g.ensure_property("Applies when", "select", ["Always", "Low energy"])
     key = g.ensure_type("Strategy", "Strategies",
-                        [p_status, p_what_for, p_learning, p_context])
+                        [p_status, p_what_for, p_learning, p_context, p_applies])
     print(f"[ok] Strategy type ready: key={key}")
     return key
 

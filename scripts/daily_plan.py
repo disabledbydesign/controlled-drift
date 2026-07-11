@@ -133,9 +133,14 @@ def load_active_items(sid):
         elif tkey == "gsdo_strategy":
             status = (pv("gsdo_status", "select") or {}).get("name")
             if status in (None, "Active"):
+                # "Applies when" has an Anytype-generated key — read by display name, like Side.
+                s_pbn = {p.get("name"): p for p in obj.get("properties", [])}
+                aw_sel = (s_pbn.get("Applies when", {}) or {}).get("select") or {}
+                applies_when = aw_sel.get("name") if isinstance(aw_sel, dict) else None
                 strategies.append({"id": oid, "name": name,
                                     "what_for": pv("gsdo_what_for", "text"),
-                                    "context": pv("gsdo_context", "text")})
+                                    "context": pv("gsdo_context", "text"),
+                                    "applies_when": applies_when or "Always"})
 
         elif tkey == "gsdo_recurring":
             recurrings.append(obj)
@@ -175,6 +180,27 @@ def load_neglected(days=3):
 
 # --- Context formatting for the LLM ----------------------------------------
 
+# --- Capacity → which triggered strategies activate --------------------------
+# A capacity signal (the "Low energy" button sends "low-energy"; free text is matched loosely)
+# maps to a STATE. A Strategy whose "Applies when" state matches gets pulled in as a firm
+# directive; strategies marked "Always" are read every day as before. This is the wiring that
+# makes capacity actually reshape the plan (June, 2026-07-11) — it points a state at HER authored
+# rule instead of a vague "capacity is low" line the model could ignore.
+_LOW_MARKERS = ("low-energy", "low energy", "tired", "exhausted", "drained", "wiped",
+                "no energy", "low spoons", "lying down", "in bed", "in pain", "hurting",
+                "rough", "bad day", "overwhelmed", "burnt out", "burned out", "depleted")
+_APPLIES_TO_LEVEL = {"Low energy": "low"}  # extend as June names more states (Sprint→high, …)
+
+
+def capacity_level(capacity):
+    """Map a capacity signal to a state: 'low' or 'normal'. Deterministic keyword read;
+    'normal' when unclear, so no triggered strategy fires unless the signal is clear."""
+    if not capacity:
+        return "normal"
+    c = str(capacity).lower()
+    return "low" if any(m in c for m in _LOW_MARKERS) else "normal"
+
+
 def format_context(goals, projects, tasks, strategies, today_recurrings, neglected, capacity,
                    period=None, is_off=False, in_window=False):
     """Build the context block that gets injected into the daily_list.md prompt."""
@@ -203,9 +229,28 @@ def format_context(goals, projects, tasks, strategies, today_recurrings, neglect
                          "as a normal work day.")
         lines.append("")
 
-    if strategies:
+    # Split strategies: always-on (read every day) vs. state-triggered (only when their state
+    # is active). A triggered strategy is injected as a FIRM directive so it actually reshapes
+    # the plan, rather than sitting in the passive list the model tends to under-weight.
+    level = capacity_level(capacity)
+    always_strats = [s for s in strategies if (s.get("applies_when") or "Always") == "Always"]
+    triggered_strats = [s for s in strategies
+                        if level != "normal" and _APPLIES_TO_LEVEL.get(s.get("applies_when")) == level]
+
+    if triggered_strats:
+        lines.append(f"## TODAY'S CAPACITY IS {level.upper()} — apply these as FIRM constraints on "
+                     "the whole plan (June authored them for exactly this state; honor them over the "
+                     "usual ordering):")
+        for s in triggered_strats:
+            parts = [s["name"]]
+            if s.get("what_for"): parts.append(s["what_for"])
+            if s.get("context"): parts.append(s["context"])
+            lines.append("- " + " — ".join(parts))
+        lines.append("")
+
+    if always_strats:
         lines.append("## Active strategies")
-        for s in strategies:
+        for s in always_strats:
             desc = s.get("what_for") or s.get("context") or ""
             lines.append(f"- {s['name']}" + (f": {desc}" if desc else ""))
         lines.append("")
