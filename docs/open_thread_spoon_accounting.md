@@ -1,6 +1,6 @@
 # Open thread — spoon accounting (a parameters doc, not a scalar field)
 
-*Status: **open design thread, not built.** Surfaced session 24 (2026-07-02) while capturing the strategy "Batch errands by spoon-cost, not count." Parked deliberately — it wants its own design session. This doc preserves the specifics so we don't reinvent them.*
+*Status: **open design thread, not built.** Surfaced session 24 (2026-07-02) while capturing the strategy "Batch errands by spoon-cost, not count." Parked deliberately — it wants its own design session. This doc preserves the specifics so we don't reinvent them. **Updated 2026-07-11 (session 27): added the cognitive-load axis (light vs heavy thinking) below.***
 
 ---
 
@@ -42,7 +42,17 @@ Worked example (June's): the grocery store is **high-spoon** (leaving house + de
 Spoon-weight is **cost AND restoration**. Some activities *restore* spoons rather than draining them — walks, and the **7 types of rest** (see the "Honor the 7 types of rest" Strategy + the addendum's wellbeing side). So the axis is not cost-only.
 
 - A scale like **High / Medium / Recovery** could work (recovery = restores spoons), but it **lacks granularity** and its shape should **emerge from real data**, not be imposed up front.
-- May **interact with other categories** — e.g. focused-concentration tasks are their own kind of load.
+- May **interact with other categories** — e.g. focused-concentration tasks are their own kind of load (now named as its own axis below).
+
+## The cognitive-load axis — light vs heavy thinking (added 2026-07-11, session 27)
+
+Spoon-weight isn't only physical / sensory / logistical. A separate, independent axis is **how much focused concentration a task demands** — **light vs heavy thinking**. A design conversation or a paper revision is **heavy** (sustained deep attention); dishes, texting a friend, a pharmacy pickup are **light**. This is the "focused-concentration tasks are their own kind of load" note above, named as its own axis.
+
+**Why it's independent — don't fold it into the physical factors.** The grocery-store example is high physical/sensory spoon but **light** thinking. A design session is **low** physical (can be done lying down) but **heavy** thinking. So "lying-down but exhausting" and "on-your-feet but mindless" are both real and non-contradictory — the same shape as "close but exhausting." This is why one capacity dial can't hold it: **body-demand and mind-demand are two separate dials**, and a low-body day is not the same as a low-thinking day. (Grounded in the real data: the "Can-be-done-lying-down" access tag sits on many of the *heaviest*-thinking tasks — design, writing, metabolism.)
+
+**Payoff for planning.** On a low-thinking day the plan should lean toward light-thinking tasks and hold the heavy design/writing for a high-capacity window (the protected morning deep-thinking anchor from the "go slow in the morning" strategy) — independent of how physically heavy the day is.
+
+**Same guardrails as the rest of this doc.** Light/heavy is a **low-granularity factor the LLM applies, not a scalar field June maintains** (guard #3; the anti-field principle). It is assessable from the task itself — a design conversation is self-evidently heavy — so the LLM can read it per-task rather than June tagging each one. Whether "light / heavy" is the right granularity (or wants a middle value, or emerges differently) should settle from real data, not be fixed up front.
 
 ## Guardrails for the eventual design session
 
