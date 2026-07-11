@@ -34,6 +34,12 @@ import capture_generate
 import session_store
 import orient_map
 import period_view
+import focus_period
+import focus_period_generate
+import focus_period_adapter
+import focus_period_author
+import focus_store
+import gsdo_anytype as g
 import cd_paths
 
 # The LLM backends the overlay can switch between live (mirrors plan_generate's accepted set).
@@ -81,6 +87,27 @@ def _start_generation(fn):
         except Exception as e:
             # Surface the failure to the poller honestly — never a silent dead end.
             plan_store.set_gen_status("error", error=str(e))
+        finally:
+            _gen_lock.release()
+
+    threading.Thread(target=worker, daemon=True).start()
+    return True
+
+
+def _start_focus_generation(fn):
+    """Like _start_generation but tracks the FOCUS authoring status (separate surface, so an
+    authoring run never reads as a plan generation to the Today poller). Shares the one _gen_lock
+    so plan-gen and focus-gen stay mutually exclusive — one LLM job at a time."""
+    if not _gen_lock.acquire(blocking=False):
+        return False
+    focus_store.set_status("running")
+
+    def worker():
+        try:
+            fn()
+            focus_store.set_status("idle")
+        except Exception as e:
+            focus_store.set_status("error", error=str(e))
         finally:
             _gen_lock.release()
 
@@ -184,6 +211,19 @@ class Handler(BaseHTTPRequestHandler):
                 self._send(200, period_view.render_period())
             except Exception as e:
                 self._send(500, {"error": f"period render failed: {e}"})
+            return
+
+        if self.path == "/api/focus/status":
+            # The authoring poller: is the structure step still running, did it land, did it fail?
+            st = focus_store.get_status()
+            st["result_ready"] = focus_store.load_result() is not None
+            self._send(200, st)
+            return
+
+        if self.path == "/api/focus/result":
+            # The structured fields + deterministic reflect-back payload, for the confirm surface.
+            r = focus_store.load_result()
+            self._send(200, r if r is not None else {"empty": True})
             return
 
         if self.path == "/api/settings":
@@ -380,6 +420,63 @@ class Handler(BaseHTTPRequestHandler):
             self._send(200, {"undone": archived})
             return
 
+        if self.path == "/api/focus/author":
+            body = self._read_json_body()
+            text = (body.get("text") or "").strip()
+            if not text:
+                self._send(400, {"error": "authoring needs text"})
+                return
+            # Async: the structure step is an LLM call (~30s). Kick it off; the overlay polls
+            # /api/focus/status, then reads /api/focus/result. Shares the one lock — if a plan
+            # generation (or another authoring) is already running, `started` is False and the UI
+            # shows "one thing at a time," never a silent hang.
+            def _job(t=text):
+                fields = focus_period_generate.generate_focus_period(t)
+                reflect = focus_period_adapter.reflect_back(fields)
+                focus_store.save_result({"raw_text": t, "fields": fields, "reflect": reflect})
+            started = _start_focus_generation(_job)
+            self._send(202, {"state": "running", "started": started})
+            return
+
+        if self.path == "/api/focus/commit":
+            # Confirm -> write. The client sends the (possibly per-field-edited) structured fields.
+            body = self._read_json_body()
+            fields = body.get("fields") or {}
+            raw_text = (body.get("raw_text") or "").strip()
+            # Guard the silent failure: a period with no start/end never activates and nothing
+            # tells her. Block the write and surface exactly what's missing (Needs-Clarifying).
+            blocking = focus_period_adapter.missing_required(fields)
+            if blocking:
+                self._send(200, {"blocked": blocking})
+                return
+            # Sync write (like /api/capture/undo) — avoids colliding with the single _gen_lock.
+            try:
+                objects = g.fetch_all_objects(g.get_space_id())
+                name, props = focus_period_adapter.to_write_properties(fields, objects=objects)
+                oid = focus_period_author.author_focus_period(
+                    raw_text, name, props, source="config_authoring")
+            except ValueError as e:   # an unknown project name — never silently dropped
+                self._send(400, {"error": str(e)})
+                return
+            except Exception as e:
+                self._send(500, {"error": str(e)})
+                return
+            # Read-back to PROVE it persisted before confirming success (confirmation discipline:
+            # a good answer is not a saved object).
+            try:
+                data = g.fetch_all_objects(g.get_space_id())
+                obj = next((o for o in data if o.get("id") == oid), None)
+                parsed = focus_period.parse_focus_period(obj) if obj else None
+                if not parsed or not (parsed["start"] and parsed["end"]):
+                    self._send(500, {"error": "period did not persist correctly on read-back"})
+                    return
+            except Exception as e:
+                self._send(500, {"error": f"read-back failed: {e}"})
+                return
+            focus_store.clear()
+            self._send(200, {"ok": True, "id": oid, "name": name})
+            return
+
         self._send(404, {"error": f"no route {self.path}"})
 
     # quieter logging — one line per request, no client noise
@@ -397,6 +494,7 @@ def main():
     srv = ThreadingHTTPServer((HOST, PORT), Handler)
     print(f"Controlled Drift overlay → http://{HOST}:{PORT}")
     print("  GET /api/plan · /api/map · /api/period · /api/actions · /api/status · /api/session · /api/settings")
+    print("  GET /api/focus/status · /api/focus/result   POST /api/focus/author (async) · /api/focus/commit")
     print("  POST /api/refresh · /api/negotiate · /api/capture (async)")
     print("  POST /api/complete · /api/uncomplete · /api/capture/undo · /api/settings")
     print("  Ctrl-C to stop.")
