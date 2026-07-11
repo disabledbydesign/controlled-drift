@@ -208,6 +208,76 @@ body {
   .focus-toggle, .focus-chevron, .focus-edit-btn, .period-card-edit, .add-period-btn { transition: none !important; }
 }
 
+/* ══ TODAY: focus AUTHORING (Phase 6, Task 3/6B) — speak → reflect-back → confirm ══ */
+.focus-author { background: var(--rose-bg); border-bottom: 1px solid var(--rose-border); padding: 13px 14px 14px; }
+.author-back { font-size: 11px; color: var(--rose-dim); margin-bottom: 10px; cursor: pointer; background: none; border: none; font-family: inherit; padding: 0; display: flex; align-items: center; gap: 4px; }
+.author-back:hover { color: var(--rose); }
+.author-label { font-size: 13px; color: var(--rose); margin-bottom: 9px; line-height: 1.4; }
+.author-field { width: 100%; background: var(--surface); border: 1px solid var(--rose-border); border-radius: 8px; padding: 10px 12px; color: var(--text); font-size: 13px; font-family: inherit; resize: none; min-height: 76px; outline: none; line-height: 1.45; }
+.author-field::placeholder { color: var(--text-dimmer); }
+.author-field:focus { border-color: var(--rose-dim); }
+.author-send-row { display: flex; justify-content: flex-end; margin-top: 8px; }
+.author-send { background: var(--rose-dim); border: 1px solid var(--rose); border-radius: 8px; color: var(--rose); font-size: 13px; font-family: inherit; padding: 8px 16px; cursor: pointer; min-height: 36px; transition: background .12s, color .12s; }
+.author-send:hover { background: var(--rose); color: var(--bg); }
+.author-send:disabled { opacity: .5; cursor: default; }
+.author-status { font-size: 12px; color: var(--text-dim); margin-top: 10px; min-height: 16px; }
+.author-status.error { color: var(--rose); }
+
+/* reflect-back */
+.reflect-box { margin-top: 14px; background: var(--surface); border: 1px solid var(--border); border-radius: 10px; overflow: hidden; }
+.reflect-summary { padding: 11px 14px; font-size: 13px; color: var(--text); line-height: 1.45; }
+.reflect-blocking { padding: 0 14px 10px; font-size: 12px; color: var(--rose); line-height: 1.4; }
+.reflect-items { padding: 0 14px 4px; }
+.reflect-item { display: flex; align-items: baseline; justify-content: space-between; padding: 6px 0; border-bottom: 1px solid rgba(72,72,74,.3); gap: 8px; }
+.reflect-item:last-child { border-bottom: none; }
+.reflect-field { font-size: 12px; color: var(--text-dim); flex-shrink: 0; }
+.reflect-val-wrap { display: flex; align-items: baseline; gap: 6px; justify-content: flex-end; text-align: right; }
+.reflect-value { font-size: 12px; color: var(--text); }
+.reflect-value.missing { color: var(--rose); }
+.reflect-fix { font-size: 11px; color: var(--gold); background: none; border: none; font-family: inherit; cursor: pointer; padding: 0; flex-shrink: 0; }
+.reflect-actions { border-top: 1px solid var(--border); padding: 10px 14px; display: flex; gap: 8px; align-items: center; justify-content: flex-end; }
+.reflect-confirm { background: var(--gold-dim); border: 1px solid var(--gold); border-radius: 8px; color: var(--gold); font-size: 13px; font-family: inherit; padding: 7px 14px; cursor: pointer; min-height: 36px; transition: background .12s, color .12s; }
+.reflect-confirm:hover:not(:disabled) { background: var(--gold); color: var(--bg); }
+.reflect-confirm:disabled { opacity: .45; cursor: default; }
+
+/* per-field editor (deterministic — no LLM) */
+.field-editor { margin-top: 12px; background: var(--surface); border: 1px solid var(--rose-border); border-radius: 10px; padding: 12px 14px; }
+.fe-head { display: flex; align-items: center; justify-content: space-between; margin-bottom: 10px; }
+.fe-title { font-size: 13px; color: var(--rose); }
+.fe-done { background: var(--gold-dim); border: 1px solid var(--gold); border-radius: 8px; color: var(--gold); font-size: 12px; font-family: inherit; padding: 5px 12px; cursor: pointer; min-height: 32px; }
+.fe-done:hover { background: var(--gold); color: var(--bg); }
+.fe-row { display: flex; align-items: center; gap: 8px; margin-bottom: 8px; }
+.fe-label { font-size: 11px; color: var(--text-dim); width: 44px; flex-shrink: 0; }
+.fe-input { flex: 1; background: var(--bg); border: 1px solid var(--border); border-radius: 6px; padding: 7px 10px; color: var(--text); font-size: 13px; font-family: inherit; outline: none; }
+.fe-input:focus { border-color: var(--rose-dim); }
+textarea.fe-input { resize: vertical; min-height: 64px; line-height: 1.45; }
+
+/* project selector: chips + search + grouped list */
+.chip-label { font-size: 10px; color: var(--text-dimmer); text-transform: uppercase; letter-spacing: .08em; margin-bottom: 7px; }
+.chip-row { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 12px; }
+.chip { display: inline-flex; align-items: center; gap: 6px; background: var(--rose-dim); border: 1px solid var(--rose-border); border-radius: 14px; padding: 4px 6px 4px 11px; font-size: 12px; color: var(--text); }
+.chip-x { background: none; border: none; color: var(--rose); font-size: 15px; line-height: 1; cursor: pointer; padding: 0 2px; font-family: inherit; }
+.chip-x:hover { color: var(--text); }
+.picker-search { width: 100%; background: var(--bg); border: 1px solid var(--border); border-radius: 8px; padding: 8px 12px; color: var(--text); font-size: 13px; font-family: inherit; outline: none; margin-bottom: 10px; }
+.picker-search::placeholder { color: var(--text-dimmer); }
+.picker-filter { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; margin-bottom: 10px; }
+.pf-btn { background: var(--bg); border: 1px solid var(--border); border-radius: 6px; color: var(--text-dimmer); font-size: 11px; font-family: inherit; padding: 5px 11px; cursor: pointer; transition: all .12s; min-height: 32px; }
+.pf-btn.active { background: var(--rose-dim); border-color: var(--rose); color: var(--text); }
+.pf-stub { border-style: dashed; }
+.picker-group-label { font-size: 10px; color: var(--text-dimmer); text-transform: uppercase; letter-spacing: .08em; padding: 8px 0 4px; }
+.picker-list { max-height: 260px; overflow-y: auto; }
+.picker-row { display: flex; align-items: center; gap: 10px; padding: 8px 0; border-bottom: 1px solid rgba(72,72,74,.2); cursor: pointer; min-height: 40px; }
+.picker-row:last-child { border-bottom: none; }
+.picker-check { width: 17px; height: 17px; border: 1.5px solid var(--border); border-radius: 5px; flex-shrink: 0; position: relative; transition: all .12s; }
+.picker-row.on .picker-check { background: var(--rose-dim); border-color: var(--rose); }
+.picker-row.on .picker-check::after { content: "✓"; position: absolute; inset: 0; display: flex; align-items: center; justify-content: center; font-size: 11px; color: var(--text); }
+.picker-name { font-size: 13px; color: var(--text); flex: 1; line-height: 1.3; }
+.picker-eng { font-size: 11px; color: var(--text-dimmer); flex-shrink: 0; }
+.picker-empty { font-size: 12px; color: var(--text-dimmer); padding: 10px 0; font-style: italic; }
+@media (prefers-reduced-motion: reduce) {
+  .author-send, .reflect-confirm, .fe-done, .pf-btn, .picker-check { transition: none !important; }
+}
+
 /* ── TODAY: woven frame ── */
 .woven-frame {
   padding: 13px 14px 11px;
@@ -807,8 +877,34 @@ textarea.add-field:focus { border-color: var(--gold); }
           <p class="period-card-front" id="focus-card-front" style="display:none"><strong>In front:</strong> <span id="focus-card-front-list"></span></p>
           <p class="period-card-note" id="focus-card-note" style="display:none"></p>
         </div>
-        <button class="add-period-btn" onclick="focusNotYet()">+ Set up next period</button>
+        <button class="add-period-btn" onclick="openAuthoring()">+ Set up next period</button>
       </div>
+    </div>
+
+    <!-- No active period → offer to author one (Task 3). Shown by loadPeriod when active:false. -->
+    <div class="focus-slot" id="focus-empty" style="display:none">
+      <div class="focus-header">
+        <span class="focus-period-name" style="flex:1">No focus period set for today</span>
+      </div>
+      <div class="focus-toggle-row">
+        <button class="focus-toggle" onclick="openAuthoring()">
+          Set up a focus period
+          <span class="focus-chevron" aria-hidden="true">›</span>
+        </button>
+      </div>
+    </div>
+
+    <!-- Authoring panel (Task 3/6B): speak → reflect-back → confirm. Hidden until opened. -->
+    <div class="focus-author" id="focus-author" style="display:none">
+      <button class="author-back" onclick="closeAuthoring()">‹ Back</button>
+      <p class="author-label">What focus period do you want to set up? Say it in your own words.</p>
+      <textarea class="author-field" id="author-text" placeholder="e.g. jobs first this week, caregiving starts Saturday, Sunday off, working late Monday…"></textarea>
+      <div class="author-send-row">
+        <button class="author-send" id="author-send" onclick="structurePeriod()">Structure this →</button>
+      </div>
+      <div class="author-status" id="author-status" role="status" aria-live="polite"></div>
+      <div id="reflect-mount"></div>
+      <div id="editor-mount"></div>
     </div>
 
     <!-- Woven frame: the narrative context that makes the plan make sense.
@@ -1219,7 +1315,14 @@ async function loadPeriod() {
       return;
     }
     const p = await res.json();
-    if (!p.active) return;
+    // three-way state: the read-only slot (active), the "set one up" entry (none), authoring (open)
+    document.getElementById('focus-author').style.display = 'none';
+    if (!p.active) {
+      document.getElementById('focus-slot').style.display = 'none';
+      document.getElementById('focus-empty').style.display = 'block';
+      return;
+    }
+    document.getElementById('focus-empty').style.display = 'none';
     document.getElementById('focus-name').textContent = p.name || '';
     document.getElementById('focus-dates').textContent = p.date_range || '';
     document.getElementById('focus-card-dates').textContent = p.date_range_full || '';
@@ -1240,6 +1343,247 @@ async function loadPeriod() {
   } catch (_) {
     // static preview / no server — leave the slot hidden
   }
+}
+
+// ── Focus AUTHORING (Phase 6, Task 3/6B): speak → reflect-back → confirm ─────
+let _authFields = null, _authRaw = "", _projectsCache = null, _pickerSel = [], _pickerFilter = "All";
+
+function openAuthoring() {
+  document.getElementById('focus-slot').style.display = 'none';
+  document.getElementById('focus-empty').style.display = 'none';
+  document.getElementById('focus-author').style.display = 'block';
+  document.getElementById('author-text').value = '';
+  document.getElementById('author-status').textContent = '';
+  document.getElementById('author-status').classList.remove('error');
+  document.getElementById('reflect-mount').innerHTML = '';
+  document.getElementById('editor-mount').innerHTML = '';
+  document.getElementById('author-send').disabled = false;
+  _authFields = null; _authRaw = '';
+}
+function closeAuthoring() { loadPeriod(); }  // restores slot or empty-entry
+
+function _authStatus(msg, isErr) {
+  const s = document.getElementById('author-status');
+  s.textContent = msg || '';
+  s.classList.toggle('error', !!isErr);
+}
+
+async function structurePeriod() {
+  const text = document.getElementById('author-text').value.trim();
+  if (!text) { _authStatus('Say a few words about the period first.'); return; }
+  _authRaw = text;
+  document.getElementById('author-send').disabled = true;
+  _authStatus('Structuring your week…');
+  try {
+    const res = await fetch('/api/focus/author', {
+      method: 'POST', headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify({text})
+    });
+    const data = await res.json();
+    if (data.started === false) {
+      _authStatus('One thing at a time — the system is busy. Try again in a moment.');
+      document.getElementById('author-send').disabled = false;
+      return;
+    }
+    pollFocusAuth(0);
+  } catch (_) {
+    _authStatus("Couldn't reach the server.", true);
+    document.getElementById('author-send').disabled = false;
+  }
+}
+
+async function pollFocusAuth(tries) {
+  if (tries > 40) { _authStatus('This is taking longer than expected — try again.', true);
+                    document.getElementById('author-send').disabled = false; return; }
+  try {
+    const st = await (await fetch('/api/focus/status')).json();
+    if (st.state === 'error') {
+      _authStatus('Structuring failed: ' + (st.error || 'unknown') , true);
+      document.getElementById('author-send').disabled = false; return;
+    }
+    if (st.state === 'idle' && st.result_ready) {
+      const r = await (await fetch('/api/focus/result')).json();
+      if (r && !r.empty) {
+        _authFields = r.fields || {}; _authRaw = r.raw_text || _authRaw;
+        _authStatus('');
+        renderReflect(r.reflect);
+        return;
+      }
+    }
+    setTimeout(() => pollFocusAuth(tries + 1), 2500);
+  } catch (_) {
+    setTimeout(() => pollFocusAuth(tries + 1), 2500);
+  }
+}
+
+function renderReflect(reflect) {
+  document.getElementById('author-send').disabled = false;
+  document.getElementById('editor-mount').innerHTML = '';
+  const blocking = reflect.blocking || [];
+  const rows = (reflect.items || []).map(it => {
+    const missing = (it.key === 'dates' && blocking.length);
+    return `<div class="reflect-item">
+      <span class="reflect-field">${esc(it.label)}</span>
+      <span class="reflect-val-wrap">
+        <span class="reflect-value${missing ? ' missing' : ''}">${esc(it.display)}</span>
+        <button class="reflect-fix" onclick="openFieldEditor('${it.key}')">fix</button>
+      </span></span></div>`;
+  }).join('');
+  const blockMsg = blocking.length
+    ? `<div class="reflect-blocking">Still need: ${esc(blocking.join(', '))} — tap “fix” on Dates to add it.</div>` : '';
+  document.getElementById('reflect-mount').innerHTML = `
+    <div class="reflect-box">
+      <div class="reflect-summary">${esc(reflect.summary)} — right?</div>
+      ${blockMsg}
+      <div class="reflect-items">${rows}</div>
+      <div class="reflect-actions">
+        <button class="reflect-confirm" id="reflect-save" onclick="savePeriod()" ${blocking.length ? 'disabled' : ''}>Looks right — save</button>
+      </div>
+    </div>`;
+}
+
+async function refreshReflect() {
+  // re-render the deterministic reflect after a per-field fix (server template, no LLM)
+  try {
+    const r = await fetch('/api/focus/reflect', {
+      method: 'POST', headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify({fields: _authFields})
+    });
+    renderReflect(await r.json());
+  } catch (_) { /* keep the current view */ }
+}
+
+// ── per-field editors (deterministic — no re-speaking, no LLM) ───────────────
+function _editorShell(title, key, inner) {
+  return `<div class="field-editor">
+    <div class="fe-head"><span class="fe-title">${esc(title)}</span>
+      <button class="fe-done" onclick="closeFieldEditor('${key}')">Done</button></div>
+    ${inner}</div>`;
+}
+function _dateRow(label, id, val) {
+  return `<div class="fe-row"><span class="fe-label">${esc(label)}</span>
+    <input type="date" class="fe-input" id="${id}" value="${val || ''}"></div>`;
+}
+function _val(id) { const e = document.getElementById(id); return e ? e.value : ''; }
+
+function openFieldEditor(key) {
+  const m = document.getElementById('editor-mount');
+  const f = _authFields || {};
+  if (key === 'dates') {
+    m.innerHTML = _editorShell('Dates', key,
+      _dateRow('Start', 'fe-start', f.start_date) + _dateRow('End', 'fe-end', f.end_date));
+  } else if (key === 'availability') {
+    m.innerHTML = _editorShell('Availability window', key,
+      _dateRow('From', 'fe-as', f.availability_start) + _dateRow('To', 'fe-ae', f.availability_end) +
+      `<p class="picker-empty">Leave both blank for no window.</p>`);
+  } else if (key === 'output_format') {
+    m.innerHTML = _editorShell('Plan shape', key,
+      `<select class="fe-input" id="fe-shape">
+        <option>Auto</option><option>Clock schedule</option><option>Priority list</option></select>`);
+    document.getElementById('fe-shape').value = f.output_format || 'Auto';
+  } else if (key === 'intent') {
+    m.innerHTML = _editorShell('Intent', key, `<textarea class="fe-input" id="fe-intent"></textarea>`);
+    document.getElementById('fe-intent').value = f.intent || '';
+  } else if (key === 'days_off') {
+    _renderDaysOff();
+  } else if (key === 'foreground' || key === 'paused') {
+    _renderPicker(key);
+  }
+  m.scrollIntoView({behavior: 'smooth', block: 'nearest'});
+}
+
+function closeFieldEditor(key) {
+  const f = _authFields;
+  if (key === 'dates') { f.start_date = _val('fe-start') || null; f.end_date = _val('fe-end') || null; }
+  else if (key === 'availability') { f.availability_start = _val('fe-as') || null; f.availability_end = _val('fe-ae') || null; }
+  else if (key === 'output_format') { f.output_format = _val('fe-shape') || 'Auto'; }
+  else if (key === 'intent') { f.intent = document.getElementById('fe-intent').value; }
+  // days_off / foreground / paused write into _authFields as they're edited
+  document.getElementById('editor-mount').innerHTML = '';
+  refreshReflect();
+}
+
+// days-off: current dates as removable chips + one date input to add
+function _renderDaysOff() {
+  const f = _authFields; f.days_off = f.days_off || [];
+  const chips = f.days_off.map((d, i) =>
+    `<span class="chip">${esc(d)} <button class="chip-x" onclick="_rmDayOff(${i})" aria-label="Remove">×</button></span>`).join('');
+  document.getElementById('editor-mount').innerHTML = _editorShell('Days off', 'days_off',
+    `<div class="chip-row">${chips || '<span class="picker-empty">Weekends (default)</span>'}</div>
+     <div class="fe-row"><input type="date" class="fe-input" id="fe-newoff">
+       <button class="fe-done" onclick="_addDayOff()">Add</button></div>`);
+}
+function _addDayOff() { const v = _val('fe-newoff'); if (v && !_authFields.days_off.includes(v)) _authFields.days_off.push(v); _authFields.days_off.sort(); _renderDaysOff(); }
+function _rmDayOff(i) { _authFields.days_off.splice(i, 1); _renderDaysOff(); }
+
+// project selector: chips + search + category-grouped list (category is a DATA-DRIVEN stub)
+async function _loadProjects() {
+  if (_projectsCache) return _projectsCache;
+  try { _projectsCache = (await (await fetch('/api/projects')).json()).projects || []; }
+  catch (_) { _projectsCache = []; }
+  return _projectsCache;
+}
+async function _renderPicker(key) {
+  const f = _authFields;
+  const listKey = key === 'foreground' ? 'foreground_projects' : 'paused_projects';
+  _pickerSel = (f[listKey] || []).slice();
+  _pickerFilter = 'All';
+  await _loadProjects();
+  _paintPicker(key, listKey, '');
+}
+function _paintPicker(key, listKey, search) {
+  const title = key === 'foreground' ? 'In front this period' : 'Paused this period';
+  // data-driven category values (stub: whatever Side values exist) + uncategorized
+  const cats = [...new Set(_projectsCache.map(p => p.side).filter(Boolean))];
+  const filters = ['All', ...cats].map(c =>
+    `<button class="pf-btn${_pickerFilter === c ? ' active' : ''}${c !== 'All' ? ' pf-stub' : ''}"
+       onclick="_setPickerFilter('${key}','${listKey}','${c}')">${esc(c)}</button>`).join('');
+  const chips = _pickerSel.map((n, i) =>
+    `<span class="chip">${esc(n)} <button class="chip-x" onclick="_pickerRemove('${key}','${listKey}',${i})" aria-label="Remove">×</button></span>`).join('');
+  const s = (search || '').toLowerCase();
+  let shown = _projectsCache.filter(p =>
+    (_pickerFilter === 'All' || p.side === _pickerFilter) &&
+    (!s || (p.name || '').toLowerCase().includes(s)));
+  const rows = shown.map(p => {
+    const on = _pickerSel.includes(p.name);
+    // pass the numeric index into _projectsCache (never the free-text name through an attribute)
+    const idx = _projectsCache.indexOf(p);
+    return `<div class="picker-row${on ? ' on' : ''}" onclick="_pickerToggle('${key}','${listKey}',${idx})">
+      <span class="picker-check"></span><span class="picker-name">${esc(p.name)}</span>
+      ${p.engagement ? `<span class="picker-eng">${esc(p.engagement)}</span>` : ''}</div>`;
+  }).join('') || '<div class="picker-empty">No projects match.</div>';
+  document.getElementById('editor-mount').innerHTML = _editorShell(title, key,
+    `<p class="chip-label">Chosen — ${_pickerSel.length}</p>
+     <div class="chip-row">${chips || '<span class="picker-empty">none yet</span>'}</div>
+     <input class="picker-search" type="text" placeholder="Search projects…" oninput="_paintPicker('${key}','${listKey}',this.value)" value="${esc(search || '')}">
+     <div class="picker-filter">${filters}</div>
+     <div class="picker-list">${rows}</div>`);
+}
+function _setPickerFilter(key, listKey, c) { _pickerFilter = c; _paintPicker(key, listKey, ''); }
+function _pickerToggle(key, listKey, idx) {
+  const p = _projectsCache[idx]; if (!p) return;
+  const i = _pickerSel.indexOf(p.name);
+  if (i >= 0) _pickerSel.splice(i, 1); else _pickerSel.push(p.name);
+  _authFields[listKey] = _pickerSel.slice();
+  _paintPicker(key, listKey, '');
+}
+function _pickerRemove(key, listKey, i) { _pickerSel.splice(i, 1); _authFields[listKey] = _pickerSel.slice(); _paintPicker(key, listKey, ''); }
+
+async function savePeriod() {
+  const btn = document.getElementById('reflect-save');
+  if (btn) btn.disabled = true;
+  _authStatus('Saving…');
+  try {
+    const r = await fetch('/api/focus/commit', {
+      method: 'POST', headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify({fields: _authFields, raw_text: _authRaw})
+    });
+    const data = await r.json();
+    if (data.blocked) { _authStatus('Still need: ' + data.blocked.join(', '), true); if (btn) btn.disabled = false; return; }
+    if (data.error) { _authStatus('Save failed: ' + data.error, true); if (btn) btn.disabled = false; return; }
+    if (data.ok) { _authStatus('Saved ✓ ' + (data.name || '')); setTimeout(closeAuthoring, 900); return; }
+    _authStatus('Unexpected response.', true); if (btn) btn.disabled = false;
+  } catch (_) { _authStatus("Couldn't reach the server.", true); if (btn) btn.disabled = false; }
 }
 
 async function loadMap() {
@@ -1359,7 +1703,8 @@ function renderPlan(plan) {
 }
 
 function esc(s) {
-  return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+  return String(s == null ? '' : s)
+    .replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
 }
 
 // Convert 24-hour time string or range to 12-hour display.

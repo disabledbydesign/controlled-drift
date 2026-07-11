@@ -39,6 +39,7 @@ import focus_period_generate
 import focus_period_adapter
 import focus_period_author
 import focus_store
+import daily_plan
 import gsdo_anytype as g
 import cd_paths
 
@@ -211,6 +212,20 @@ class Handler(BaseHTTPRequestHandler):
                 self._send(200, period_view.render_period())
             except Exception as e:
                 self._send(500, {"error": f"period render failed: {e}"})
+            return
+
+        if self.path == "/api/projects":
+            # The "in front" selector reads this: every non-Done project with its category (Side —
+            # a DATA-DRIVEN stub until June's multi-tier categories land) + engagement + parent, so
+            # the picker can group + show hierarchy without hardcoding the category values.
+            try:
+                _g, projects, *_ = daily_plan.load_active_items(g.get_space_id())
+                self._send(200, {"projects": [
+                    {"id": p["id"], "name": p["name"], "side": p.get("side"),
+                     "engagement": p.get("engagement"), "parent_id": p.get("parent_project_id")}
+                    for p in projects]})
+            except Exception as e:
+                self._send(500, {"error": f"projects load failed: {e}"})
             return
 
         if self.path == "/api/focus/status":
@@ -436,6 +451,14 @@ class Handler(BaseHTTPRequestHandler):
                 focus_store.save_result({"raw_text": t, "fields": fields, "reflect": reflect})
             started = _start_focus_generation(_job)
             self._send(202, {"state": "running", "started": started})
+            return
+
+        if self.path == "/api/focus/reflect":
+            # Re-render the deterministic reflect-back after a client-side per-field fix. Cheap,
+            # synchronous, NO LLM — keeps the reflect template single-source (Python) instead of
+            # duplicating date/label formatting in the client.
+            body = self._read_json_body()
+            self._send(200, focus_period_adapter.reflect_back(body.get("fields") or {}))
             return
 
         if self.path == "/api/focus/commit":
