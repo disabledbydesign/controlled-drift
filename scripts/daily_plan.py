@@ -106,7 +106,11 @@ def load_active_items(sid):
                 done = pv("done", "checkbox")
                 if done:
                     continue
-                access_tags = pv("gsdo_access", "multi_select") or []
+                # The tags live under the key `gsdo_access_conditions` (display "Access
+                # conditions") — NOT `gsdo_access`. Reading the wrong key meant every task's
+                # access tags came back empty since they were seeded (2026-07), so capacity/
+                # access-aware planning had no signal to act on. (Fixed 2026-07-11.)
+                access_tags = pv("gsdo_access_conditions", "multi_select") or []
                 access = [t.get("name") for t in access_tags if isinstance(t, dict)]
                 # The relation reads back under "objects" as a list of id strings (or dicts).
                 # Resolve each to the current project name (rename-safe, by id).
