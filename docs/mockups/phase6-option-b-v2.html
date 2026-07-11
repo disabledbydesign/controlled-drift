@@ -1,0 +1,901 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Phase 6 Option B v2 — Focus slot inline in Today</title>
+<style>
+:root {
+  --bg: #1c1c1e; --surface: #2c2c2e; --border: #48484a;
+  --text: #f2f2f7; --text-dim: #98989f; --text-dimmer: #5a5a5e;
+  --rose: #c78fa0; --rose-bg: #251a1e; --rose-border: #4a2e38; --rose-dim: #614550;
+  --gold: #d4a96a; --gold-dim: #6a5230;
+}
+@media (prefers-reduced-motion: reduce) { *, *::before, *::after { transition: none !important; } }
+* { box-sizing: border-box; margin: 0; padding: 0; }
+body {
+  background: #111;
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', system-ui, sans-serif;
+  padding: 40px 16px 60px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 48px;
+}
+
+/* ── layout ── */
+.frame-label {
+  font-size: 10px; color: #555; text-transform: uppercase;
+  letter-spacing: 0.12em; margin-bottom: 10px; text-align: center;
+}
+.frame { display: flex; flex-direction: column; align-items: center; }
+
+/* ── overlay shell ── */
+.overlay {
+  background: var(--bg);
+  border: 1px solid var(--border);
+  border-radius: 14px;
+  width: 360px;
+  overflow: hidden;
+  box-shadow: 0 8px 32px rgba(0,0,0,.5);
+}
+
+/* ── header ── */
+.overlay-header {
+  display: flex; align-items: center; justify-content: space-between;
+  padding: 10px 14px 0;
+}
+.header-title { font-size: 11px; color: var(--text-dimmer); text-transform: uppercase; letter-spacing: .1em; }
+.header-right { display: flex; align-items: center; gap: 9px; }
+.header-time { font-size: 11px; color: var(--text-dimmer); }
+.header-gear { background: none; border: none; color: var(--text-dim); font-size: 16px; cursor: pointer; padding: 0; line-height: 1; }
+
+/* ── tabs ── */
+.tabs { display: flex; padding: 8px 14px 0; border-bottom: 1px solid var(--border); }
+.tab {
+  font-size: 12px; color: var(--text-dimmer);
+  padding: 5px 12px 7px;
+  border-bottom: 2px solid transparent;
+  margin-bottom: -1px; transition: all .12s;
+  background: none; border-top: none; border-left: none; border-right: none;
+  font-family: inherit; cursor: pointer;
+}
+.tab.active { color: var(--gold); border-bottom-color: var(--gold); }
+.tab:hover:not(.active) { color: var(--text-dim); }
+
+/* ── scrollable today body ── */
+.today-body { overflow-y: auto; max-height: 680px; }
+
+/* ═══════════════════════════════
+   FOCUS SLOT
+   ═══════════════════════════════ */
+.focus-slot {
+  background: var(--rose-bg);
+  border-bottom: 1px solid var(--rose-border);
+}
+
+/* collapsed header row */
+.focus-header {
+  display: flex; align-items: center; gap: 8px;
+  padding: 11px 14px 10px;
+}
+.focus-period-name {
+  font-size: 12px; color: var(--rose); font-weight: 500;
+  flex: 1; line-height: 1.3;
+}
+.focus-dates {
+  font-size: 11px; color: var(--rose-dim); flex-shrink: 0;
+}
+.focus-edit-btn {
+  background: none; border: 1px solid var(--rose-border);
+  border-radius: 6px; color: var(--rose-dim);
+  font-size: 11px; font-family: inherit;
+  padding: 3px 8px; cursor: pointer;
+  transition: color .12s, border-color .12s;
+  flex-shrink: 0;
+}
+.focus-edit-btn:hover { color: var(--rose); border-color: var(--rose); }
+
+/* caregiving alert — active availability window */
+.focus-alert {
+  display: flex; align-items: flex-start; gap: 8px;
+  padding: 0 14px 10px;
+  font-size: 12px; color: var(--text-dim); line-height: 1.45;
+}
+.focus-alert-mark {
+  font-size: 10px; color: var(--rose-dim);
+  text-transform: uppercase; letter-spacing: .08em;
+  flex-shrink: 0; padding-top: 1px;
+}
+
+/* "See this week" toggle */
+.focus-toggle-row {
+  border-top: 1px solid var(--rose-border);
+}
+.focus-toggle {
+  display: flex; align-items: center; gap: 6px;
+  padding: 9px 14px; width: 100%;
+  background: none; border: none; font-family: inherit;
+  color: var(--text-dim); font-size: 12px; cursor: pointer;
+  text-align: left; min-height: 40px;
+  -webkit-tap-highlight-color: transparent;
+  transition: color .12s;
+}
+.focus-toggle:hover { color: var(--text); }
+.focus-chevron { font-size: 10px; color: var(--text-dimmer); transition: transform .15s; margin-left: auto; }
+.focus-slot.open .focus-chevron { transform: rotate(90deg); }
+
+/* expanded body */
+.focus-expanded { display: none; padding: 0 14px 12px; }
+.focus-slot.open .focus-expanded { display: block; }
+
+.focus-intent {
+  font-size: 13px; color: var(--rose); line-height: 1.55;
+  margin-bottom: 8px; opacity: .9;
+  display: -webkit-box; -webkit-line-clamp: 3; -webkit-box-orient: vertical;
+  overflow: hidden; cursor: pointer;
+}
+.focus-intent.expanded { display: block; }
+
+.focus-foreground {
+  font-size: 12px; color: var(--rose-dim); line-height: 1.5;
+  margin-bottom: 14px;
+}
+.focus-foreground strong { color: var(--text-dim); font-weight: 500; }
+
+/* period cards */
+.period-card {
+  border: 1px solid var(--rose-border);
+  border-radius: 8px;
+  padding: 10px 12px;
+  margin-bottom: 10px;
+  background: rgba(37,26,30,0.5);
+}
+.period-card-header {
+  display: flex; align-items: center; gap: 7px; margin-bottom: 7px;
+}
+.period-card-dates {
+  font-size: 11px; color: var(--text-dim); flex: 1;
+}
+.period-card-badge {
+  font-size: 10px; color: var(--rose-dim);
+  text-transform: uppercase; letter-spacing: .08em;
+  border: 1px solid var(--rose-border); border-radius: 4px;
+  padding: 1px 5px;
+}
+.period-card-edit {
+  background: none; border: 1px solid var(--rose-border);
+  border-radius: 6px; color: var(--rose-dim);
+  font-size: 11px; font-family: inherit;
+  padding: 2px 8px; cursor: pointer;
+  transition: color .12s, border-color .12s;
+}
+.period-card-edit:hover { color: var(--rose); border-color: var(--rose); }
+.period-card-intent {
+  font-size: 12px; color: var(--rose); line-height: 1.5;
+  margin-bottom: 6px; opacity: .85;
+  display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical;
+  overflow: hidden; cursor: pointer;
+}
+.period-card-intent.expanded { display: block; }
+.period-card-front {
+  font-size: 11px; color: var(--text-dimmer); line-height: 1.45; margin-bottom: 5px;
+}
+.period-card-front strong { color: var(--text-dim); font-weight: 500; }
+.period-card-note {
+  font-size: 11px; color: var(--rose-dim); line-height: 1.4;
+}
+
+/* period management row */
+.period-mgmt {
+  border-top: 1px solid var(--rose-border);
+  padding-top: 12px; margin-top: 2px;
+}
+.period-mgmt-label {
+  font-size: 10px; color: var(--text-dimmer);
+  text-transform: uppercase; letter-spacing: .08em;
+  margin-bottom: 8px;
+}
+.add-period-btn {
+  display: flex; align-items: center; gap: 6px;
+  background: none; border: 1px dashed var(--border);
+  border-radius: 8px; color: var(--text-dim);
+  font-size: 12px; font-family: inherit;
+  padding: 9px 12px; cursor: pointer; width: 100%;
+  text-align: left; min-height: 40px;
+  transition: border-color .12s, color .12s;
+}
+.add-period-btn:hover { border-color: var(--rose-border); color: var(--rose); }
+
+/* "This week's work" sub-toggle */
+.work-toggle {
+  display: flex; align-items: center; gap: 6px;
+  background: none; border: none; font-family: inherit;
+  color: var(--text-dimmer); font-size: 11px; cursor: pointer;
+  padding: 0 0 8px; text-align: left; width: 100%;
+  text-transform: uppercase; letter-spacing: .08em;
+  transition: color .12s;
+}
+.work-toggle:hover { color: var(--text-dim); }
+.work-chevron { font-size: 9px; transition: transform .15s; margin-left: auto; }
+.focus-slot.work-open .work-chevron { transform: rotate(90deg); }
+.work-list { display: none; }
+.focus-slot.work-open .work-list { display: block; }
+
+.projects-heading {
+  font-size: 10px; color: var(--text-dimmer);
+  text-transform: uppercase; letter-spacing: .08em;
+  padding: 4px 0 6px; margin-top: 4px;
+}
+
+.project-row {
+  display: flex; align-items: baseline; justify-content: space-between;
+  padding: 5px 0;
+  border-bottom: 1px solid rgba(72,72,74,.2);
+  gap: 8px;
+}
+.project-row:last-child { border-bottom: none; }
+.project-name { font-size: 13px; color: var(--text); line-height: 1.3; }
+.project-name.foreground { color: var(--rose); }
+.project-eng { font-size: 11px; color: var(--text-dimmer); flex-shrink: 0; }
+.project-eng.foreground { color: var(--rose-dim); }
+
+/* foreground group label */
+.fg-note {
+  font-size: 11px; color: var(--rose-dim); padding: 2px 0 6px;
+  font-style: italic;
+}
+
+.wellbeing-block {
+  margin-top: 10px; padding-top: 10px;
+  border-top: 1px solid rgba(72,72,74,.3);
+}
+.wellbeing-toggle {
+  display: flex; align-items: center; justify-content: space-between;
+  background: none; border: none; width: 100%; font-family: inherit;
+  padding: 4px 0; cursor: pointer; min-height: 40px;
+  -webkit-tap-highlight-color: transparent;
+}
+.wellbeing-label { font-size: 13px; color: var(--text-dim); }
+.wellbeing-count { font-size: 11px; color: var(--text-dimmer); }
+.wellbeing-inner { display: none; padding-top: 8px; }
+.wellbeing-toggle.open + .wellbeing-inner { display: block; }
+.wellbeing-row {
+  display: flex; align-items: baseline; justify-content: space-between;
+  padding: 4px 0; border-bottom: 1px solid rgba(72,72,74,.15);
+  gap: 8px; font-size: 12px; color: var(--text-dim);
+}
+.wellbeing-row:last-child { border-bottom: none; }
+.wellbeing-eng { font-size: 11px; color: var(--text-dimmer); flex-shrink: 0; }
+
+/* ═══════════════════════════════
+   SECTION DIVIDER
+   ═══════════════════════════════ */
+.section-divider {
+  display: flex; align-items: center; justify-content: space-between;
+  padding: 8px 14px; border-bottom: 1px solid var(--border);
+}
+.divider-label { font-size: 10px; color: var(--text-dimmer); text-transform: uppercase; letter-spacing: .1em; }
+.divider-date { font-size: 10px; color: var(--text-dimmer); }
+
+/* ═══════════════════════════════
+   PRIORITY LIST (fragmented day)
+   ═══════════════════════════════ */
+/* structural placeholder — marks where real generated content renders, without faking it */
+.struct-ph {
+  margin: 12px 14px; padding: 14px;
+  border: 1px dashed var(--border); border-radius: 8px;
+  background: rgba(72,72,74,.08);
+}
+.struct-ph-label {
+  display: block; font-size: 10px; color: var(--text-dim);
+  text-transform: uppercase; letter-spacing: .09em; margin-bottom: 6px;
+}
+.struct-ph-note { font-size: 12px; color: var(--text-dimmer); line-height: 1.45; }
+
+.priority-note {
+  padding: 9px 14px; font-size: 12px; color: var(--text-dim);
+  line-height: 1.4; border-bottom: 1px solid rgba(72,72,74,.4);
+}
+.priority-note strong { color: var(--text); font-weight: 500; }
+
+.priority-items { padding: 0; border-bottom: 1px solid var(--border); }
+.priority-item {
+  display: flex; align-items: flex-start; gap: 10px;
+  padding: 11px 14px; border-bottom: 1px solid rgba(72,72,74,.4); cursor: pointer;
+}
+.priority-item:last-child { border-bottom: none; }
+.pi-check {
+  width: 16px; height: 16px; border: 1.5px solid var(--border);
+  border-radius: 50%; flex-shrink: 0; margin-top: 2px;
+  transition: border-color .12s;
+}
+.priority-item:hover .pi-check { border-color: var(--gold); }
+.pi-body { flex: 1; }
+.pi-label { font-size: 13px; color: var(--text); line-height: 1.35; }
+.pi-project { font-size: 11px; color: var(--text-dim); margin-top: 2px; }
+
+/* ═══════════════════════════════
+   STILL HERE
+   ═══════════════════════════════ */
+.still-section { border-top: 1px solid var(--border); }
+.still-toggle {
+  display: flex; align-items: center; gap: 6px;
+  padding: 10px 14px; background: none; border: none;
+  font-family: inherit; color: var(--text-dimmer); font-size: 12px;
+  width: 100%; text-align: left; min-height: 40px; cursor: pointer;
+  -webkit-tap-highlight-color: transparent;
+}
+.still-chevron { font-size: 10px; transition: transform .15s; }
+.still-section.open .still-chevron { transform: rotate(90deg); }
+.still-items { display: none; padding: 0 14px 10px; }
+.still-section.open .still-items { display: block; }
+.still-item { display: flex; align-items: center; gap: 8px; padding: 4px 0; font-size: 12px; color: var(--text-dimmer); }
+.still-dot { width: 4px; height: 4px; border-radius: 50%; background: var(--text-dimmer); flex-shrink: 0; }
+
+/* ═══════════════════════════════
+   ACTIONS + ASK
+   ═══════════════════════════════ */
+.actions-section {
+  border-top: 1px solid var(--border);
+  padding: 10px 14px; display: flex; flex-wrap: wrap; gap: 7px;
+}
+.action-btn {
+  background: var(--surface); border: 1px solid var(--border);
+  border-radius: 8px; color: var(--text-dim);
+  font-size: 12px; font-family: inherit; padding: 7px 12px;
+  cursor: pointer; min-height: 36px; transition: background .12s, color .12s;
+}
+.action-btn:hover { background: var(--border); color: var(--text); }
+.action-btn.primary { background: var(--gold-dim); border-color: var(--gold); color: var(--gold); }
+.action-btn.primary:hover { background: var(--gold); color: var(--bg); }
+
+.ask-section { border-top: 1px solid var(--border); padding: 10px 14px 14px; }
+.ask-label { font-size: 10px; color: var(--text-dimmer); text-transform: uppercase; letter-spacing: .08em; margin-bottom: 8px; }
+.op-toggle { display: flex; gap: 6px; margin-bottom: 8px; }
+.op-btn {
+  background: var(--surface); border: 1px solid var(--border);
+  border-radius: 6px; color: var(--text-dimmer);
+  font-size: 12px; font-family: inherit; padding: 5px 10px; cursor: pointer; transition: all .12s;
+}
+.op-btn.active { background: var(--gold-dim); border-color: var(--gold); color: var(--gold); }
+.ask-row { display: flex; gap: 8px; align-items: flex-end; }
+.ask-field {
+  flex: 1; background: var(--surface); border: 1px solid var(--border);
+  border-radius: 8px; padding: 9px 12px; color: var(--text);
+  font-size: 13px; font-family: inherit; resize: none; min-height: 44px; outline: none;
+}
+.ask-field::placeholder { color: var(--text-dimmer); }
+.ask-send {
+  background: var(--surface); border: 1px solid var(--border);
+  border-radius: 8px; color: var(--text-dim); font-size: 16px;
+  width: 40px; height: 40px; flex-shrink: 0; cursor: pointer;
+  display: flex; align-items: center; justify-content: center; transition: all .12s;
+}
+.ask-send:hover { background: var(--border); color: var(--text); }
+
+/* ═══════════════════════════════
+   AUTHORING STATE (frame 2)
+   ═══════════════════════════════ */
+.focus-author-slot {
+  background: var(--rose-bg);
+  border-bottom: 1px solid var(--rose-border);
+  padding: 13px 14px 14px;
+}
+.author-back {
+  font-size: 11px; color: var(--rose-dim); margin-bottom: 10px;
+  cursor: pointer; background: none; border: none; font-family: inherit;
+  padding: 0; display: flex; align-items: center; gap: 4px;
+}
+.author-back:hover { color: var(--rose); }
+.author-label {
+  font-size: 13px; color: var(--rose); margin-bottom: 9px; line-height: 1.4;
+}
+.author-field {
+  width: 100%; background: var(--surface); border: 1px solid var(--rose-border);
+  border-radius: 8px; padding: 10px 12px; color: var(--text);
+  font-size: 13px; font-family: inherit; resize: none; min-height: 76px;
+  outline: none; line-height: 1.45;
+}
+.author-field::placeholder { color: var(--text-dimmer); }
+.author-field:focus { border-color: var(--rose-dim); }
+.author-send-row { display: flex; justify-content: flex-end; margin-top: 8px; }
+.author-send {
+  background: var(--rose-dim); border: 1px solid var(--rose);
+  border-radius: 8px; color: var(--rose); font-size: 13px;
+  font-family: inherit; padding: 8px 16px; cursor: pointer;
+  min-height: 36px; transition: background .12s, color .12s;
+}
+.author-send:hover { background: var(--rose); color: var(--bg); }
+
+/* reflect-back — shown after speaking */
+.reflect-box {
+  margin-top: 14px;
+  background: var(--surface); border: 1px solid var(--border);
+  border-radius: 10px; overflow: hidden;
+}
+.reflect-summary {
+  padding: 11px 14px; font-size: 13px; color: var(--text); line-height: 1.45;
+}
+.reflect-items { padding: 0 14px 4px; }
+.reflect-item {
+  display: flex; align-items: baseline; justify-content: space-between;
+  padding: 6px 0; border-bottom: 1px solid rgba(72,72,74,.3);
+  gap: 8px;
+}
+.reflect-item:last-child { border-bottom: none; }
+.reflect-field { font-size: 12px; color: var(--text-dim); }
+.reflect-value { font-size: 12px; color: var(--text); flex-shrink: 0; }
+.reflect-fix { font-size: 11px; color: var(--gold); background: none; border: none; font-family: inherit; cursor: pointer; padding: 0; margin-left: 8px; }
+.reflect-actions {
+  border-top: 1px solid var(--border);
+  padding: 10px 14px; display: flex; gap: 8px; align-items: center; justify-content: flex-end;
+}
+.reflect-expand { font-size: 12px; color: var(--text-dim); background: none; border: none; font-family: inherit; cursor: pointer; padding: 0; flex: 1; }
+.reflect-confirm {
+  background: var(--gold-dim); border: 1px solid var(--gold);
+  border-radius: 8px; color: var(--gold); font-size: 13px;
+  font-family: inherit; padding: 7px 14px; cursor: pointer; min-height: 36px;
+  transition: background .12s, color .12s;
+}
+.reflect-confirm:hover { background: var(--gold); color: var(--bg); }
+
+/* ═══════════════════════════════
+   FIELD EDITOR — "in front" project selector (deterministic, no LLM)
+   ═══════════════════════════════ */
+.editor-slot {
+  background: var(--rose-bg);
+  border-bottom: 1px solid var(--rose-border);
+  padding: 13px 14px 14px;
+}
+.editor-head {
+  display: flex; align-items: center; justify-content: space-between;
+  margin-bottom: 4px;
+}
+.editor-title { font-size: 13px; color: var(--rose); }
+.editor-done {
+  background: var(--gold-dim); border: 1px solid var(--gold);
+  border-radius: 8px; color: var(--gold); font-size: 12px;
+  font-family: inherit; padding: 5px 12px; cursor: pointer; min-height: 32px;
+  transition: background .12s, color .12s;
+}
+.editor-done:hover { background: var(--gold); color: var(--bg); }
+.editor-sub { font-size: 11px; color: var(--rose-dim); margin-bottom: 11px; line-height: 1.4; }
+
+/* current selections as removable chips */
+.chip-label { font-size: 10px; color: var(--text-dimmer); text-transform: uppercase; letter-spacing: .08em; margin-bottom: 7px; }
+.chip-row { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 14px; }
+.chip {
+  display: inline-flex; align-items: center; gap: 6px;
+  background: var(--rose-dim); border: 1px solid var(--rose-border);
+  border-radius: 14px; padding: 4px 6px 4px 11px;
+  font-size: 12px; color: var(--text);
+}
+.chip-x {
+  background: none; border: none; color: var(--rose);
+  font-size: 15px; line-height: 1; cursor: pointer; padding: 0 2px;
+  font-family: inherit;
+}
+.chip-x:hover { color: var(--text); }
+
+/* search + grouped picker */
+.picker-search {
+  width: 100%; background: var(--surface); border: 1px solid var(--border);
+  border-radius: 8px; padding: 8px 12px; color: var(--text);
+  font-size: 13px; font-family: inherit; outline: none; margin-bottom: 12px;
+}
+.picker-search::placeholder { color: var(--text-dimmer); }
+.picker-group-label {
+  font-size: 10px; color: var(--text-dimmer);
+  text-transform: uppercase; letter-spacing: .08em;
+  padding: 4px 0 7px; display: flex; align-items: center; justify-content: space-between;
+}
+.picker-row {
+  display: flex; align-items: center; gap: 10px;
+  padding: 8px 0; border-bottom: 1px solid rgba(72,72,74,.2);
+  cursor: pointer; min-height: 40px;
+}
+.picker-row:last-child { border-bottom: none; }
+.picker-check {
+  width: 17px; height: 17px; border: 1.5px solid var(--border);
+  border-radius: 5px; flex-shrink: 0; position: relative; transition: all .12s;
+}
+.picker-row.on .picker-check { background: var(--rose-dim); border-color: var(--rose); }
+.picker-row.on .picker-check::after {
+  content: "✓"; position: absolute; inset: 0;
+  display: flex; align-items: center; justify-content: center;
+  font-size: 11px; color: var(--text);
+}
+.picker-name { font-size: 13px; color: var(--text); flex: 1; line-height: 1.3; }
+.picker-eng { font-size: 11px; color: var(--text-dimmer); flex-shrink: 0; }
+
+/* data-driven category filter */
+.filter-caption { font-size: 11px; color: var(--text-dim); margin-bottom: 7px; }
+.stub-tag {
+  display: inline-block; font-size: 10px; color: var(--text-dimmer);
+  border: 1px dashed var(--border); border-radius: 4px; padding: 1px 6px; margin-left: 4px;
+}
+.picker-filter { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; margin-bottom: 12px; }
+.pf-btn {
+  background: var(--surface); border: 1px solid var(--border);
+  border-radius: 6px; color: var(--text-dimmer);
+  font-size: 11px; font-family: inherit; padding: 6px 12px; cursor: pointer;
+  transition: all .12s; min-height: 34px;
+}
+.pf-btn.active { background: var(--rose-dim); border-color: var(--rose); color: var(--text); }
+/* stub category values — dashed to signal "placeholder, will be replaced by real categories" */
+.pf-btn.pf-stub { border-style: dashed; color: var(--text-dimmer); }
+.pf-ghost { font-size: 11px; color: var(--text-dimmer); font-style: italic; padding: 0 4px; }
+
+/* nested project tree */
+.tree-row {
+  display: flex; align-items: center; gap: 9px;
+  padding: 8px 0; border-bottom: 1px solid rgba(72,72,74,.18);
+  cursor: pointer; min-height: 40px;
+}
+.tree-row:last-child { border-bottom: none; }
+.tree-indent-1 { padding-left: 22px; }
+.tree-indent-2 { padding-left: 44px; }
+.tree-twist {
+  width: 12px; flex-shrink: 0; font-size: 10px; color: var(--text-dimmer);
+  transition: transform .15s; text-align: center;
+}
+.tree-row.open > .tree-twist { transform: rotate(90deg); }
+.tree-twist.leaf { visibility: hidden; }
+.tree-check {
+  width: 17px; height: 17px; border: 1.5px solid var(--border);
+  border-radius: 5px; flex-shrink: 0; position: relative; transition: all .12s;
+}
+.tree-row.on > .tree-check { background: var(--rose-dim); border-color: var(--rose); }
+.tree-row.on > .tree-check::after {
+  content: "✓"; position: absolute; inset: 0;
+  display: flex; align-items: center; justify-content: center;
+  font-size: 11px; color: var(--text);
+}
+.tree-name { font-size: 13px; color: var(--text); flex: 1; line-height: 1.3; }
+.tree-row.parent > .tree-name { color: var(--text-dim); }
+.tree-count { font-size: 11px; color: var(--text-dimmer); flex-shrink: 0; }
+.tree-eng { font-size: 11px; color: var(--text-dimmer); flex-shrink: 0; }
+.tree-children { display: none; }
+.tree-children.open { display: block; }
+</style>
+</head>
+<body>
+
+<!-- ═══════════════════════════════════════════════════════
+     FRAME 1 — Today tab, normal state (focus slot collapsed)
+     ═══════════════════════════════════════════════════════ -->
+<div class="frame">
+  <div class="frame-label">Option B — focus slot inline in Today (collapsed view)</div>
+  <div class="overlay">
+
+    <div class="overlay-header">
+      <span class="header-title">Drift</span>
+      <span class="header-right">
+        <span class="header-time">11:22</span>
+        <button class="header-gear" aria-label="Settings">⚙</button>
+      </span>
+    </div>
+
+    <div class="tabs">
+      <button class="tab active">Today</button>
+      <button class="tab">Map</button>
+      <button class="tab">Add</button>
+    </div>
+
+    <div class="today-body">
+
+      <!-- FOCUS SLOT — collapsed -->
+      <div class="focus-slot" id="fs1">
+
+        <div class="focus-header">
+          <span class="focus-period-name">Week of Jun 29 — recover, jobs, caregiving</span>
+          <span class="focus-dates">Jun 29 – Jul 6</span>
+          <button class="focus-edit-btn" aria-label="Edit focus period">Edit</button>
+        </div>
+
+        <!-- caregiving window is active today -->
+        <div class="focus-alert">
+          <span class="focus-alert-mark">Now</span>
+          <span>Caregiving Sat–Mon — fragmented time, survival-first in whatever windows open.</span>
+        </div>
+
+        <div class="focus-toggle-row">
+          <button class="focus-toggle" onclick="toggleFocus('fs1', 'ft1', 'wt1')" aria-expanded="false" id="ft1">
+            See this week
+            <span class="focus-chevron" aria-hidden="true">›</span>
+          </button>
+        </div>
+
+        <!-- expanded content: chronological period list, current → upcoming -->
+        <div class="focus-expanded" id="fe1">
+
+          <!-- current period card -->
+          <div class="period-card period-card-active">
+            <div class="period-card-header">
+              <span class="period-card-dates">Mon Jun 29 – Mon Jul 6</span>
+              <span class="period-card-badge">Now</span>
+              <button class="period-card-edit">Edit</button>
+            </div>
+            <p class="period-card-intent" onclick="this.classList.toggle('expanded')">Coming off the SSRC sprint: ~2 days rest/recovery first, then focused survival-track job applications, then caregiving Saturday–Monday. Jobs are the survival focus this stretch.</p>
+            <p class="period-card-front"><strong>In front:</strong> Academic positions, Industry positions, Build my own business, Grants / fellowships</p>
+            <p class="period-card-note">Caregiving Sat–Mon — fragmented time, survival-first in whatever windows open.</p>
+          </div>
+
+          <!-- upcoming: empty slot -->
+          <button class="add-period-btn">+ Set up next period — from Tue Jul 7</button>
+
+        </div>
+      </div><!-- end focus-slot -->
+
+      <!-- SECTION DIVIDER -->
+      <div class="section-divider">
+        <span class="divider-label">Today's plan</span>
+      </div>
+
+      <!-- structural placeholder — the plan is real generated content; not faked here -->
+      <div class="struct-ph">
+        <span class="struct-ph-label">Today's plan renders here</span>
+        <span class="struct-ph-note">Your real tasks, in priority order (or a clock schedule on fixed-time days). Generated from the plan — shown as structure only.</span>
+      </div>
+
+      <!-- STILL HERE -->
+      <div class="still-section" id="still1">
+        <button class="still-toggle" onclick="document.getElementById('still1').classList.toggle('open')">
+          <span class="still-chevron" aria-hidden="true">›</span>
+          still here, not today
+        </button>
+        <div class="still-items">
+          <div class="still-item"><div class="still-dot"></div>Calendar integration</div>
+          <div class="still-item"><div class="still-dot"></div>Park migration from Reframe</div>
+        </div>
+      </div>
+
+      <!-- ACTIONS -->
+      <div class="actions-section">
+        <button class="action-btn primary">↻ Fresh plan</button>
+        <button class="action-btn">Low energy</button>
+        <button class="action-btn">30 min only</button>
+      </div>
+
+      <!-- ASK -->
+      <div class="ask-section">
+        <p class="ask-label">or tell me what you need</p>
+        <div class="op-toggle">
+          <button class="op-btn active">Reorder</button>
+          <button class="op-btn">Generate</button>
+        </div>
+        <div class="ask-row">
+          <textarea class="ask-field" placeholder="e.g. I only have 30 min and need to stay horizontal…" rows="2"></textarea>
+          <button class="ask-send" aria-label="Send">↑</button>
+        </div>
+      </div>
+
+    </div><!-- end today-body -->
+  </div><!-- end overlay -->
+</div><!-- end frame 1 -->
+
+
+<!-- ═══════════════════════════════════════════════════════
+     FRAME 2 — Authoring state (Edit tapped in the focus slot)
+     ═══════════════════════════════════════════════════════ -->
+<div class="frame">
+  <div class="frame-label">Option B — authoring state (Edit tapped)</div>
+  <div class="overlay">
+
+    <div class="overlay-header">
+      <span class="header-title">Drift</span>
+      <span class="header-right">
+        <span class="header-time">11:22</span>
+        <button class="header-gear" aria-label="Settings">⚙</button>
+      </span>
+    </div>
+
+    <div class="tabs">
+      <button class="tab active">Today</button>
+      <button class="tab">Map</button>
+      <button class="tab">Add</button>
+    </div>
+
+    <div class="today-body">
+
+      <!-- FOCUS SLOT — authoring mode -->
+      <div class="focus-author-slot">
+
+        <button class="author-back">‹ Back to this week</button>
+
+        <p class="author-label">What focus period(s) do you want to add?</p>
+        <textarea class="author-field" placeholder="e.g. jobs first this week, caregiving starts Saturday, Sunday off, working late on Monday…"></textarea>
+        <div class="author-send-row">
+          <button class="author-send">Structure this →</button>
+        </div>
+
+        <!-- reflect-back (shown after the LLM structures the input) -->
+        <div class="reflect-box">
+          <div class="reflect-summary">
+            Jobs first, caregiving Sat–Mon, SSRC recovery done — right?
+          </div>
+
+          <div class="reflect-items">
+            <div class="reflect-item">
+              <span class="reflect-field">Foreground</span>
+              <span style="display:flex;align-items:center;gap:4px">
+                <span class="reflect-value">Academic, Industry, Business, Grants</span>
+                <button class="reflect-fix">fix</button>
+              </span>
+            </div>
+            <div class="reflect-item">
+              <span class="reflect-field">Dates</span>
+              <span style="display:flex;align-items:center;gap:4px">
+                <span class="reflect-value">Jun 29 – Jul 6</span>
+                <button class="reflect-fix">fix</button>
+              </span>
+            </div>
+            <div class="reflect-item">
+              <span class="reflect-field">Caregiving window</span>
+              <span style="display:flex;align-items:center;gap:4px">
+                <span class="reflect-value">Jul 4 – Jul 6</span>
+                <button class="reflect-fix">fix</button>
+              </span>
+            </div>
+            <div class="reflect-item">
+              <span class="reflect-field">Days off</span>
+              <span style="display:flex;align-items:center;gap:4px">
+                <span class="reflect-value">Sat, Sun (default)</span>
+                <button class="reflect-fix">fix</button>
+              </span>
+            </div>
+            <div class="reflect-item">
+              <span class="reflect-field">Plan shape</span>
+              <span style="display:flex;align-items:center;gap:4px">
+                <span class="reflect-value">Auto</span>
+                <button class="reflect-fix">fix</button>
+              </span>
+            </div>
+          </div>
+
+          <div class="reflect-actions">
+            <button class="reflect-expand">Expand to verify all fields</button>
+            <button class="reflect-confirm">Looks right — save</button>
+          </div>
+        </div>
+
+      </div><!-- end focus-author-slot -->
+
+      <!-- rest of Today unchanged below -->
+      <div class="section-divider">
+        <span class="divider-label">Today's plan</span>
+      </div>
+      <div class="struct-ph">
+        <span class="struct-ph-label">Today's plan renders here</span>
+        <span class="struct-ph-note">Real generated content — shown as structure only.</span>
+      </div>
+
+      <div class="actions-section">
+        <button class="action-btn primary">↻ Fresh plan</button>
+        <button class="action-btn">Low energy</button>
+      </div>
+
+      <div class="ask-section">
+        <p class="ask-label">or tell me what you need</p>
+        <div class="op-toggle">
+          <button class="op-btn active">Reorder</button>
+          <button class="op-btn">Generate</button>
+        </div>
+        <div class="ask-row">
+          <textarea class="ask-field" placeholder="e.g. I only have 30 min and need to stay horizontal…" rows="2"></textarea>
+          <button class="ask-send" aria-label="Send">↑</button>
+        </div>
+      </div>
+
+    </div>
+  </div>
+</div><!-- end frame 2 -->
+
+
+<!-- ═══════════════════════════════════════════════════════
+     FRAME 3 — Field editor: the "in front" project selector
+     (opened by tapping "fix" on Foreground — deterministic, no LLM)
+     Loaded with June's REAL 40 projects to stress-test scannability.
+     ═══════════════════════════════════════════════════════ -->
+<div class="frame">
+  <div class="frame-label">Option B — "in front" selector (fix tapped) · real 40 projects</div>
+  <div class="overlay">
+
+    <div class="overlay-header">
+      <span class="header-title">Drift</span>
+      <span class="header-right">
+        <span class="header-time">11:24</span>
+        <button class="header-gear" aria-label="Settings">⚙</button>
+      </span>
+    </div>
+
+    <div class="tabs">
+      <button class="tab active">Today</button>
+      <button class="tab">Map</button>
+      <button class="tab">Add</button>
+    </div>
+
+    <div class="today-body">
+      <div class="editor-slot">
+
+        <div class="editor-head">
+          <span class="editor-title">In front this period</span>
+          <button class="editor-done">Done</button>
+        </div>
+        <p class="editor-sub">Pick the few projects this stretch is about. These get planned first.</p>
+
+        <!-- current picks as removable chips (the usual case: tweaking a few) -->
+        <p class="chip-label">Chosen — 4</p>
+        <div class="chip-row">
+          <span class="chip">Academic positions <button class="chip-x" aria-label="Remove">×</button></span>
+          <span class="chip">Industry positions <button class="chip-x" aria-label="Remove">×</button></span>
+          <span class="chip">Build my own business <button class="chip-x" aria-label="Remove">×</button></span>
+          <span class="chip">Grants / fellowships <button class="chip-x" aria-label="Remove">×</button></span>
+        </div>
+
+        <!-- search: fast path when you know the name (flattens the tree) -->
+        <input class="picker-search" type="text" placeholder="Search projects…" aria-label="Search projects">
+
+        <!-- DATA-DRIVEN filter: renders from whatever category values projects carry.
+             Not hardcoded. Today it reads the stub `Side` field; when June's real
+             (multi-tier) categories land, the SAME control populates from them. -->
+        <p class="filter-caption">Group by category <span class="stub-tag">stub: Side — your real categories populate here</span></p>
+        <div class="picker-filter">
+          <button class="pf-btn active">All</button>
+          <button class="pf-btn pf-stub">Obligation</button>
+          <button class="pf-btn pf-stub">Wellbeing</button>
+          <span class="pf-ghost">+ your categories →</span>
+        </div>
+
+        <!-- NESTED tree — real hierarchy: 12 roots, parents collapse. Foreground at any level. -->
+
+        <div class="tree-row"><span class="tree-twist leaf">›</span><span class="tree-check"></span><span class="tree-name">AI welfare critique paper</span><span class="tree-eng">Steady</span></div>
+        <div class="tree-row on"><span class="tree-twist leaf">›</span><span class="tree-check"></span><span class="tree-name">Academic positions</span></div>
+
+        <!-- parent, collapsed: 10 children tucked away -->
+        <div class="tree-row parent"><span class="tree-twist">›</span><span class="tree-check"></span><span class="tree-name">Build Controlled Drift</span><span class="tree-count">10 ›</span></div>
+
+        <div class="tree-row on"><span class="tree-twist leaf">›</span><span class="tree-check"></span><span class="tree-name">Build my own business</span></div>
+        <div class="tree-row"><span class="tree-twist leaf">›</span><span class="tree-check"></span><span class="tree-name">Consulting (iChange)</span></div>
+        <div class="tree-row"><span class="tree-twist leaf">›</span><span class="tree-check"></span><span class="tree-name">Cultural Anthropology article — reviewer response</span><span class="tree-eng">Sprint</span></div>
+
+        <!-- parent, EXPANDED: drill in to pick the child -->
+        <div class="tree-row parent open"><span class="tree-twist">›</span><span class="tree-check"></span><span class="tree-name">Grants / fellowships</span><span class="tree-count">1 ›</span></div>
+        <div class="tree-children open">
+          <div class="tree-row tree-indent-1"><span class="tree-twist leaf">›</span><span class="tree-check"></span><span class="tree-name">Anthropic Fellows coding prep</span><span class="tree-eng">Steady</span></div>
+        </div>
+
+        <!-- parent, collapsed: the deep GRA tree -->
+        <div class="tree-row parent"><span class="tree-twist">›</span><span class="tree-check"></span><span class="tree-name">Grounded Recollection (GRA)</span><span class="tree-count">15 ›</span></div>
+
+        <div class="tree-row on"><span class="tree-twist leaf">›</span><span class="tree-check"></span><span class="tree-name">Industry positions</span></div>
+
+        <!-- parent, EXPANDED: this is June's "papers" example — collapse the group, pick the paper -->
+        <div class="tree-row parent open"><span class="tree-twist">›</span><span class="tree-check"></span><span class="tree-name">Publishing papers</span><span class="tree-count">1 ›</span></div>
+        <div class="tree-children open">
+          <div class="tree-row tree-indent-1"><span class="tree-twist leaf">›</span><span class="tree-check"></span><span class="tree-name">Output Format Bias paper</span><span class="tree-eng">Steady</span></div>
+        </div>
+
+        <div class="tree-row"><span class="tree-twist leaf">›</span><span class="tree-check"></span><span class="tree-name">Reframe paper</span><span class="tree-eng">Backburner</span></div>
+        <div class="tree-row"><span class="tree-twist leaf">›</span><span class="tree-check"></span><span class="tree-name">Stable clock-in/out income</span></div>
+
+      </div>
+    </div>
+  </div>
+</div><!-- end frame 3 -->
+
+<script>
+function toggleFocus(slotId, toggleId, workToggleId) {
+  const slot = document.getElementById(slotId);
+  const toggle = document.getElementById(toggleId);
+  const isOpen = slot.classList.contains('open');
+  slot.classList.toggle('open', !isOpen);
+  toggle.setAttribute('aria-expanded', !isOpen);
+}
+function toggleWork(slotId) {
+  document.getElementById(slotId).classList.toggle('work-open');
+}
+</script>
+</body>
+</html>

@@ -67,13 +67,42 @@ Hard constraints, not preferences.
 
 ---
 
-## Task 1 — Decide the shape of "see my week"
-**The fork June can't picture, so she sees both.** Two static mockups via `/ui-ux-pro-max` under the access frame:
-- **Option A — a new tab** ("This week"): the composed view as its own destination.
-- **Option B — folded into Today**: the composed view expands Today's existing woven-frame context slot; Log Day (Task 5) becomes Today's evening bookend. No new tabs.
-**Why this is the first task (swarm, convergent):** the architect + neurodiv-UX lenses both flagged that a new tab makes a *second* whole-picture screen next to Map, pushes the overlay from 3 tabs to 5+, and puts the focus period out of sight (she'd have to remember to open it) — cutting against "one primary thing per screen" and the telos ("it reaches her where she already is"). Option B may be structurally better; June decides by seeing. Fake sample data is fine here — this decides *structure*, not density. **Output: June picks A or B; that choice sets where 6A, and Log Day, live.**
+## Task 1 — Decide the shape of "see my week" ✅ DECIDED 2026-07-11
+
+**DECIDED (June): Option B — focus slot folded into Today. No new tabs.**
+
+Mockups built twice (session 27): first with fake data (wrong — missed the authoring surface and duplicated Map content); second with real live data (40 real projects, real active focus period). Real data revealed: a flat project list is redundant with Map and not ADHD-scannable. The right content for the expanded slot is a **chronological period management surface** — not a project list.
+
+**Settled design (docs/mockups/phase6-option-b-v2.html — authoritative mockup):**
+- Focus slot lives at the top of Today, rose-bg, collapsed by default
+- Collapsed shows: period name + dates (with day-of-week) + active availability note (if in window) + Edit button + "See this week ›" toggle
+- Expanded shows: **period cards in chronological order** — current period card (intent clamped/expandable, "In front:" compact foreground list, availability note, Edit button scoped to that card) → "+ Set up next period — from [day date]" for the upcoming slot. No archived periods shown.
+- Edit button scoped to each period card (not a global edit). Confirm-before-commit (reflect-back) is the write guard — no separate undo needed.
+- Log Day lives in the Add tab as a second mode (Add task / Log day toggle) — NOT at the bottom of Today. Plan-change requests (actions + ask section) stay at the bottom of Today unchanged.
+- Tab count stays 3: Today | Map | Add.
+
+**Key design corrections found during mockup iteration (load-bearing for Task 2):**
+- The "see my week" surface is a period management surface, not a project view — projects live in Map.
+- Archaeology-before-generation is mandatory: read backend code + addendum before designing. The first mockup pass skipped this and produced wrong content.
+- The authoring flow (Task 3) is shown in Frame 2 of the mockup: speak → reflect-back (deterministic template, compressed then expandable, per-item fix) → confirm → save. Frame 2 is sufficient design for the next builder; no further authoring-flow mockup work needed.
+- One Jun 29–Jul 6 period in Anytype covers multiple phases (recovery, jobs, caregiving) in one object — that's fine; nuance lives in intent text + structured availability window.
+
+## ⚠️ UPSTREAM DEPENDENCY — the category axes are being reworked (2026-07-11)
+
+Reading the Task 1 selector against the **real 44 projects / 131 tasks** showed the `Obligation`/`Wellbeing`
+`Side` binary **does not fit June's actual work** — "Wellbeing" as tagged is her build/creative/scholarly
+work (zero rest in it); real rest, errands/chores, and social sit uncategorized; a spoons axis
+(`Access conditions`: lying-down / leaving-house) already cuts across everything. **June is reworking the
+categorization into multiple tiers in her own separate session.** Her direction: multi-tier not binary;
+bills → life-admin; build and creative separated; survival/income further breakable; building/scholarly ≠ wellbeing.
+
+**Build data-driven so categories plug in without a rewrite (the approach — not a blocker):**
+- **The category filter/grouping reads whatever category values the projects carry — it does NOT hardcode `Obligation`/`Wellbeing`.** Today it reads the current `Side` field (the stub); when the real categories exist, the same code populates from the new field/values. What changes is the *data*, not the UI code. This is standard "don't hardcode the enum" — simple, and it means Phase 6 is **not blocked** on the categorization session.
+- **The nested-tree selector structure** (mockup Frame 3) is category-independent (pure parent/child) and is **final now**. Only the *filter axis on top* is data-driven-and-pending.
+- **Caveat — multi-tier:** a flat category swap is trivial (data-only). If the categories are tiered, the filter control itself gains a tier (a modest extension, not a rewrite). Build flat-data-driven now; extend to tiers when the shape is known.
 
 ## Task 2 (6A) — The composed "see my week" view (read-only), wired real
+*⚠️ The "grouped by side" bit below is provisional — see the upstream-dependency note above. Build with the current Side as a stub; the real grouping axis is pending June's categorization session.*
 - **Content:** the active Focus Period (name, dates, intent in plain words, days off, availability note) + projects grouped by **side**, structurally separated (never interleaved).
 - **The density resolution (swarm — neurodiv-UX):** June has ~8 Obligation + ~31 Wellbeing projects. Showing 31 Wellbeing rows breaks glanceability; hiding them behind taps breaks see-it-together. Resolve by **unit choice**, mirroring the already-built `open_hobby_block` decision: **Obligation projects shown individually** (with engagement); **Wellbeing shown as the one protected block**, its projects available on expand. Engagement values render as-is (June parses them fine).
 - **Backend:** `GET /api/period` returns a **structured JSON render payload** (not verbatim `<pre>` — that is the orient_map anti-pattern that scrolls sideways). The client renders accessible layout from the JSON, so color-alone and encode-and-lock are avoidable at the layout layer. A pure render/assembly function; deterministic (reads the same every time).
@@ -85,6 +114,9 @@ Hard constraints, not preferences.
 - **The adapter (new module, real work):** map `generate_focus_period` output → `author_focus_period` `properties` — key renames, `resolve_project_names_to_ids`, ISO-date-lists → CSV, preserve `output_format` select exactly (`"Auto"|"Clock schedule"|"Priority list"`). Read-back asserts the select value survived.
 - **The reflect-back — production specified (swarm, convergent: build agent + neurodiv-UX + author-informed):** the compressed confirmation is a **deterministic Python template over the already-structured fields** — *not* a second LLM call. Rationale: (1) it keeps a hard-guard'd, June-depended-on surface free of freshly-generated LLM prose (no-metaphors risk); (2) it's testable/verifiable; (3) the fields are already structured by the generate step. The template assembles a short line ("Jobs first, caregiving Sat–Wed, weekends off"). *If June wants more fluent phrasing later, an LLM version can be revisited with the guard enforced in-prompt — recommended default is the template.*
 - **The reflect-back — shape (swarm, convergent — resolves compression-vs-verification + all-or-nothing-repair):** **compressed sentence by default → expandable to the exact saved fields** (start/end dates, the resolved days-off dates, availability window, foreground/paused lists) so June can verify the write is *right* (read-back-to-verify discipline) → **per-item "fix just this"** so a single wrong detail (heard Wednesday, meant Thursday) doesn't force re-speaking the whole week.
+- **The "fix" per-field editor — DECIDED 2026-07-11 (June): deterministic direct-edit, NO LLM.** Tapping "fix" on a field opens a direct editor for that field only — a **date picker** for dates, a **project selector** for foreground, a plain text field for intent, a select for plan-shape. No re-speaking, no LLM round-trip. Rationale: reliability (no misinterpretation), speed (no ~30s model call to move one date), and it honors the date-determinism principle (dates set directly must never round-trip through a model). The LLM's job is turning the *initial spoken brain-dump* into structure; once structured, every field edit is direct manipulation. **The `focus_period_generate` LLM path is for speech→structure only; all field edits are deterministic.**
+- **The foreground ("in front") project selector — DECIDED 2026-07-11 (June's concern: must not become chaotic with real data — she has ~40 projects).** Design (mockup Frame 3, `docs/mockups/phase6-option-b-v2.html`): (1) **current picks shown as removable chips** at top (the usual case is tweaking a few, not rebuilding); (2) a **search field** for the known-name fast path; (3) the pick list **grouped by Side, Obligation first** (~14 — foreground is almost always survival-side), with **Wellbeing collapsed** behind a tap (~26, rarely foregrounded but reachable). This keeps the default view scannable at any project count: your handful of chosen + search + the short obligation list; the long tail stays tucked away. A flat 40-item checklist is the anti-pattern to avoid.
+- **Missing required field must BLOCK save — DECIDED 2026-07-11 (June).** Edge case she named: author a period but forget a date. Currently a **silent failure** — `focus_period.load_active_focus_period` requires both `start` and `end`, so a date-less period never becomes active and nothing tells her. Fix: the reflect-back must detect a missing required field (start/end date at minimum) and **surface it + block save until resolved** ("I don't have an end date for this period — when does it end?"), the same Needs-Clarifying pattern the capture flow uses. Never silently save a period that can never fire. (Malformed date-*lists* are already surfaced via `days_off_error`; this is about missing required scalars.)
 - **Two-phase state (build gap):** generate → reflect-back → confirm → author. Server **stashes the structured fields keyed by session** between the generate call (202, poll `/api/status`) and the confirm call; extend `session_store.STREAMS` with `"focus"` (or a dedicated `/api/focus/result`). Confirm→author is a **synchronous** Anytype write (like `/api/capture/undo`), not another async gen — avoids colliding with the single `_gen_lock`.
 - **Concurrency:** if a plan generation is already running, the authoring `202` returns busy — the UI shows a plain "one thing at a time, try again in a moment," never a silent hang.
 - **Guard:** no auto-generation of content June must supply (Decision 4, addendum). The system structures her words; it never invents the week.
@@ -93,6 +125,10 @@ Hard constraints, not preferences.
 ## Task 4 (6B-edit) — Edit an active period
 *New task — the addendum decided editing is in scope ("June edits it by voice when the time comes"); Phase 6 owns it because it owns authoring.*
 - Same speak → reflect-back → confirm path, but **against the existing active period** (load it, apply the spoken change, reflect back the *changed* result, confirm, update-in-place with read-back). The mid-period caregiving shift is the target case.
+- **Two edit routes — DECIDED 2026-07-11 (June):**
+  - **Precise single-field edit → deterministic, no LLM** (the "fix"-editor path from Task 3): tap a period card's Edit, tap a field, change it directly (date picker / project selector / text). This is the safe, fast default for "move caregiving to Thursday" when she's already looking at the field.
+  - **Broad spoken revision → LLM, guarded by a DIFF.** She *can* revise a period by voice ("push everything a day later," "drop the caregiving window, add a sprint Fri–Sun") and the `generate_focus_period` LLM interprets the change against the loaded period. **The safety is not protecting the period from the LLM — it's the confirm gate + a diff:** the reflect-back for an edit must show **what changed vs. what stayed** (not just the new state), so an LLM that clobbers an unrelated field is visible before anything writes. Nothing writes without June seeing the resulting state. (June weighed full-protection vs. allow-with-guard and chose allow-with-guard — the caregiving-shift example is itself a spoken edit.)
+- **The edit reflect-back shows a diff, not just the new value** — this is the one real addition over Task 3's create reflect-back. Deterministic template over (old fields, new fields).
 - **Build decision:** update-in-place vs. supersede-and-archive. Lean update-in-place for v1 (the period object is short-lived); archive-on-lapse is Phase 8's concern.
 
 ## Task 5 (6C) — Log Day (backend-only rest, uncategorized dump)
