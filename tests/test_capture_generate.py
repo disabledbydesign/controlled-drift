@@ -110,6 +110,38 @@ def test_capture_creates_links_and_skips(tmp_path, monkeypatch):
     assert surgeon["alignment_reasoning"] == "concrete next step"
 
 
+def test_capture_writes_estimated_duration_labeled(tmp_path, monkeypatch):
+    # June stated no duration; the model estimated one. It lands labeled 'estimated'.
+    canned = json.dumps({"opening": "x", "capacity_read": None, "groups": [
+        {"label": "g", "through_line": "t", "items": [
+            {"type": "Task", "name": "Study Python", "link": "P1", "status": "Ready",
+             "duration_min": None, "duration_estimate_min": 90,
+             "action": "create", "reasoning": "learning block"},
+        ]},
+    ]})
+    calls = _stub(monkeypatch, tmp_path, canned=canned)
+    cg.capture("study python")
+    props = {name: p for (_t, name, p) in calls}["Study Python"]
+    assert props["Duration min"] == 90
+    assert props["Duration source"] == "estimated"
+
+
+def test_capture_stated_duration_beats_estimate(tmp_path, monkeypatch):
+    # June said 20; model also guessed 90. Her number wins and is labeled 'stated'.
+    canned = json.dumps({"opening": "x", "capacity_read": None, "groups": [
+        {"label": "g", "through_line": "t", "items": [
+            {"type": "Task", "name": "Quick email to editor", "link": "P1", "status": "Ready",
+             "duration_min": 20, "duration_estimate_min": 90,
+             "action": "create", "reasoning": "she said 20"},
+        ]},
+    ]})
+    calls = _stub(monkeypatch, tmp_path, canned=canned)
+    cg.capture("quick 20 min email to editor")
+    props = {name: p for (_t, name, p) in calls}["Quick email to editor"]
+    assert props["Duration min"] == 20
+    assert props["Duration source"] == "stated"
+
+
 def test_wrong_kind_link_token_is_dropped_not_applied(tmp_path, monkeypatch):
     # A Task whose link points at a GOAL token (G1) must NOT be linked (Tasks link to Projects).
     # Better an unlinked task — honest "might need a project" signal — than a corrupt link.

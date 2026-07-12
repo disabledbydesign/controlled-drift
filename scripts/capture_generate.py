@@ -176,7 +176,8 @@ validation surface; the JSON carries it. Shape:
           "dedup_note": "why skipped, if skipped, else null",
           "reasoning": "why this type and this link — June must be able to see the why",
           "when": "<when June wants it, IN HER WORDS: 'today', a weekday like 'thursday', 'tomorrow', an ISO date, or 'someday'. EMPTY STRING if she didn't say. Never guess a time.>",
-          "duration_min": <how many MINUTES this will take, as a number, ONLY if June said or clearly implied it ("a quick 15 min", "an hour"). null if she gave no signal — NEVER guess; a wrong guess is worse than leaving it unset.>,
+          "duration_min": <MINUTES, as a number, ONLY if June STATED or clearly implied it ("a quick 15 min", "an hour"). null if she gave no duration signal. This is her word — never put a guess here.>,
+          "duration_estimate_min": <YOUR best-guess MINUTES for how long this Task actually takes, for EVERY Task, using the DURATION PRIORS below plus the task's linked project as context. This is a separate field from duration_min on purpose: duration_min is what June said; this is what you estimate. Give a real number, not null, unless the task is genuinely too vague to size (Needs Clarifying) — a rough honest estimate beats the flat 30-minute fallback every unsized Task currently gets. null for non-Task types.>,
           "affect": "<how June feels about THIS item, in her words ('dreading it', 'excited about this one'). Match the SCOPE she gave the feeling: said about one item → only that item; said about the whole dump ('I'm dreading all of this') → put it on every item, because that's her information. Do NOT invent scope — never widen a single-item remark to the dump or narrow a dump-wide statement to one item. Empty string if she gave this item no signal (blank is fine). Never a number or rating.>",
           "blocked_on": "<what this is waiting on, in June's words, if she said it's blocked/waiting ('waiting on Donna', 'once the key arrives'). Empty string if nothing.>",
           "access_conditions": [<zero or more of EXACTLY these, only when her words indicate them: "Can-be-done-lying-down", "Involves-leaving-house", "Requires-talking-to-a-person". Empty list if none. Do NOT invent other values.>]
@@ -188,8 +189,14 @@ validation surface; the JSON carries it. Shape:
 ```
 
 `capacity_read` may be null if no signal is present. `status` applies to Tasks (default "Ready";
-"Needs Clarifying" if too vague to act on). Keep every `reasoning` present — the system must be
-able to show June why each thing landed where it did.
+"Needs Clarifying" if too vague to act on). `duration_min` is June's STATED time (null unless she
+said one); `duration_estimate_min` is YOUR estimate for a Task and should be filled for every
+sizable Task. Keep every `reasoning` present — the system must be able to show June why each thing
+landed where it did.
+
+## DURATION PRIORS — use these to estimate `duration_estimate_min`
+
+""" + capture_fields.DURATION_PRIORS + """
 """
 
 
@@ -259,6 +266,7 @@ def parse_weed(model_text):
     for grp in parsed.get("groups", []):
         for item in grp.get("items", []):
             item.setdefault("duration_min", None)
+            item.setdefault("duration_estimate_min", None)
             item.setdefault("affect", "")
             item.setdefault("blocked_on", "")
             item.setdefault("access_conditions", [])
@@ -311,6 +319,7 @@ def _creation_props(type_name, item, link_id, scheduled=None, is_parked=False):
     # blank/invalid value emits no key, preserving the bare-by-default behavior.
     props.update(capture_fields.build_optional_props(
         duration_min=item.get("duration_min"),
+        duration_estimate_min=item.get("duration_estimate_min"),
         affect=item.get("affect"),
         blocked_on=item.get("blocked_on"),
         access_conditions=item.get("access_conditions"),
