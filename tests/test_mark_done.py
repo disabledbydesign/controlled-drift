@@ -213,3 +213,28 @@ def test_uncomplete_route_reverts_and_unflips_cache(live_server):
 def test_uncomplete_route_needs_an_id(live_server):
     status, body = _post(live_server, "/api/uncomplete", {})
     assert status == 400 and "id" in body["error"]
+
+
+# --- complete_stream: the checker's stream close + read-back ------------------
+
+def test_complete_stream_writes_done_engagement_and_confirms(monkeypatch):
+    updates = []
+    monkeypatch.setattr(task_actions.gsdo_objects, "update",
+                        lambda oid, properties=None: updates.append((oid, properties)))
+    monkeypatch.setattr(task_actions, "_get_object", lambda oid: {
+        "name": "Finish the daily-plan pipeline",
+        "properties": [{"key": "engagement", "select": {"name": "Done"}}],
+    })
+    result = task_actions.complete_stream("id-stream")
+    assert updates == [("id-stream", {"Engagement": "Done"})]
+    assert result == {"id": "id-stream", "name": "Finish the daily-plan pipeline",
+                      "engagement": "Done", "done": True}
+
+
+def test_complete_stream_raises_if_engagement_did_not_persist(monkeypatch):
+    monkeypatch.setattr(task_actions.gsdo_objects, "update", lambda oid, properties=None: None)
+    monkeypatch.setattr(task_actions, "_get_object", lambda oid: {
+        "name": "x", "properties": [{"key": "engagement", "select": {"name": "Steady"}}],
+    })
+    with pytest.raises(RuntimeError):
+        task_actions.complete_stream("id-stream")

@@ -68,6 +68,29 @@ def uncomplete_task(task_id):
     return {"id": task_id, "name": obj.get("name"), "status": "Ready", "done": False}
 
 
+def complete_stream(stream_id):
+    """Mark a work-stream (Project) Done in Anytype and confirm it persisted. Returns:
+        {"id", "name", "engagement": "Done", "done": True}
+
+    Completion for a STREAM = the Engagement select -> 'Done' — the property the whole
+    map already reads (orient_map routes engagement == 'Done' to the Finished section).
+    One property, the one everything else reads: same principle as complete_task.
+
+    Used by the monthly status checker (status_check.py) for its ONE allowed autonomous
+    change: marking demonstrably-finished work as Done. The checker's gate — not this
+    function — decides WHETHER; this function only makes the write honest (read-back).
+    """
+    gsdo_objects.update(stream_id, properties={"Engagement": "Done"})
+
+    obj = _get_object(stream_id)
+    pv = {p.get("key"): p for p in obj.get("properties", [])}
+    eng = (pv.get("engagement", {}).get("select") or {}).get("name")
+    if eng != "Done":
+        raise RuntimeError(
+            f"complete_stream({stream_id!r}): Engagement did not persist (read-back={eng!r})")
+    return {"id": stream_id, "name": obj.get("name"), "engagement": "Done", "done": True}
+
+
 def archive_object(object_id):
     """Undo a just-made capture by moving the object to Anytype's bin (DELETE archives, it
     doesn't hard-delete — recoverable in the app). The honest undo of a *creation* is removal,
