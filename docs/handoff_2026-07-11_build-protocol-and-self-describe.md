@@ -34,7 +34,9 @@ The map *shows* status, but nothing keeps it *honest* — statuses drift out of 
 - **Agents close their own tasks in-flight** — decided; June-facing side already built (`task_actions.complete_task`).
 - **A "system notices, you confirm" check-in** — designed in `docs/focus_configuration_addendum.md`; `neglect.py` exists as scaffolding but has never been run.
 
-**Next step:** write a short plan that assembles these two, then build it through the (now-fixed) loop. Do NOT half-build it — that reproduces the exact pattern this session fixed.
+**Decided design (2026-07-11, June):** delivery is a *scheduled checker subagent* (~monthly) that compares each thread's status against evidence — staleness (`neglect.py`), status-vs-tasks mismatch, and reading code/commits to investigate. **Autonomy — lean cautious:** the agent may *auto-fix only cases with concrete positive evidence of the true state* (e.g. work clearly complete in the code but not marked done — "the code is right there"). Anything resting on absence-of-evidence or judgment (looks stale; marked done but the capability can't be found/confirmed) it *flags for June* and does not change — auto-marking from absence would let a wrong guess silently become the record (the map lying a new way). The asymmetry is the safety line.
+
+**Next step:** write a short plan that assembles these two pieces into that checker, then build it through the (now-fixed) loop. Do NOT half-build it — that reproduces the exact pattern this session fixed.
 
 ## Known gaps in this session's own work
 - `whats_open.py` / `describe_model.py` have no unit tests — they are thin glue over already-tested functions, and were verified by live run (the bar the new build rule sets). Add mocked tests if a reviewer wants belt-and-suspenders.
