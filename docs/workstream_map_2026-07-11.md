@@ -1,5 +1,11 @@
 # Controlled Drift — workstream map (reconstructed 2026-07-11)
 
+> **⚠️ SUPERSEDED (2026-07-11).** The "what's open" function of this doc is now a
+> live command — `python3 scripts/whats_open.py` (the work-stream map, read straight
+> from Anytype, per repo). The status lists below are a frozen hand-reconstruction and
+> will drift — do not treat them as current. This file is kept only for its diagnostic
+> narrative: how threads fell through, and why. For live state, run the command.
+
 *Built from a three-way sweep (design docs, session memory + logs, code) + the live Anytype tree.
 This is a **point-in-time reconstruction** — June's own conclusion this session is that the map
 should become **a live function of the Anytype system** (agent-facing), not a doc rebuilt from
