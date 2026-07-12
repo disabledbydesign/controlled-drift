@@ -138,7 +138,7 @@ def _stub_pipeline(monkeypatch, tmp_path):
     monkeypatch.setenv("CD_DATA_DIR", str(tmp_path))
     fake_tasks = [{"id": "t1", "name": "Task One"}, {"id": "t2", "name": "Task Two"}]
     monkeypatch.setattr(pg, "build_context",
-                        lambda capacity=None, start_time=None:
+                        lambda capacity=None, start_time=None, end_time=None, extra=None, **kw:
                         ("ctx", fake_tasks, dt.datetime(2026, 6, 23, 9, 0), "clock"))
     monkeypatch.setattr(pg, "generate", lambda prompt: _CANNED)
     surfaced, corrections = [], []

@@ -393,7 +393,74 @@ def select_and_order_tasks(tasks, period):
     return sorted(kept, key=_key)
 
 
-def build_context(capacity=None, start_time=None, end_time=None):
+def _match_extra(extra, projects, tasks):
+    """When June explicitly asks ("put X in today"), find the project/task she named so the gate
+    never hides or collapses it away. Errs toward INCLUSION: a missed paraphrase falls back to the
+    normal gate, a false include just surfaces one extra real item — the safe direction. This is a
+    lenient token overlap, not precise NLP; the model still gets `extra` and prioritizes among what
+    is kept. Reconciled design: docs/spec_reconciliation_selection_2026-07-11.md (explicit-request
+    override — an explicitly-named task must be a real move, never relegated to still_here)."""
+    named = {"projects": set(), "task_ids": set()}
+    if not extra:
+        return named
+    low = extra.lower()
+
+    def hit(name):
+        if not name:
+            return False
+        n = name.lower()
+        return n in low or any(w in low for w in n.split() if len(w) >= 4)
+
+    for p in projects:
+        if hit(p.get("name")):
+            named["projects"].add(p.get("name"))
+    for t in tasks:
+        if hit(t.get("name")):
+            named["task_ids"].add(t.get("id"))
+    return named
+
+
+def _gate_and_collapse(tasks, projects, neglected, period, extra=None):
+    """Engagement grain gate + one-next-move-per-thread (spec AI_LAYER_SPEC.md §2/§9; reconciled in
+    docs/spec_reconciliation_selection_2026-07-11.md). Backburner/Open/unset are hidden unless the
+    project is foregrounded (Focus Period) — and, for Backburner/unset only, unless neglected (Open
+    is self-paced: never surfaced by neglect, only by foreground). Everything surfacing collapses to
+    ONE next move per project-thread. A task/project June named in `extra` is guaranteed through
+    (task-named bypasses hide AND collapse; project-named is foregrounded, still one move). Held-back
+    tasks are NOT dropped — they stay in Anytype, just not in today's plan ("nothing lost" = still
+    accessible in the store, not shown daily). No-project tasks are discrete actions: never collapsed
+    together."""
+    proj_eng = {p.get("name"): (p.get("engagement") or "unset") for p in projects}
+    fg = set((period or {}).get("foreground") or [])
+    neg_names = {n.get("name") for n in (neglected or []) if isinstance(n, dict)}
+    named = _match_extra(extra, projects, tasks)
+
+    def proj_of(t):
+        ps = t.get("linked_projects") or []
+        return ps[0] if ps else ""
+
+    kept, seen_thread = [], set()
+    for t in tasks:
+        proj = proj_of(t)
+        eng = proj_eng.get(proj, "unset")
+        task_forced = t.get("id") in named["task_ids"]
+        foregrounded = proj in fg or proj in named["projects"] or task_forced
+        if not foregrounded:
+            if eng == "Open":
+                continue                                   # available, self-paced: not pushed, not nagged
+            if eng in ("Backburner", "unset") and proj not in neg_names:
+                continue                                   # dormant: hidden unless neglected
+        # one next move per real project-thread; no-project tasks (proj == "") are discrete, not collapsed;
+        # an explicitly-named task bypasses the collapse so June always gets what she asked for.
+        if proj and proj in seen_thread and not task_forced:
+            continue
+        if proj:
+            seen_thread.add(proj)
+        kept.append(t)
+    return kept
+
+
+def build_context(capacity=None, start_time=None, end_time=None, extra=None):
     """Load active items + compute the clock schedule, returning the full prompt context.
 
     Mirrors daily_plan.run() but with NO blocking input() and NO printing: capacity is
@@ -438,6 +505,11 @@ def build_context(capacity=None, start_time=None, end_time=None):
     # rest still stays. June toggles this from the overlay Settings panel (dp.include_hobby_block
     # reads settings.json). NB: `wellbeing` var below = the held-out Fun/hobby list (legacy name).
     schedulable, wellbeing = dp.partition_by_side(ordered, projects)
+    # Engagement grain gate + one-next-move-per-thread (reconciled selection model 2026-07-11,
+    # docs/spec_reconciliation_selection_2026-07-11.md): honor engagement DETERMINISTICALLY (not
+    # just as an LLM hint) so the plan is a handful of real next-moves, not the whole pile. The
+    # held-back tasks stay in Anytype — this only changes what today's plan shows.
+    schedulable = _gate_and_collapse(schedulable, projects, neglected, period, extra=extra)
 
     # Output SHAPE (Phase 6, Task 6): a fragmented / unknown-timing day (a caregiving window, or
     # a period that asks for a priority list) can't be expressed as a clock schedule — forcing one
@@ -731,7 +803,7 @@ def generate_plan(capacity=None, source="generate", extra=None):
     framing below): a fresh generation still selects from the whole active list, but her words
     are the strongest signal for what to prioritize. Writes cache, logs what surfaced.
     """
-    full_context, tasks, start_time, shape = build_context(capacity=capacity)
+    full_context, tasks, start_time, shape = build_context(capacity=capacity, extra=extra)
     ref_map, task_table = _build_task_refs(tasks)
     prompt = _assemble_prompt(full_context, start_time, capacity=capacity, task_table=task_table,
                               extra=extra, request_kind="generate", shape=shape)
@@ -780,7 +852,7 @@ def reorder(message, kind):
     re-surfaces (the renegotiated plan is what she's now working from).
     """
     before = plan_store.load_plan()
-    full_context, tasks, start_time, shape = build_context()
+    full_context, tasks, start_time, shape = build_context(extra=message)
     ref_map, task_table = _build_task_refs(tasks)
     history = session_store.recent_entries("negotiate")
     current_plan_summary = _format_current_plan(before)

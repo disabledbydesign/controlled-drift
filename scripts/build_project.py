@@ -22,7 +22,7 @@ def build_project():
     # as legacy but is superseded. Learning loop target: system learns what each level means for
     # each project over time from June's corrections. Paired text field = canonical; select = filterable.
     p_engagement  = g.ensure_property("Engagement", "select",
-                                      ["Steady", "Sprint", "Hyperfixation",
+                                      ["Steady", "Open", "Sprint", "Hyperfixation",
                                        "Needs Clarifying", "Backburner", "Done"])
     p_eng_notes   = g.ensure_property("Engagement notes", "text")   # open: thresholds, cadence, conditions
     # Obligation vs wellbeing — set directly on the Project (June thinks of a project
