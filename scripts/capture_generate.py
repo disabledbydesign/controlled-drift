@@ -20,12 +20,14 @@ Reuses, never reinvents: plan_generate.generate (the pluggable LLM seam), gsdo_o
 (the deterministic write layer), session_store (the working-memory log).
 """
 import sys, os, re, json, time
+import datetime as dt
 sys.path.insert(0, os.path.dirname(__file__))
 import gsdo_anytype as g
 import gsdo_objects
 import plan_generate
 import session_store
 import generation_log
+import when_resolve
 from anytype_test import call
 
 PROMPT_PATH = os.path.join(os.path.dirname(__file__), "..", "prompts", "weeding_gate.md")
@@ -250,12 +252,20 @@ def _get_object(oid):
     return b["object"]
 
 
-def _creation_props(type_name, item, link_id):
+def _creation_props(type_name, item, link_id, scheduled=None, is_parked=False):
     """The properties to write for a confirmed item. Conservative + bare-by-default: only set
-    what the design specifies per type, using property names verified against the live model."""
+    what the design specifies per type, using property names verified against the live model.
+
+    `scheduled`/`is_parked` come from when_resolve (the anchored 'when'). A Task with a resolved
+    date carries it on `Scheduled`; a 'someday' Task is Parked (its real "off today" — the plan
+    path excludes Parked by status, no future-date logic needed)."""
     props = {}
     if type_name == "Task":
         props["Task status"] = item.get("status") or "Ready"
+        if scheduled:
+            props["Scheduled"] = scheduled
+        if is_parked:
+            props["Task status"] = "Parked"   # override "Ready" — someday drops off today via status
     elif type_name == "Project":
         props["Engagement"] = "Steady"        # captured project is live by default (design)
     elif type_name == "Strategy":
@@ -274,10 +284,24 @@ def _creation_props(type_name, item, link_id):
     return props
 
 
-def _create_one(type_name, item, ref_map, id2name):
+def _when_label(scheduled, is_today, is_parked):
+    """The chip June sees for an item's 'when'. "Today" / a short date ("Thu Jul 16") / "Parked".
+    None when she gave no when (undated, eligible any day) — no chip, and status stays Ready
+    (undated is NOT the same as someday/Parked)."""
+    if is_today:
+        return "Today"
+    if scheduled:
+        return dt.date.fromisoformat(scheduled).strftime("%a %b %-d")
+    if is_parked:
+        return "Parked"
+    return None
+
+
+def _create_one(type_name, item, ref_map, id2name, scheduled=None, is_today=False, is_parked=False):
     """Create one confirmed item and PROVE it persisted (read-back). Returns the record kept in
     the session log + shown to June. Raises on any failure so the caller logs it and moves on —
-    one bad item never aborts the rest of the batch."""
+    one bad item never aborts the rest of the batch. The when tuple (from when_resolve) sets the
+    Task's Scheduled date / Parked status and rides back on the record as when_label + is_today."""
     name = (item.get("name") or "").strip()
     if not name:
         raise ValueError("item has no name")
@@ -286,7 +310,7 @@ def _create_one(type_name, item, ref_map, id2name):
     # token yields no link rather than a mismatched one (corrupt links are worse than none).
     expected = _LINK_TOKEN_PREFIX.get(type_name)
     link_id = ref_map.get(tok) if (tok and expected and str(tok).startswith(expected)) else None
-    props = _creation_props(type_name, item, link_id)
+    props = _creation_props(type_name, item, link_id, scheduled=scheduled, is_parked=is_parked)
     oid = gsdo_objects.create(type_name, name, properties=props)
     obj = _get_object(oid)
     if obj.get("name") != name:
@@ -298,6 +322,8 @@ def _create_one(type_name, item, ref_map, id2name):
         "project": id2name.get(link_id) if link_id else None,
         "alignment_reasoning": item.get("reasoning"),
         "dedup_note": item.get("dedup_note"),   # a create-with-overlap doubt, if the model flagged one
+        "when_label": _when_label(scheduled, is_today, is_parked),
+        "is_today": bool(is_today),
     }
 
 
@@ -314,16 +340,19 @@ def _summarize(created, failed, skipped):
 
 # --- the public entry point -------------------------------------------------
 
-def capture(text):
+def capture(text, today=None):
     """Weed June's input into typed, linked Anytype objects and log the turn.
 
-    Returns {opening, capacity_read, groups, created[], failed[], skipped[], result_summary}.
-    Never silent: a generation/parse failure logs to the session store and re-raises; a single
-    item's create failure is logged and recorded in `failed` without losing the rest.
-    """
+    Returns {opening, capacity_read, groups, created[], failed[], skipped[], result_summary,
+    has_today}. Never silent: a generation/parse failure logs to the session store and re-raises;
+    a single item's create failure is logged and recorded in `failed` without losing the rest.
+
+    `today` is injectable (tests pin it); Python owns the date, so a resolved "thursday" anchors
+    to a real ISO day before anything is written — a weekday word never reaches Anytype."""
     text = (text or "").strip()
     if not text:
         raise ValueError("capture: empty text")
+    today = today or dt.date.today()
 
     sid, goals, projects, tasks, recurrings, strategies = _load_weed_context()
     ref_map, id2name, ref_table = _build_ref_table(goals, projects)
@@ -366,8 +395,13 @@ def capture(text):
                 session_store.log_failure("capture", "unknown_type", {"item": item})
                 failed.append({"name": item.get("name"), "error": f"unknown type {tname!r}"})
                 continue
+            # Python owns the date: anchor the free-text 'when' to a real ISO day BEFORE writing,
+            # so "thursday" can never reach Anytype as a weekday word. (Only Tasks carry a
+            # Scheduled date / Parked-someday; the tuple is inert for other types.)
+            scheduled, is_today, is_parked = when_resolve.resolve_when(item.get("when", ""), today)
             try:
-                created.append(_create_one(tname, item, ref_map, id2name))
+                created.append(_create_one(tname, item, ref_map, id2name,
+                                           scheduled=scheduled, is_today=is_today, is_parked=is_parked))
             except Exception as e:
                 session_store.log_failure("capture", "create_failed", {
                     "name": item.get("name"), "type": tname, "error": str(e)})
@@ -399,6 +433,9 @@ def capture(text):
         "failed": failed,
         "skipped": skipped,
         "result_summary": summary,
+        # belt-and-suspenders — the async capture worker discards this return, so the overlay
+        # reads is_today off the session entry's created items; has_today is here for direct callers.
+        "has_today": any(c.get("is_today") for c in created),
     }
 
 
