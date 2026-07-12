@@ -26,6 +26,7 @@ import gsdo_objects
 import plan_generate
 import generation_log
 import memory_pass_log
+import capture_fields
 from anytype_test import call
 
 DEFAULT_PROJECTS_ROOT = os.path.expanduser("~/.claude/projects")
@@ -392,6 +393,16 @@ def apply_candidate(candidate):
         props["Task status"] = "Ready"
     if link_id:
         props[link_prop] = [link_id]
+    # Per-item optional fields (duration / affect / blocked-on / access), through the SAME shared
+    # builder as the capture path so the two write paths cannot diverge. Each candidate is one
+    # entry, so its affect is already quoted from that entry's own words (DECISION 1 holds by
+    # construction). A blank/invalid value emits no key.
+    props.update(capture_fields.build_optional_props(
+        duration_min=candidate.get("duration_min"),
+        affect=candidate.get("affect"),
+        blocked_on=candidate.get("blocked_on"),
+        access_conditions=candidate.get("access_conditions"),
+    ))
 
     oid = gsdo_objects.create(type_name, name, properties=props)
     obj = _get_object(oid)

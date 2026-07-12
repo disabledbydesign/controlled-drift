@@ -72,7 +72,11 @@ given (do not skip any; do not add entries you weren't given). Shape:
     "proposed_name": "a short name for the Anytype object, in June's own words where possible",
     "link_to": "the exact name of an existing Goal/Project to link to, or null if none is clearly named",
     "needs_clarifying": false,
-    "reasoning": "one or two sentences: why this belongs in Anytype (or doesn't), plain language"
+    "reasoning": "one or two sentences: why this belongs in Anytype (or doesn't), plain language",
+    "duration_min": "how many MINUTES, as a number, ONLY if the entry's text states/implies it; null otherwise — never guess",
+    "affect": "a short verbatim quote of any feeling/capacity signal in the entry's own words, or null",
+    "blocked_on": "verbatim what it's waiting on, if the entry says so, or null",
+    "access_conditions": "zero or more of EXACTLY: \"Can-be-done-lying-down\", \"Involves-leaving-house\", \"Requires-talking-to-a-person\" — only if the text indicates one; else empty list"
   }
 ]
 ```
@@ -80,6 +84,10 @@ given (do not skip any; do not add entries you weren't given). Shape:
 Set `belongs_in_anytype: false` (and `proposed_type: null`, `needs_clarifying: false`) for every
 entry that's correctly filed as memory — most of them will be. `needs_clarifying` is only
 meaningful when `belongs_in_anytype` is true and the type/link couldn't be determined confidently.
+
+These optional fields, like `context_verbatim`, are read from the entry's own words only — if the
+text doesn't state a duration / feeling / blocker / access condition, leave it null (or empty).
+Never infer one to fill the field.
 
 ---
 
