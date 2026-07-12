@@ -171,22 +171,18 @@ def _push_to_phone(plan, stale=False):
     the body says so plainly (its clock times may be off) so June isn't misled, and can tap to
     rebuild. A clearly-labelled stale plan beats silence on a bad-network morning.
 
-    Sends the woven frame + this morning's moves as a readable body, in permission-granting
-    register. The topic is a private unguessable secret (only her phone is subscribed)."""
+    The body is deliberately CONTENT-FREE (June's decision, 2026-07-12): ntfy.sh is a public
+    relay guarded only by the unguessable topic, and plan text carries exactly the sensitive
+    material the local-first store exists to protect. The notification says a plan is ready
+    and links to the overlay; the content stays on the LAN. Do not add task text back here."""
     topic = _ntfy_topic()
     if not topic:
         return False
-    preface = ["Couldn't refresh this morning — here's your last plan (times may be off; tap to rebuild).", ""] if stale else []
-    lines = preface + [(plan.get("woven_frame") or "").strip(), ""]
-    blocks = plan.get("blocks", [])
-    if blocks:
-        b = blocks[0]
-        lines.append(f"{b.get('label','')}  {b.get('time','')}".strip())
-        import re
-        for it in b.get("items", [])[:5]:
-            task = re.sub(r"^\([^)]*\)\s*", "", (it.get("task") or "")).strip()
-            lines.append(f"• {it.get('time','')}  {task}".strip())
-    body = "\n".join(l for l in lines if l is not None).strip()
+    if stale:
+        body = ("Couldn't refresh this morning — your last plan is up (times may be off). "
+                "Tap to open and rebuild when you're ready.")
+    else:
+        body = "Today's plan is ready, if you want it. Tap to open."
     try:
         req = urllib.request.Request(f"https://ntfy.sh/{topic}",
                                      data=body.encode("utf-8"), method="POST")
