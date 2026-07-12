@@ -438,6 +438,7 @@ def apply_candidate(candidate):
     # construction). A blank/invalid value emits no key.
     props.update(capture_fields.build_optional_props(
         duration_min=candidate.get("duration_min"),
+        duration_estimate_min=candidate.get("duration_estimate_min"),
         affect=candidate.get("affect"),
         blocked_on=candidate.get("blocked_on"),
         access_conditions=candidate.get("access_conditions"),

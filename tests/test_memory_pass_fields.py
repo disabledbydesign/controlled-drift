@@ -23,6 +23,21 @@ def test_apply_candidate_writes_optional_fields(monkeypatch):
     assert seen["Access conditions"] == ["Involves-leaving-house"]
 
 
+def test_apply_candidate_forwards_estimated_duration(monkeypatch):
+    seen = {}
+    monkeypatch.setattr(mp.gsdo_objects, "create",
+                        lambda typ, name, properties: seen.update(properties) or "oid-1")
+    monkeypatch.setattr(mp.gsdo_objects, "find_existing", lambda key, name: None)
+    monkeypatch.setattr(mp, "_get_object", lambda oid: {"name": "Draft the SSRC narrative"})
+    monkeypatch.setattr(mp.g, "find_type", lambda name: {"key": "task", "id": "t"})
+    mp.apply_candidate({
+        "proposed_name": "Draft the SSRC narrative", "proposed_type": "Task", "link_to": None,
+        "duration_estimate_min": 120,
+    })
+    assert seen["Duration min"] == 120
+    assert seen["Duration source"] == "estimated"
+
+
 def test_apply_candidate_no_optional_fields_writes_none(monkeypatch):
     seen = {}
     monkeypatch.setattr(mp.gsdo_objects, "create",
