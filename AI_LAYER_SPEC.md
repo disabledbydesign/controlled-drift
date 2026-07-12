@@ -72,6 +72,8 @@ The LLM still does the *thinking* (alignment, the woven frame, ordering, drift) 
 
 ## 2. Data model
 
+> **⟳ Selection model reconciled 2026-07-11 — June-approved; full detail in `docs/spec_reconciliation_selection_2026-07-11.md`.** The daily plan's selection composes three layers at read time (none a scalar, none overwriting another): **(1) `engagement`** as the enduring per-project grain gate — Backburner → hidden-unless-neglected, Steady → *one* next move, Done → excluded — read **deterministically, not just hinted to the LLM** (the drift this fixes). `Sprint` is **retired** (a sprint = Focus Period foreground); `Hyperfixation` is **not a priority category** (ambiguous — routed through the qualitative entrypoint `engagement_notes`/`affective`, not a select value). **(2) `Focus Period`** as a temporary phase lens over engagement (foreground elevates — incl. "sprint" — and *activates* a Steady project, enabling later rotation over Steady threads; paused suppresses; does not overwrite engagement). **(3) `Side`** now has **three** values (Obligation / Wellbeing / Fun-hobby), applied orthogonally. Output: one next item per surviving thread, rendered as streams, never a flat list. Engagement/affective are kept current by AI-proposed updates June confirms (logged).
+
 **The fundamental rule: formal fields exist only for what the AI must query or filter on. Everything else lives in `context` (free text, always present, always read).**
 
 Only what June cannot re-hold gets persisted as a formal field. `context` absorbs the rest. New patterns emerge in `context` before we know they're patterns; they promote to formal fields when they've earned it (§6).
@@ -405,7 +407,7 @@ data model (§2)  ──>  weeding gate (8a)  ──>  alignment/drift (8b)  ─
 2. Data model created in Anytype (Goal / Project / Task / Recurring / Strategy + fields).
 3. **Weeding gate (8a)** — so associational input becomes structured items. This is the first behavior; without it June faces a blank store. (Prompt drafted: `prompts/weeding_gate.md`.)
 4. **Daily plan generation (richer than "a first cut" — June confirmed this is the usefulness threshold, session 4).** Not a flat list. It must:
-   - surface the **next tangible item per project/thread** (Param #13 — June holds one move per thread, never the pile), organized by today's sort axis;
+   - surface the **next tangible item per project/thread** (Param #13 — June holds one move per thread, never the pile), organized by today's sort axis *(selection mechanics — how `engagement` gates this, with Focus Period + Side — reconciled 2026-07-11: `docs/spec_reconciliation_selection_2026-07-11.md`)*;
    - carry a **woven conceptual frame** — a narrative sentence on the organizing strategy + how today's moves advance her goals + a progress reminder (read from active `Strategy` objects + the Goal→Project chain);
    - propose a **deterministic clock-time schedule** (Python computes times from current time + `duration_estimate`s — NOT the LLM; see §1) that June negotiates in chat, then it writes to Anytype;
    - include a **"still here, not today" list** that reassures: each parked item shows its designated rhythm/slot + the reason, and the system actually re-surfaces it (see neglect-resurfacing below). The relief depends on the re-surfacing being *real*, not just stated.
