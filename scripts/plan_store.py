@@ -169,6 +169,140 @@ def mark_item_undone(task_id):
     return plan
 
 
+# --- tap-to-place move (deterministic — no LLM, no regeneration) -------------
+# June moves a task by TAPPING WHERE IT GOES: the overlay shows tap-targets at every later
+# spot in the visible plan, and the tapped spot arrives here as (target_block, position).
+# The clock times then RE-FLOW automatically: pure first-fit arithmetic over the cached
+# plan's existing durations. This never touches plan_generate/daily_plan and never writes
+# to Anytype. It is a day-of adjustment to what's on screen, NOT a stored preference: the
+# next generation rebuilds the plan from Anytype and the move is gone (overlay copy says
+# so — nothing here promises persistence).
+
+_DEFAULT_ITEM_MIN = 30  # fallback duration when an item's current time doesn't parse
+
+
+def _hhmm_to_min(s):
+    """'13:30' -> 810, or None if it isn't an HH:MM string."""
+    try:
+        h, m = str(s).strip().split(":")
+        return int(h) * 60 + int(m)
+    except (ValueError, AttributeError):
+        return None
+
+
+def _min_to_hhmm(n):
+    n %= 24 * 60
+    return f"{n // 60:02d}:{n % 60:02d}"
+
+
+def _range_bounds(s):
+    """'09:00 – 10:30' -> (540, 630). A single time or unparseable text -> (start_or_None, None).
+    Splits on the en-dash, the separator every generated time range uses."""
+    if not s:
+        return None, None
+    parts = [p.strip() for p in str(s).split("–")]
+    start = _hhmm_to_min(parts[0]) if parts else None
+    end = _hhmm_to_min(parts[1]) if len(parts) > 1 else None
+    return start, end
+
+
+def _reflow_block(block):
+    """Recompute every item's clock time in this block, in order — the automatic time
+    recalculation June asked for. Each item KEEPS its existing duration (or 30 min if its
+    current time doesn't parse); item N starts where item N-1 ends; the walk starts at the
+    block's own start time (or the first item's, if the block has none). If nothing gives a
+    start time, the times are left exactly as they are — an honest no-op, never invented.
+    If the durations run past the block's labelled end, the times run past it too: the
+    arithmetic tells the truth rather than squeezing tasks to fit."""
+    items = block.get("items", [])
+    if not items:
+        return
+    cursor, _ = _range_bounds(block.get("time"))
+    if cursor is None:
+        cursor, _ = _range_bounds(items[0].get("time"))
+    if cursor is None:
+        return
+    for item in items:
+        s, e = _range_bounds(item.get("time"))
+        dur = (e - s) if (s is not None and e is not None and e > s) else _DEFAULT_ITEM_MIN
+        item["time"] = f"{_min_to_hhmm(cursor)} – {_min_to_hhmm(cursor + dur)}"
+        cursor += dur
+
+
+def _write_plan(plan):
+    """Atomic persist of an in-place plan mutation (same discipline as save_plan/mark_item_done:
+    the overlay never reads a half-written plan). Deliberately does NOT re-stamp
+    generated_at/source — a move is not a regeneration."""
+    path = _plan_path()
+    tmp = path + ".tmp"
+    with open(tmp, "w") as f:
+        json.dump(plan, f, indent=2)
+    os.replace(tmp, path)
+
+
+def move_item_later(task_id, target_block_index, position=None):
+    """Move one scheduled task LATER in the cached clock-shape plan and re-flow the times.
+
+    `position` is the item's FINAL index in the destination block's item list (the tap-target
+    the overlay showed); None appends to the end of the destination block. A move within the
+    SAME block needs a position strictly greater than the item's current index; any other
+    destination must be a strictly later block. Both affected blocks are re-flowed so every
+    item shows a real recomputed time.
+
+    Returns the updated plan dict. Raises:
+      LookupError — no cached plan; no clock-shape blocks (fragmented days reorder via
+                    move_priority_item_later instead); or no scheduled item with task_id.
+      ValueError  — block/position out of range, or the destination is not strictly later.
+    """
+    plan = load_plan()
+    if plan is None:
+        raise LookupError("no cached plan to move within")
+    blocks = plan.get("blocks")
+    if not blocks:
+        raise LookupError("plan has no time-blocks — use move_priority_item_later for a "
+                          "fragmented (priority-shape) day")
+    if not (0 <= target_block_index < len(blocks)):
+        raise ValueError(f"target block {target_block_index} out of range (0..{len(blocks) - 1})")
+
+    src_index = src_pos = None
+    for bi, block in enumerate(blocks):
+        for pos, item in enumerate(block.get("items", [])):
+            if item.get("id") == task_id:
+                src_index, src_pos = bi, pos
+                break
+        if src_index is not None:
+            break
+    if src_index is None:
+        raise LookupError(f"no scheduled item with id {task_id!r} to move")
+    if target_block_index < src_index:
+        raise ValueError("can only move a task later")
+
+    # Validate the landing spot BEFORE mutating anything.
+    if target_block_index == src_index:
+        n = len(blocks[src_index]["items"])
+        # Same block: the final index must be strictly later than where it is now.
+        if position is None or not (src_pos < position <= n - 1):
+            raise ValueError("a move within its own part of the day must land at a later spot")
+    else:
+        n = len(blocks[target_block_index].get("items", []))
+        if position is None:
+            position = n                      # append (the block-end tap-target)
+        elif not (0 <= position <= n):
+            raise ValueError(f"position {position} out of range for that part of the day (0..{n})")
+
+    src_item = blocks[src_index]["items"].pop(src_pos)
+    # After the pop, inserting at `position` puts the item at exactly that final index —
+    # including the same-block case (everything after src_pos shifted down by one).
+    blocks[target_block_index].setdefault("items", []).insert(position, src_item)
+
+    _reflow_block(blocks[src_index])
+    if target_block_index != src_index:
+        _reflow_block(blocks[target_block_index])
+
+    _write_plan(plan)
+    return plan
+
+
 # --- generation status (for async generate-and-poll) ------------------------
 # A long generation (the LLM call) no longer blocks the HTTP request — the server kicks it
 # off in the background and the overlay polls this status. Lives in its own small file so a

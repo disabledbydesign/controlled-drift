@@ -78,3 +78,139 @@ def test_add_preset_has_no_payload(tmp_path, monkeypatch):
     _redirect(tmp_path, monkeypatch)
     # "add" is UI-only (focuses the text field) — it must not carry a generation payload.
     assert plan_store.find_preset("add")["payload"] is None
+
+
+# --- tap-to-place move (deterministic, no LLM) — clock shape ------------------
+
+def _clock_plan():
+    return {
+        "woven_frame": "wf",
+        "blocks": [
+            {"label": "Morning", "time": "09:00 – 12:00",
+             "items": [{"time": "09:00 – 10:30", "project": "Alpha", "task": "draft", "id": "T1"},
+                       {"time": "10:30 – 11:15", "project": "Beta", "task": "email", "id": "T2"},
+                       {"time": "11:15 – 12:00", "project": "Beta", "task": "forms", "id": "T3"}]},
+            {"label": "Afternoon", "time": "13:00 – 17:00",
+             "items": [{"time": "13:00 – 14:00", "project": "Gamma", "task": "call", "id": "T4"}]},
+        ],
+        "still_here": [],
+    }
+
+
+def test_move_append_to_later_block_recomputes_times(tmp_path, monkeypatch):
+    _redirect(tmp_path, monkeypatch)
+    plan_store.save_plan(_clock_plan(), source="generate")
+    updated = plan_store.move_item_later("T1", 1)   # position None -> append
+    assert "T1" not in [i.get("id") for i in updated["blocks"][0]["items"]]
+    # T1 keeps its 90-min duration; T4 ends 14:00 -> T1 is 14:00 – 15:30. Never blanked.
+    moved = next(i for i in updated["blocks"][1]["items"] if i.get("id") == "T1")
+    assert moved["time"] == "14:00 – 15:30"
+
+
+def test_move_to_start_of_later_block(tmp_path, monkeypatch):
+    _redirect(tmp_path, monkeypatch)
+    plan_store.save_plan(_clock_plan(), source="generate")
+    updated = plan_store.move_item_later("T1", 1, position=0)   # the block-start tap-target
+    ids = [i["id"] for i in updated["blocks"][1]["items"]]
+    assert ids == ["T1", "T4"]
+    times = {i["id"]: i["time"] for i in updated["blocks"][1]["items"]}
+    assert times == {"T1": "13:00 – 14:30", "T4": "14:30 – 15:30"}
+
+
+def test_move_closes_the_gap_in_the_source_block(tmp_path, monkeypatch):
+    _redirect(tmp_path, monkeypatch)
+    plan_store.save_plan(_clock_plan(), source="generate")
+    updated = plan_store.move_item_later("T1", 1)
+    # The source block re-flows from its start: T2 (45 min) now 09:00–09:45, T3 09:45–10:30.
+    t2 = next(i for i in updated["blocks"][0]["items"] if i.get("id") == "T2")
+    t3 = next(i for i in updated["blocks"][0]["items"] if i.get("id") == "T3")
+    assert t2["time"] == "09:00 – 09:45"
+    assert t3["time"] == "09:45 – 10:30"
+
+
+def test_move_later_within_same_block(tmp_path, monkeypatch):
+    _redirect(tmp_path, monkeypatch)
+    plan_store.save_plan(_clock_plan(), source="generate")
+    # Tap-target after T2: T1 lands at final index 1 -> [T2, T1, T3], durations kept.
+    updated = plan_store.move_item_later("T1", 0, position=1)
+    assert [i["id"] for i in updated["blocks"][0]["items"]] == ["T2", "T1", "T3"]
+    times = {i["id"]: i["time"] for i in updated["blocks"][0]["items"]}
+    assert times == {"T2": "09:00 – 09:45", "T1": "09:45 – 11:15", "T3": "11:15 – 12:00"}
+
+
+def test_move_overflow_past_block_end_is_honest_arithmetic(tmp_path, monkeypatch):
+    _redirect(tmp_path, monkeypatch)
+    plan = _clock_plan()
+    plan["blocks"][1]["items"].append({"time": "14:00 – 16:45", "project": "Gamma",
+                                       "task": "long thing", "id": "T5"})
+    plan_store.save_plan(plan, source="generate")
+    updated = plan_store.move_item_later("T1", 1)   # 90 min appended after 16:45
+    moved = next(i for i in updated["blocks"][1]["items"] if i["id"] == "T1")
+    # Runs past the block label's 17:00 end — the arithmetic tells the truth; we never
+    # squeeze or invent durations to make it fit.
+    assert moved["time"] == "16:45 – 18:15"
+
+
+def test_move_unparseable_item_time_falls_back_to_default_duration(tmp_path, monkeypatch):
+    _redirect(tmp_path, monkeypatch)
+    plan = _clock_plan()
+    plan["blocks"][0]["items"][1]["time"] = ""   # T2 has no parseable time
+    plan_store.save_plan(plan, source="generate")
+    updated = plan_store.move_item_later("T1", 1)
+    t2 = next(i for i in updated["blocks"][0]["items"] if i["id"] == "T2")
+    assert t2["time"] == "09:00 – 09:30"   # default 30 min, anchored to block start
+
+
+def test_move_preserves_generated_at_and_source(tmp_path, monkeypatch):
+    _redirect(tmp_path, monkeypatch)
+    saved = plan_store.save_plan(_clock_plan(), source="refresh")
+    updated = plan_store.move_item_later("T1", 1)
+    # A move is not a regeneration — the timestamp/source must not be re-stamped.
+    assert updated["generated_at"] == saved["generated_at"]
+    assert updated["source"] == "refresh"
+
+
+def test_move_persists_to_cache(tmp_path, monkeypatch):
+    _redirect(tmp_path, monkeypatch)
+    plan_store.save_plan(_clock_plan(), source="generate")
+    plan_store.move_item_later("T1", 1)
+    reloaded = plan_store.load_plan()
+    assert "T1" in [i.get("id") for i in reloaded["blocks"][1]["items"]]
+    assert not os.path.exists(str(tmp_path / "current_plan.json.tmp"))  # atomic, no leftover
+
+
+def test_move_rejects_not_later(tmp_path, monkeypatch):
+    _redirect(tmp_path, monkeypatch)
+    plan_store.save_plan(_clock_plan(), source="generate")
+    import pytest
+    with pytest.raises(ValueError):
+        plan_store.move_item_later("T4", 0)                 # earlier block
+    with pytest.raises(ValueError):
+        plan_store.move_item_later("T1", 0)                 # same block, no position
+    with pytest.raises(ValueError):
+        plan_store.move_item_later("T2", 0, position=0)     # same block, EARLIER spot
+    with pytest.raises(ValueError):
+        plan_store.move_item_later("T2", 0, position=1)     # same block, same spot (no-op)
+
+
+def test_move_rejects_out_of_range_and_missing_id(tmp_path, monkeypatch):
+    _redirect(tmp_path, monkeypatch)
+    plan_store.save_plan(_clock_plan(), source="generate")
+    import pytest
+    with pytest.raises(ValueError):
+        plan_store.move_item_later("T1", 9)                 # block out of range
+    with pytest.raises(ValueError):
+        plan_store.move_item_later("T1", 1, position=5)     # position out of range
+    with pytest.raises(LookupError):
+        plan_store.move_item_later("NOPE", 1)
+
+
+def test_move_raises_when_no_cache_or_no_blocks(tmp_path, monkeypatch):
+    _redirect(tmp_path, monkeypatch)
+    import pytest
+    with pytest.raises(LookupError):
+        plan_store.move_item_later("T1", 1)
+    plan_store.save_plan({"shape": "priority", "items": [{"task": "x", "id": "T1"}]},
+                         source="generate")
+    with pytest.raises(LookupError):
+        plan_store.move_item_later("T1", 1)   # priority shape has no blocks (see Task 2)
