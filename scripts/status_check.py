@@ -766,8 +766,9 @@ if __name__ == "__main__":
                     help="LLM verdicts + gate, but write NOTHING — for reviewed first runs")
     ap.add_argument("--run", action="store_true", help="the real pass: apply + flag + log")
     ap.add_argument("--flags", action="store_true", help="list what's waiting for June")
-    ap.add_argument("--resolve", default=None, metavar="FLAG_ID",
-                    help="record June's answer to a flag (with --response, --action)")
+    ap.add_argument("--resolve", nargs="?", const="", default=None, metavar="FLAG_ID",
+                    help="record June's answer to a flag (with --response, --action); "
+                         "bare --resolve lists what's waiting and how to answer")
     ap.add_argument("--response", default=None, help="June's words, verbatim")
     ap.add_argument("--action", default="leave",
                     help="leave | mark_stream_done | mark_task_done")
@@ -786,10 +787,23 @@ if __name__ == "__main__":
             print(f"[{f['id']}] {f['june_line']}")
         sys.exit(0)
 
+    if args.resolve == "" or (args.resolve and not args.response):
+        # June typed --resolve bare (or without her answer): show what's waiting and
+        # exactly how to answer it, in plain words — never an argparse usage dump.
+        flags = pending_flags()
+        if not flags:
+            print("Nothing waiting — the map and the check agree.")
+            sys.exit(0)
+        print("Waiting for your word:")
+        for f in flags:
+            print(f"  [{f['id']}] {f['june_line']}")
+        print()
+        print("To answer one:")
+        print('  python3 scripts/status_check.py --resolve <id> --response "your answer in your words"')
+        print("Or just tell Claude your answer — resolving it is Claude's job, not yours.")
+        sys.exit(0)
+
     if args.resolve:
-        if not args.response:
-            print("--resolve needs --response (June's words, verbatim)", file=sys.stderr)
-            sys.exit(1)
         flag = resolve_flag(args.resolve, args.response, action=args.action,
                             target_id=args.target)
         print(json.dumps({"resolved": flag["id"], "action": args.action,
