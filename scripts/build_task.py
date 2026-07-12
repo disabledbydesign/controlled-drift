@@ -27,6 +27,11 @@ def build_task():
     p_docs       = g.ensure_property("Relevant docs", "text")       # reused
     p_context    = g.ensure_property("Context", "text")             # reused
     p_surfaced   = g.ensure_property("Last surfaced", "date")       # plan note 1
+    # When June wants a task worked (anchored to a real ISO date at capture time by
+    # when_resolve — never a weekday word). Distinct from the built-in Due date (a deadline):
+    # Scheduled is "start considering it on/after this day", Due date is "it's late after this
+    # day". The selection thread reads this to hold future-dated tasks off today's plan.
+    p_scheduled  = g.ensure_property("Scheduled", "date")
 
     task_type = g.find_type("task")
     if not task_type:
@@ -34,7 +39,7 @@ def build_task():
     # built-in keys used in place of custom Deadline / Project-link:
     g.link_properties_to_type(task_type["id"],
         [p_duration, p_clarify, p_status, p_blocked, p_affective, p_access, p_access_nts,
-         p_autonomous, p_docs, p_context, p_surfaced, "due_date", "linked_projects"])
+         p_autonomous, p_docs, p_context, p_surfaced, p_scheduled, "due_date", "linked_projects"])
     print(f"[ok] Task type extended: id={task_type['id']}")
 
 if __name__ == "__main__":
