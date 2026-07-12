@@ -4,11 +4,45 @@ import capture_fields as cf
 
 
 def test_duration_valid_int():
-    assert cf.build_optional_props(duration_min=45) == {"Duration min": 45}
+    assert cf.build_optional_props(duration_min=45) == {
+        "Duration min": 45, "Duration source": "stated"}
 
 
 def test_duration_coerces_numeric_string():
-    assert cf.build_optional_props(duration_min="30") == {"Duration min": 30}
+    assert cf.build_optional_props(duration_min="30") == {
+        "Duration min": 30, "Duration source": "stated"}
+
+
+def test_stated_duration_labels_source_stated():
+    assert cf.build_optional_props(duration_min=90) == {
+        "Duration min": 90, "Duration source": "stated"}
+
+
+def test_estimated_duration_labels_source_estimated():
+    assert cf.build_optional_props(duration_estimate_min=120) == {
+        "Duration min": 120, "Duration source": "estimated"}
+
+
+def test_stated_wins_over_estimate_fidelity_first():
+    # June said 90; the model also guessed 120. Her number is truth; the estimate is discarded.
+    assert cf.build_optional_props(duration_min=90, duration_estimate_min=120) == {
+        "Duration min": 90, "Duration source": "stated"}
+
+
+def test_no_duration_writes_neither_key():
+    out = cf.build_optional_props(duration_min=None, duration_estimate_min=None)
+    assert "Duration min" not in out and "Duration source" not in out
+
+
+def test_invalid_estimate_writes_nothing():
+    assert cf.build_optional_props(duration_estimate_min="soon") == {}
+    assert cf.build_optional_props(duration_estimate_min=0) == {}
+    assert cf.build_optional_props(duration_estimate_min=-5) == {}
+
+
+def test_duration_priors_text_present():
+    # The shared priors carry June's calibration so both prompt sites stay in sync.
+    assert "1" in cf.DURATION_PRIORS and "hour" in cf.DURATION_PRIORS.lower()
 
 
 def test_duration_absent_or_bad_writes_nothing():
@@ -53,5 +87,6 @@ def test_access_conditions_empty_after_filter_writes_nothing():
 def test_all_fields_together():
     got = cf.build_optional_props(duration_min=20, affect="dread", blocked_on="the API key",
                                   access_conditions=["Requires-talking-to-a-person"])
-    assert got == {"Duration min": 20, "Affective": "dread", "Blocked on": "the API key",
+    assert got == {"Duration min": 20, "Duration source": "stated",
+                   "Affective": "dread", "Blocked on": "the API key",
                    "Access conditions": ["Requires-talking-to-a-person"]}
