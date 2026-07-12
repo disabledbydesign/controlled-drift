@@ -74,6 +74,8 @@ The agent reconstructs the whole thread from this doc. June does not have to hol
 
 # DECIDED — 2026-07-11 workshop session (the design is now settled enough to plan)
 
+> **Status (2026-07-12): the build scope is FINALIZED in the plan, not here.** Authoritative: `docs/superpowers/plans/2026-07-11-capture-when-regenerate-flow.md` (rev. 3, critic-swarm-reviewed) + `docs/handoff_2026-07-12_capture-when-thread.md`. **Key change since this section was written:** the future-date "held off today" behavior is NOT built by this thread — it's handed to the selection thread (which owns `daily_plan.py`/`plan_generate.py`); this thread ships the `Scheduled` field + a pure eligibility predicate. See the plan's "HANDOFF TO THE SELECTION THREAD" section.
+
 *Reached via the `workshop` skill, grounded in the real tool (overlay `docs/overlay_daily.html` +
 `scripts/server.py` routes + `scripts/daily_plan.py`). This section is the outcome; read it and the
 thread above together.*
