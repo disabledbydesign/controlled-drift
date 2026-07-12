@@ -524,6 +524,13 @@ textarea.fe-input { resize: vertical; min-height: 64px; line-height: 1.45; }
   display: none;
 }
 .project-row.open .project-tasks { display: block; }
+.project-summary { padding: 2px 0 8px; }
+.summary-line { font-size: 12px; line-height: 1.4; color: var(--text); padding: 2px 0; }
+.summary-key { color: var(--text-dim); font-weight: 600; }
+.summary-tasks-toggle { font-size: 11.5px; font-family: inherit; background: none; border: none;
+  color: var(--gold); cursor: pointer; padding: 4px 0; }
+.project-subtasks { display: none; margin-top: 4px; }
+.project-row.tasks-open .project-subtasks { display: block; }
 .task-sub {
   display: flex;
   align-items: baseline;
@@ -865,6 +872,17 @@ textarea.add-field:focus { border-color: var(--gold); }
 .when-chip.parked { color: var(--text-dimmer); }
 .when-chip:hover { border-color: var(--gold); }
 .when-chip:disabled { opacity: 0.5; cursor: default; }
+/* tap-to-place move — chip on the task, "move here" targets while placing */
+.move-chip { flex-shrink: 0; margin-left: auto; border-radius: 13px; font-size: 11px;
+  padding: 2px 11px; cursor: pointer; font-family: inherit; background: var(--surface);
+  border: 1px solid var(--border); color: var(--text-dim); transition: all .12s; }
+.move-chip:hover { border-color: var(--gold); color: var(--gold); }
+.move-chip.active { border-color: var(--gold); color: var(--gold); }
+.place-target { display: block; width: 100%; text-align: center; font-size: 11.5px;
+  font-family: inherit; padding: 5px 0; margin: 3px 0; border-radius: 8px; cursor: pointer;
+  background: var(--gold-dim); border: 1px dashed var(--gold); color: var(--gold); }
+.place-target:disabled { opacity: 0.5; cursor: default; }
+.placing-item { outline: 1px solid var(--gold); border-radius: 8px; }
 .verify-box { margin: 8px 14px 16px; background: var(--rose-bg); border: 1px solid var(--rose-border); border-radius: 10px; padding: 12px 13px; }
 .verify-q { font-size: 12.5px; color: var(--text); line-height: 1.45; margin-bottom: 11px; }
 .verify-q b { color: var(--gold); font-weight: 600; }
@@ -1305,7 +1323,8 @@ async function pollGeneration(tries) {
     const st = await res.json();
     if (st.state === 'error') { showError(st.error || 'generation failed'); setBusy(false); return; }
     if (st.state === 'idle' && st.plan_generated_at && st.plan_generated_at !== _planGeneratedAt) {
-      await loadPlan();          // a new plan landed — render it
+      await loadProjectSummaries();  // a fresh generation may bring new streams
+      await loadPlan();              // a new plan landed — render it
       setBusy(false);
       return;
     }
@@ -1380,6 +1399,16 @@ async function loadPlan() {
   } catch (_) {
     // static preview — hardcoded sample data is already shown
   }
+}
+
+async function loadProjectSummaries() {
+  try {
+    const res = await fetch('/api/project-summaries');
+    if (!res.ok) return;
+    const data = await res.json();
+    _projectSummaries = data.summaries || {};
+    if (_lastPlan) renderPlan(_lastPlan);   // summaries arrived after the plan — re-render
+  } catch (_) { /* static preview / server down — rows just fall back to tasks */ }
 }
 
 // ── Focus slot: "see my week" (Phase 6, Task 2/6A — read-only) ──────────────
@@ -1758,11 +1787,66 @@ function groupByProject(items) {
   return groups;
 }
 
-function renderFlatItem(item, showProject) {
+// ── Tap-to-place move (no drag) ─────────────────────────────────────────────
+// June moves a task by tapping WHERE IT GOES: tap "move ›" on the task, tap-targets appear at
+// every later spot in the visible plan, tap one. Times recompute server-side (no LLM, instant).
+// The move is for TODAY'S view only — the next plan rebuild replaces it (no copy here may
+// promise otherwise).
+let _lastPlan = null;   // last rendered plan — placement mode re-renders from it
+let _placing = null;    // {id, block} while June is choosing a spot; block is null on list days
+// name -> {what_it_is?, next_step?} for the expandable work-stream rows. Only projects whose
+// Context parsed appear here; a row for any other project falls back to its task list, with no
+// invented text (divergence ledger H2 — we don't paper over the fragile parse).
+let _projectSummaries = {};
+
+function startPlacing(id, block) {
+  // Tapping the same task's control again cancels; tapping another task switches to it.
+  _placing = (_placing && _placing.id === id) ? null
+           : { id, block: (block === null || block === undefined) ? null : block };
+  if (_lastPlan) renderPlan(_lastPlan);
+}
+
+// One "move here" tap-target. data-pos is the FINAL index the item lands at (the position
+// contract /api/task/move expects); data-block is absent on fragmented (list) days.
+function _placeTargetHtml(targetBlock, position) {
+  const tb = targetBlock == null ? '' : ` data-block="${targetBlock}"`;
+  return `<button class="place-target"${tb} data-pos="${position}" onclick="placeAt(this)">move here</button>`;
+}
+
+// The per-task control. Normal mode: "move ›" on any task with an id and somewhere later to
+// go. Placing mode: ONLY the moving task shows a control, reading "cancel" (one thing at a
+// time — every other control gives way to the tap-targets).
+function moveChipHtml(id, bi) {
+  if (!id) return '';
+  if (_placing) {
+    return _placing.id === id
+      ? `<button class="move-chip active" onclick="event.stopPropagation(); startPlacing('${esc(id)}', null)">cancel</button>`
+      : '';
+  }
+  const p = _lastPlan || {};
+  let hasLater = false;
+  if (p.shape === 'priority') {
+    const items = p.items || [];
+    const pos = items.findIndex(it => it.id === id);
+    hasLater = pos >= 0 && pos < items.length - 1;
+  } else {
+    const blocks = p.blocks || [];
+    const here = (blocks[bi] && blocks[bi].items) || [];
+    const pos = here.findIndex(it => it.id === id);
+    hasLater = (bi != null && bi < blocks.length - 1) || (pos >= 0 && pos < here.length - 1);
+  }
+  if (!hasLater) return '';
+  const blockArg = (bi === null || bi === undefined) ? 'null' : bi;
+  return `<button class="move-chip" title="move this later in the day" onclick="event.stopPropagation(); startPlacing('${esc(id)}', ${blockArg})">move ›</button>`;
+}
+
+function renderFlatItem(item, showProject, bi) {
   const slim = !!item.interstitial;
   const cls = ['plan-item', item.done ? 'done' : '', slim ? 'interstitial' : ''].filter(Boolean).join(' ');
-  // Interstitial items: no expand, no why, project label suppressed
-  const clickAttr = slim ? '' : `onclick="if(!event.target.closest('.item-check'))this.classList.toggle('open')"`;
+  // Interstitial items: no expand, no why, project label suppressed. The click-guard now also
+  // ignores the move control; interstitials get no chip (they carry no task id).
+  const clickAttr = slim ? '' : `onclick="if(!event.target.closest('.item-check,.move-chip'))this.classList.toggle('open')"`;
+  const move = slim ? '' : moveChipHtml(item.id, bi);
   return `
     <div class="${cls}" ${clickAttr}>
       <div class="item-top">
@@ -1772,26 +1856,52 @@ function renderFlatItem(item, showProject) {
           ${!slim && showProject && item.project ? `<span class="item-project">${esc(item.project)}</span><span class="item-sep"> · </span>` : ''}
           <span class="item-task">${esc(item.task)}</span>
         </span>
+        ${move}
       </div>
       ${!slim && item.why ? `<div class="item-why">${esc(item.why)}</div>` : ''}
     </div>`;
 }
 
-function renderGroup(g) {
-  if (g.atomic) return renderFlatItem(g.item, false);
-  if (g.tasks.length === 1) return renderFlatItem(g.tasks[0], true);
-  // Multi-task project row: compute the time span from first start → last end.
+function renderGroup(g, bi) {
+  if (g.atomic) return renderFlatItem(g.item, false, bi);
+  if (g.tasks.length === 1) return renderFlatItem(g.tasks[0], true, bi);
+  // Multi-task work-stream row: compute the time span from first start → last end.
   const t0 = g.tasks[0].time || '';
   const tN = g.tasks[g.tasks.length - 1].time || '';
   const spanStart = t0.split(' – ')[0] || t0;          // split on en-dash
   const spanEnd   = tN.split(' – ')[1] || tN.split(' – ')[0] || tN;
   const spanTime  = spanStart && spanEnd ? `${spanStart} – ${spanEnd}` : t0;
   const why = g.tasks[0].why || '';
+
+  // Individual task rows (the deepest level) — each keeps its own done-check and move control.
   const subHtml = g.tasks.map(t => `
     <div class="task-sub${t.done ? ' done' : ''}" onclick="event.stopPropagation()">
       ${t.id ? `<button class="item-check" onclick="toggleItem('${esc(t.id)}', this)"></button>` : '<span class="check-gap"></span>'}
       <span class="task-sub-label">${esc(t.task)}</span>
+      ${moveChipHtml(t.id, bi)}
     </div>`).join('');
+
+  // What the project is / its next step comes FIRST when this project's Context parsed; a
+  // further tap opens the individual tasks. When there's NO parsed summary, show the tasks
+  // directly (today's behavior) — never an invented line. (June-facing words are plain:
+  // "What it is" / "Next step" — never "focus", which belongs to the Focus Period.)
+  const summary = _projectSummaries[g.project];
+  let body;
+  if (summary && (summary.what_it_is || summary.next_step)) {
+    body = `
+      <div class="project-summary">
+        ${summary.what_it_is ? `<div class="summary-line"><span class="summary-key">What it is:</span> ${esc(summary.what_it_is)}</div>` : ''}
+        ${summary.next_step ? `<div class="summary-line"><span class="summary-key">Next step:</span> ${esc(summary.next_step)}</div>` : ''}
+      </div>
+      <button class="summary-tasks-toggle"
+              onclick="event.stopPropagation(); this.closest('.project-row').classList.toggle('tasks-open')">
+        see the tasks (${g.tasks.length}) ›
+      </button>
+      <div class="project-subtasks">${subHtml}</div>`;
+  } else {
+    body = subHtml;   // no summary written — the task list is the row's expanded content
+  }
+
   return `
     <div class="project-row" onclick="this.classList.toggle('open')">
       <div class="item-top">
@@ -1801,7 +1911,7 @@ function renderGroup(g) {
         <span class="project-count">${g.tasks.length} ›</span>
       </div>
       ${why ? `<div class="project-why">${esc(why)}</div>` : ''}
-      <div class="project-tasks">${subHtml}</div>
+      <div class="project-tasks">${body}</div>
     </div>`;
 }
 
@@ -1809,6 +1919,7 @@ function renderGroup(g) {
 // Expects: { woven_frame, blocks: [{label, time, framing, items: [{time, project, task, why}]}],
 //            still_here: [{label, note}] }
 function renderPlan(plan) {
+  _lastPlan = plan;
   if (plan.woven_frame) {
     document.getElementById('woven-frame-text').textContent = plan.woven_frame;
   }
@@ -1817,13 +1928,29 @@ function renderPlan(plan) {
     // Fragmented day: a plain header naming the shape (so the switch from a clock schedule is
     // never silent) + a short, ordered, no-clock list to pull from. Done-affordance is the same
     // ○/✓ as clock items.
-    const items = (plan.items || []).map(renderPriorityItem).join('');
+    let itemsHtml;
+    if (_placing && _placing.block === null) {
+      const items = plan.items || [];
+      const srcIdx = items.findIndex(it => it.id === _placing.id);
+      const parts = [];
+      items.forEach((it, j) => {
+        parts.push(j === srcIdx ? `<div class="placing-item">${renderPriorityItem(it)}</div>`
+                                : renderPriorityItem(it));
+        if (srcIdx >= 0 && j > srcIdx) parts.push(_placeTargetHtml(null, j));
+      });
+      itemsHtml = parts.join('');
+    } else {
+      itemsHtml = (plan.items || []).map(renderPriorityItem).join('');
+    }
     container.innerHTML =
       (plan.header ? `<div class="priority-header">${esc(plan.header)}</div>` : '') +
-      `<div class="priority-list">${items}</div>`;
+      `<div class="priority-list">${itemsHtml}</div>`;
   } else if (plan.blocks) {
-    container.innerHTML = plan.blocks.map(block => {
-      const itemsHtml = groupByProject(block.items || []).map(renderGroup).join('');
+    const placingClock = !!(_placing && _placing.block != null);
+    container.innerHTML = plan.blocks.map((block, bi) => {
+      const itemsHtml = placingClock
+        ? renderBlockPlacement(block, bi)
+        : groupByProject(block.items || []).map(g => renderGroup(g, bi)).join('');
       return `
       <div class="time-block">
         <div class="block-header" onclick="this.closest('.time-block').classList.toggle('open')">
@@ -1855,13 +1982,14 @@ function renderPlan(plan) {
 function renderPriorityItem(it) {
   const done = it.done ? ' done' : '';
   return `
-    <div class="plan-item priority-item${done}" onclick="if(!event.target.closest('.item-check'))this.classList.toggle('open')">
+    <div class="plan-item priority-item${done}" onclick="if(!event.target.closest('.item-check,.move-chip'))this.classList.toggle('open')">
       <div class="item-top">
         ${it.id ? `<button class="item-check" title="${it.done ? 'undo' : 'mark done'}" onclick="toggleItem('${esc(it.id)}', this)"></button>` : '<span class="check-gap"></span>'}
         <span class="item-label">
           ${it.project ? `<span class="item-project">${esc(it.project)}</span><span class="item-sep"> · </span>` : ''}
           <span class="item-task">${esc(it.task)}</span>
         </span>
+        ${moveChipHtml(it.id, null)}
       </div>
       ${it.why ? `<div class="item-why">${esc(it.why)}</div>` : ''}
     </div>`;
@@ -2085,6 +2213,56 @@ async function cycleWhen(chip) {
   chip.disabled = false;
 }
 
+// Placement mode for one clock block: items render FLAT (placement happens between individual
+// items, and grouped work-stream rows would hide the spots) with a "move here" target at every
+// spot LATER than where the task is now — this affordance only moves a task later.
+//   same block as the task: a target after each later item (final index = that item's index);
+//   later blocks: a target at the start (0), after each item (j+1) — the last one is the end.
+//   earlier blocks: no targets.
+function renderBlockPlacement(block, bi) {
+  const items = block.items || [];
+  const src = _placing.block;
+  const sameBlock = bi === src;
+  const srcIdx = sameBlock ? items.findIndex(it => it.id === _placing.id) : -1;
+  const parts = [];
+  if (bi > src) parts.push(_placeTargetHtml(bi, 0));
+  items.forEach((it, j) => {
+    const moving = sameBlock && j === srcIdx;
+    parts.push(moving ? `<div class="placing-item">${renderFlatItem(it, true, bi)}</div>`
+                      : renderFlatItem(it, true, bi));
+    if (bi > src) parts.push(_placeTargetHtml(bi, j + 1));
+    else if (sameBlock && j > srcIdx) parts.push(_placeTargetHtml(bi, j));
+  });
+  return parts.join('');
+}
+
+// The tapped spot -> POST -> re-render from the returned plan (times recomputed server-side).
+// Never silent on failure (the cycleWhen rule) — surfaced via showError, the Today tab's
+// visible channel; placing mode stays on so she can just tap again.
+async function placeAt(el) {
+  if (!_placing) return;
+  const body = { id: _placing.id, position: Number(el.dataset.pos) };
+  if (el.dataset.block !== undefined) body.target_block = Number(el.dataset.block);
+  el.disabled = true;
+  try {
+    const res = await fetch('/api/task/move', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(body),
+    });
+    const data = await res.json();
+    if (!res.ok || data.ok === false) {
+      showError(data.error || "That move didn't save — tap move here again.");
+      el.disabled = false;
+      return;
+    }
+    _placing = null;
+    if (data.plan) renderPlan(data.plan);
+  } catch (_) {
+    showError("That move didn't save — tap move here again.");
+    el.disabled = false;
+  }
+}
+
 // The verify-before-regenerate box, scoped to the MOST RECENT capture turn only. Shows when that
 // turn has any live today item and June hasn't already acted on/dismissed it. Nothing rebuilds
 // her plan until she presses Regenerate.
@@ -2237,6 +2415,7 @@ async function setBackend(backend) {
 
 // Load live data + the button schema on startup (no-op in static preview)
 loadActions();
+loadProjectSummaries();
 loadPlan();
 loadPeriod();
 loadMapPointer();
