@@ -1136,14 +1136,14 @@ textarea.add-field:focus { border-color: var(--gold); }
          moment, tagged by what it is (multi-select). Never a report, never classified back. -->
     <div id="add-mode-logday" style="display:none">
       <div class="add-section">
-        <div class="add-label">log the day, or an issue as it comes up</div>
+        <div class="add-label">log the day, or a friction as it comes up</div>
         <div class="logday-tags" id="logday-tags">
           <button type="button" class="logday-tag active" data-tag="day" onclick="toggleLogTag(this)">The day</button>
-          <button type="button" class="logday-tag" data-tag="issue" onclick="toggleLogTag(this)">An issue</button>
+          <button type="button" class="logday-tag" data-tag="issue" onclick="toggleLogTag(this)">Friction</button>
         </div>
         <div class="add-row">
           <textarea class="add-field" id="logday-field"
-            placeholder="the day: barely worked, migraine, rested on the couch… — or an issue: the low-energy plan didn't feel right"></textarea>
+            placeholder="the day: barely worked, migraine, rested on the couch… — or a friction: the low-energy plan didn't feel right"></textarea>
           <button class="ask-send" onclick="logDay()">Log</button>
         </div>
         <div class="add-hint">Just for you — a faithful record in your own words. Tap what this is
