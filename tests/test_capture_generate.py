@@ -285,3 +285,69 @@ def test_parse_weed_optional_fields_default_safely_when_absent():
     assert item["affect"] == ""
     assert item["blocked_on"] == ""
     assert item["access_conditions"] == []
+
+
+# --- Task 3: capture writes per-item optional fields ------------------------
+
+def test_capture_affect_scope_single_item(monkeypatch, tmp_path):
+    # FIDELITY case (a): June attached the feeling to ONE item — only that item carries it.
+    canned = json.dumps({
+        "opening": "o",
+        "capacity_read": {"text": "generally frazzled", "source": "inferred", "reasoning": "x"},
+        "groups": [{"label": "g", "through_line": "t", "items": [
+            {"type": "Task", "name": "Book dentist", "link": None, "status": "Ready",
+             "action": "create", "reasoning": "r", "duration_min": 10,
+             "affect": "dreading the call", "blocked_on": "the insurance card",
+             "access_conditions": ["Requires-talking-to-a-person"]},
+            {"type": "Task", "name": "Sketch the zine cover", "link": None, "status": "Ready",
+             "action": "create", "reasoning": "r"},
+        ]}],
+    })
+    calls = _stub(monkeypatch, tmp_path, canned=canned)
+    cg.capture("book the dentist (~10 min, dreading it, need the insurance card first); sketch the zine cover")
+    props = {name: p for (typ, name, p) in calls}
+    dentist = props["Book dentist"]
+    assert dentist["Duration min"] == 10
+    assert dentist["Affective"] == "dreading the call"        # the ITEM's affect, verbatim
+    assert dentist["Blocked on"] == "the insurance card"
+    assert dentist["Access conditions"] == ["Requires-talking-to-a-person"]
+    zine = props["Sketch the zine cover"]
+    for k in ("Duration min", "Affective", "Blocked on", "Access conditions"):
+        assert k not in zine    # she gave this item no signal → nothing written
+    # capacity_read is never auto-copied onto objects (objects get affect only via `affect`):
+    assert dentist.get("Affective") != "generally frazzled"
+
+
+def test_capture_affect_scope_whole_dump(monkeypatch, tmp_path):
+    # FIDELITY case (b): June stated one feeling about EVERYTHING — the contract has the LLM put
+    # it on every item, and every object carries it. Her information, faithfully captured.
+    canned = json.dumps({
+        "opening": "o",
+        "capacity_read": {"text": "dreading all of this", "source": "stated", "reasoning": "x"},
+        "groups": [{"label": "g", "through_line": "t", "items": [
+            {"type": "Task", "name": "File the extension", "link": None, "status": "Ready",
+             "action": "create", "reasoning": "r", "affect": "dreading all of this"},
+            {"type": "Task", "name": "Call the landlord", "link": None, "status": "Ready",
+             "action": "create", "reasoning": "r", "affect": "dreading all of this"},
+        ]}],
+    })
+    calls = _stub(monkeypatch, tmp_path, canned=canned)
+    cg.capture("I'm dreading all of this: file the extension, call the landlord")
+    props = {name: p for (typ, name, p) in calls}
+    assert props["File the extension"]["Affective"] == "dreading all of this"
+    assert props["Call the landlord"]["Affective"] == "dreading all of this"
+
+
+def test_capture_no_signals_writes_no_optional_props(monkeypatch, tmp_path):
+    canned = json.dumps({
+        "opening": "o", "capacity_read": None,
+        "groups": [{"label": "g", "through_line": "t", "items": [
+            {"type": "Task", "name": "Email editor", "link": None, "status": "Ready",
+             "action": "create", "reasoning": "r"},
+        ]}],
+    })
+    calls = _stub(monkeypatch, tmp_path, canned=canned)
+    cg.capture("email the editor")
+    props = {name: p for (typ, name, p) in calls}["Email editor"]
+    for k in ("Duration min", "Affective", "Blocked on", "Access conditions"):
+        assert k not in props   # absent stays absent — flat-default behavior preserved

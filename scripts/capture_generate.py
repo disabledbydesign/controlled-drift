@@ -28,6 +28,7 @@ import plan_generate
 import session_store
 import generation_log
 import when_resolve
+import capture_fields
 from anytype_test import call
 
 PROMPT_PATH = os.path.join(os.path.dirname(__file__), "..", "prompts", "weeding_gate.md")
@@ -303,6 +304,17 @@ def _creation_props(type_name, item, link_id, scheduled=None, is_parked=False):
     # IS the intended Context content (found 2026-07-02, alongside a Strategy created with none).
     if item.get("reasoning"):
         props["Context"] = item["reasoning"]
+    # Per-item optional fields (duration / affect / blocked-on / access), validated + shaped by the
+    # shared builder so this path and the memory pass cannot diverge. Each value is read from THIS
+    # item alone — a dump-wide feeling already arrives written on every item (the scope judgment is
+    # the LLM's, per DECISION 1), so there is nothing to thread through from the turn level. A
+    # blank/invalid value emits no key, preserving the bare-by-default behavior.
+    props.update(capture_fields.build_optional_props(
+        duration_min=item.get("duration_min"),
+        affect=item.get("affect"),
+        blocked_on=item.get("blocked_on"),
+        access_conditions=item.get("access_conditions"),
+    ))
     return props
 
 
