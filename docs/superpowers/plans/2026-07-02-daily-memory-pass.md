@@ -282,15 +282,47 @@ correctly, live. Also double-checked the `MEMORY.md`-is-the-only-index-file assu
 all 21 real project folders (held, no exceptions) and re-ran the full scratch-set functional test
 + full suite (282 passed) after the fix. No other defects found on this pass.
 
-**Open gap surfaced by the "when does the first backfill need to happen" question:** there is
-currently no way to preview what the model would propose across the real corpus without actually
-writing to Anytype — `--dry-run` only inspects parsing (no LLM call); the only way to see real
-candidates is `--run`, which creates them immediately. That's fine for a handful of steady-state
-entries but doesn't give the "dry-run, June eyeballs, then commits" review step this plan
-explicitly wants for the *first* backfill (411 entries, unknown real hit-rate). A `--preview` mode
-(generate candidates, print them, skip the write, don't mark state) would close this — not yet
-decided whether to build it before Slice 3 or treat `--run` + reading `memory_pass_log.jsonl`
-right after as good enough given how solid Slice 2 tested out.
+**Closed 2026-07-03: `--preview` mode built.** `memory_pass.py --preview` calls the LLM
+(`preview_pass()`) and prints every candidate (`format_preview()` — full, untruncated
+`context_verbatim` so June can confirm guard 1 held), grouped into would-create /
+would-stay-in-memory / malformed — but never calls `apply_candidate()`, `mark_extracted()`, or
+`save_state()`. Verified against a throwaway scratch fixture (2 fake entries, one real-feedback-
+shaped, one misfiled-task-shaped): the model judged both correctly, and running `--preview` twice
+in a row produced identical output both times (proves no state was written — a later `--run` will
+still see every entry as new). Full suite still green (282 passed). Scratch fixture deleted after.
+This closes the review gap: the first-ever backfill is now `--preview` (June reviews the real
+proposals) → `--run` (commits), not `--run` blind + after-the-fact log reading.
+
+**Two real bugs found and fixed running `--preview` against the actual corpus (2026-07-03), not
+hypothetical:**
+- `plan_batches()` split entries by project when the *combined* prompt was too big, but never
+  checked whether an individual project's own batch was still over `SINGLE_CALL_TOKEN_BUDGET`.
+  The Job-Search project alone has 99 unextracted entries (~65k estimated tokens against the 40k
+  budget) and was sent as one oversized call — timed out at the API's 300s ceiling. Fixed:
+  `_chunk_to_budget()` greedily splits any project whose own batch still exceeds budget into
+  smaller chunks (never drops an entry). Confirmed against the real corpus: all 25 resulting
+  batches now sit at or under budget (worst case ~39.7k tokens).
+- Separately, a single batch failing (whether over-budget or a transient API stall — evidence
+  pointed to the latter: two calls timed out at exactly 300.2s while a *larger* neighboring batch
+  succeeded in 197s) aborted the entire pass and discarded every candidate already gathered from
+  prior batches, in both `preview_pass()` and `run_pass()`. Fixed two ways: (1) `generate_candidates()`
+  now retries once (`GEN_ATTEMPTS = 2`) before raising — both attempts still logged to
+  `generation_log.jsonl` either way, so a persistent failure stays visible; (2) both `preview_pass()`
+  and `run_pass()` now catch a batch that fails even after retry, record it, and continue to the
+  next batch instead of aborting — `preview_pass()` surfaces this as a "FAILED — not previewed"
+  section in `format_preview()`; `run_pass()` logs a `failed` decision per entry in that batch and
+  leaves them unmarked so the next `--run` retries exactly those. Verified with a monkeypatched
+  `plan_generate.generate()` (one batch always raises `TimeoutError`): confirmed 4 calls made
+  (1 ok + 2 retries-on-fail + 1 ok) and both good batches' candidates survived.
+
+**First real backfill preview run completed 2026-07-03** (25 batches, all succeeded, zero
+failures after the fixes above): 422 unextracted entries considered across every project folder —
+199 would be created (8 of those flagged `needs_clarifying`), 225 correctly judged as already-
+belongs-in-memory, 0 malformed. Rendered as a reviewable page (grouped by project, full verbatim
+text on expand, searchable, filterable to needs-clarifying-only) since 424 items is too much to
+review as scrolling terminal text — sent to June for review. **Next step: June reviews, then
+`--run` commits.** Nothing has been written to Anytype yet; the state file
+(`~/.controlled-drift/memory_pass_state.json`) still does not exist.
 
 ## Slice 3 — scheduling
 

@@ -255,10 +255,30 @@ def _estimate_tokens(text):
     return len(text) // _CHARS_PER_TOKEN
 
 
+def _chunk_to_budget(entries, schema):
+    """Greedily split one project's entries into sub-batches whose assembled prompt each fits
+    SINGLE_CALL_TOKEN_BUDGET. Never drops an entry — a single entry whose own prompt exceeds
+    budget still gets sent alone rather than silently omitted."""
+    chunks, current = [], []
+    for e in entries:
+        candidate = current + [e]
+        if current and _estimate_tokens(_assemble_prompt(candidate, schema)) > SINGLE_CALL_TOKEN_BUDGET:
+            chunks.append(current)
+            current = [e]
+        else:
+            current = candidate
+    if current:
+        chunks.append(current)
+    return chunks
+
+
 def plan_batches(entries, schema):
     """Single call across every entry, unless the REAL assembled prompt is too big — then one
-    call per source project. Decided by measuring the actual prompt, not guessing from entry
-    counts (schema size and body length both affect the real total)."""
+    call per source project, and if even ONE project's own batch is still over budget (real case:
+    a 99-entry project came in at ~65k estimated tokens against a 40k budget and timed out as a
+    single call), that project gets chunked further so no batch sent to generate() ever exceeds
+    budget. Decided by measuring the actual prompt, not guessing from entry counts (schema size
+    and body length both affect the real total)."""
     if not entries:
         return []
     single_prompt = _assemble_prompt(entries, schema)
@@ -267,37 +287,56 @@ def plan_batches(entries, schema):
     by_project = {}
     for e in entries:
         by_project.setdefault(e["source_project"], []).append(e)
-    return list(by_project.values())
+    batches = []
+    for es in by_project.values():
+        if _estimate_tokens(_assemble_prompt(es, schema)) <= SINGLE_CALL_TOKEN_BUDGET:
+            batches.append(es)
+        else:
+            batches.extend(_chunk_to_budget(es, schema))
+    return batches
 
 
 # --- step 6: generation ---------------------------------------------------------
 
+GEN_ATTEMPTS = 2  # 1 retry. Real evidence, not speculative: two live batches near the token
+# budget ceiling each hit exactly the 300s API timeout, while a LARGER batch sent moments later
+# succeeded in 197s — size alone doesn't explain it, so this looks like transient API stalls, not
+# a hard limit. A single retry absorbs that without masking a genuinely bad prompt/response (both
+# attempts logged either way, so a persistent failure is still visible in generation_log.jsonl).
+
+
 def generate_candidates(entries, schema, backend=None):
-    """One generate() call for this batch of entries. Returns (candidates, malformed, meta)
-    where meta carries backend/timing for the caller to log. Raises on a generation or
-    top-level-parse failure (a run that produced nothing usable is a real failure, surfaced
-    honestly) — but a single malformed ELEMENT inside a valid array is dropped into `malformed`,
-    never fatal to the rest of the batch (mirrors capture_generate.py's per-item handling)."""
+    """One generate() call for this batch of entries (retried once on failure — see GEN_ATTEMPTS).
+    Returns (candidates, malformed). Raises only if every attempt fails — a run that produced
+    nothing usable after a retry is a real failure, surfaced honestly — but a single malformed
+    ELEMENT inside a valid array is dropped into `malformed`, never fatal to the rest of the batch
+    (mirrors capture_generate.py's per-item handling)."""
     prompt = _assemble_prompt(entries, schema)
     backend_name = backend or os.environ.get("CD_BACKEND", "mistral")
     model = plan_generate._active_model(backend_name)
     backend_label = f"{backend_name}/{model}" if model else backend_name
-    t0 = time.monotonic()
-    try:
-        model_text = plan_generate.generate(prompt, backend=backend)
-        candidates, malformed = _parse_candidates(model_text)
-    except Exception as e:
+
+    last_err = None
+    for attempt in range(1, GEN_ATTEMPTS + 1):
+        t0 = time.monotonic()
+        try:
+            model_text = plan_generate.generate(prompt, backend=backend)
+            candidates, malformed = _parse_candidates(model_text)
+        except Exception as e:
+            generation_log.log_generation(
+                backend=backend_label, duration_s=time.monotonic() - t0,
+                success=False, source="memory_pass",
+                error_type=type(e).__name__, error_msg=str(e),
+                structural={"attempt": attempt, "n_entries": len(entries)})
+            last_err = e
+            continue
         generation_log.log_generation(
             backend=backend_label, duration_s=time.monotonic() - t0,
-            success=False, source="memory_pass",
-            error_type=type(e).__name__, error_msg=str(e))
-        raise
-    generation_log.log_generation(
-        backend=backend_label, duration_s=time.monotonic() - t0,
-        success=True, source="memory_pass",
-        structural={"n_entries": len(entries), "n_candidates": len(candidates),
-                    "n_malformed": len(malformed)})
-    return candidates, malformed
+            success=True, source="memory_pass",
+            structural={"attempt": attempt, "n_entries": len(entries),
+                        "n_candidates": len(candidates), "n_malformed": len(malformed)})
+        return candidates, malformed
+    raise last_err
 
 
 def _parse_candidates(model_text):
@@ -412,6 +451,99 @@ def apply_candidate(candidate):
             "needs_clarifying": needs_clarifying}
 
 
+def preview_pass(projects_root=None, state_path=None, backend=None):
+    """Generate candidates for every unextracted entry WITHOUT writing anything to Anytype and
+    WITHOUT touching the state file. Exists so the first-ever backfill (hundreds of entries,
+    unknown real hit-rate) can be reviewed by June before anything lands in her live space —
+    see the "Open gap" note in docs/superpowers/plans/2026-07-02-daily-memory-pass.md.
+
+    Deliberately calls generate_candidates() (the LLM step) but stops before apply_candidate()
+    and before mark_extracted()/save_state() — nothing here is a write, so running --preview
+    any number of times is side-effect-free and a later --run still sees every entry as new.
+    """
+    entries = discover_memory_entries(projects_root=projects_root)
+    state = load_state(path=state_path)
+    to_process = unextracted(entries, state)
+    if not to_process:
+        return {"processed": 0, "candidates": [], "malformed": [], "entries_by_id": {},
+                "failed_batches": []}
+
+    schema = fetch_live_schema()
+    batches = plan_batches(to_process, schema)
+    entries_by_id = {(e["source_project"], _entry_id(e)): e for e in to_process}
+
+    all_candidates, all_malformed, failed_batches = [], [], []
+    for batch in batches:
+        # One batch failing outright (after generate_candidates' own retry) must not throw away
+        # every candidate already gathered from prior batches — real failure mode, not
+        # hypothetical: two live batches hit this during the actual backfill review. Report and
+        # move on; --preview is side-effect-free, so re-running it retries everything including
+        # whatever failed here.
+        try:
+            candidates, malformed = generate_candidates(batch, schema, backend=backend)
+        except Exception as e:
+            failed_batches.append({
+                "projects": sorted(set(entry["source_project"] for entry in batch)),
+                "n_entries": len(batch), "error": f"{type(e).__name__}: {e}"})
+            continue
+        all_candidates.extend(candidates)
+        all_malformed.extend(malformed)
+
+    return {"processed": len(to_process), "candidates": all_candidates,
+            "malformed": all_malformed, "entries_by_id": entries_by_id,
+            "failed_batches": failed_batches}
+
+
+def format_preview(preview):
+    """Human-readable rendering of a preview_pass() result, grouped by what --run would do with
+    each candidate. context_verbatim is printed in FULL (never truncated) — the point of the
+    review is to confirm the model actually carried the memory text verbatim, per guard 1."""
+    lines = []
+    would_create = [c for c in preview["candidates"] if c.get("belongs_in_anytype")]
+    would_skip = [c for c in preview["candidates"] if not c.get("belongs_in_anytype")]
+
+    lines.append(f"{preview['processed']} unextracted entries considered; "
+                 f"{len(would_create)} would be created, {len(would_skip)} would stay in memory, "
+                 f"{len(preview['malformed'])} malformed (dropped).")
+    lines.append("")
+
+    if preview.get("failed_batches"):
+        lines.append(f"### FAILED — not previewed ({len(preview['failed_batches'])} batch(es), "
+                     f"{sum(b['n_entries'] for b in preview['failed_batches'])} entries)")
+        for b in preview["failed_batches"]:
+            lines.append(f"- {b['n_entries']} entries in {b['projects']}: {b['error']}")
+        lines.append("  Re-run --preview to retry these (side-effect-free; nothing above is lost).")
+        lines.append("")
+
+    if would_create:
+        lines.append(f"### WOULD CREATE ({len(would_create)})")
+        for c in would_create:
+            flag = " [NEEDS CLARIFYING]" if c.get("needs_clarifying") else ""
+            lines.append(f"\n- {c.get('proposed_name')!r}  type={c.get('proposed_type')!r}"
+                         f"{flag}  project={c.get('source_project')!r}  "
+                         f"source={c.get('source_entry')!r}")
+            if c.get("link_to"):
+                lines.append(f"  link_to: {c['link_to']!r}")
+            if c.get("reasoning"):
+                lines.append(f"  reasoning: {c['reasoning']}")
+            lines.append(f"  context_verbatim: {c.get('context_verbatim', '')}")
+        lines.append("")
+
+    if would_skip:
+        lines.append(f"### WOULD STAY IN MEMORY — model judged correctly filed ({len(would_skip)})")
+        for c in would_skip:
+            lines.append(f"- {c.get('source_entry')!r} (project={c.get('source_project')!r})"
+                         + (f" — {c['reasoning']}" if c.get("reasoning") else ""))
+        lines.append("")
+
+    if preview["malformed"]:
+        lines.append(f"### MALFORMED — dropped, not actionable ({len(preview['malformed'])})")
+        for m in preview["malformed"]:
+            lines.append(f"- {m}")
+
+    return "\n".join(lines)
+
+
 # --- orchestration: the whole pass ----------------------------------------------
 
 def run_pass(projects_root=None, state_path=None, backend=None, log_path=None):
@@ -426,7 +558,7 @@ def run_pass(projects_root=None, state_path=None, backend=None, log_path=None):
     to_process = unextracted(entries, state)
 
     tally = {"processed": 0, "created": 0, "needs_clarifying": 0, "skipped_dedup": 0,
-             "skipped_not_anytype": 0, "rejected_malformed": 0, "failed": 0}
+             "skipped_not_anytype": 0, "rejected_malformed": 0, "failed": 0, "batch_failed": 0}
     if not to_process:
         return tally
 
@@ -435,7 +567,18 @@ def run_pass(projects_root=None, state_path=None, backend=None, log_path=None):
     entries_by_id = {(e["source_project"], _entry_id(e)): e for e in to_process}
 
     for batch in batches:
-        candidates, malformed = generate_candidates(batch, schema, backend=backend)
+        # A whole batch failing (after generate_candidates' own retry) must not abort every batch
+        # still queued behind it — real failure mode observed live during the backfill. None of
+        # this batch's entries get marked extracted, so the next --run retries exactly these.
+        try:
+            candidates, malformed = generate_candidates(batch, schema, backend=backend)
+        except Exception as e:
+            tally["batch_failed"] += 1
+            for entry in batch:
+                memory_pass_log.log_decision("failed", entry=entry,
+                                             error=f"batch generation failed: {type(e).__name__}: {e}",
+                                             path=log_path)
+            continue
 
         for c in malformed:
             tally["rejected_malformed"] += 1
@@ -499,9 +642,21 @@ if __name__ == "__main__":
     ap.add_argument("--backend", default=None, help="override CD_BACKEND for this run")
     ap.add_argument("--run", action="store_true",
                      help="actually call the LLM and write to Anytype (real run, not a dry-run)")
+    ap.add_argument("--preview", action="store_true",
+                     help="call the LLM and show what --run would create, but write NOTHING to "
+                          "Anytype and touch no state — safe to run repeatedly; use this to "
+                          "review the first-ever backfill before committing it with --run")
     args = ap.parse_args()
 
-    if args.run:
+    if args.run and args.preview:
+        print("--run and --preview are mutually exclusive", file=sys.stderr)
+        sys.exit(1)
+
+    if args.preview:
+        preview = preview_pass(projects_root=args.memory_dir, state_path=args.state_file,
+                               backend=args.backend)
+        print(format_preview(preview))
+    elif args.run:
         tally = run_pass(projects_root=args.memory_dir, state_path=args.state_file,
                          backend=args.backend, log_path=args.log_file)
         print(json.dumps(tally, indent=2))
