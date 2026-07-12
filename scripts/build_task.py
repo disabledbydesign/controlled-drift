@@ -32,13 +32,19 @@ def build_task():
     # Scheduled is "start considering it on/after this day", Due date is "it's late after this
     # day". The selection thread reads this to hold future-dated tasks off today's plan.
     p_scheduled  = g.ensure_property("Scheduled", "date")
+    # Provenance for Duration min: did June state this duration ("stated") or did the model
+    # estimate it to fill a silence ("estimated")? The scheduler ignores this field — it only
+    # reads Duration min — but the duration-bias learning loop reads it to know which durations
+    # it may correct (estimated) vs. must never touch (stated). A select, not a checkbox, so it
+    # reads plainly in June's UI and leaves room for a future "corrected" value.
+    p_dur_source = g.ensure_property("Duration source", "select", ["stated", "estimated"])
 
     task_type = g.find_type("task")
     if not task_type:
         raise RuntimeError("built-in 'task' type not found")
     # built-in keys used in place of custom Deadline / Project-link:
     g.link_properties_to_type(task_type["id"],
-        [p_duration, p_clarify, p_status, p_blocked, p_affective, p_access, p_access_nts,
+        [p_duration, p_dur_source, p_clarify, p_status, p_blocked, p_affective, p_access, p_access_nts,
          p_autonomous, p_docs, p_context, p_surfaced, p_scheduled, "due_date", "linked_projects"])
     print(f"[ok] Task type extended: id={task_type['id']}")
 
