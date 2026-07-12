@@ -214,3 +214,64 @@ def test_move_raises_when_no_cache_or_no_blocks(tmp_path, monkeypatch):
                          source="generate")
     with pytest.raises(LookupError):
         plan_store.move_item_later("T1", 1)   # priority shape has no blocks (see Task 2)
+
+
+# --- tap-to-place on a fragmented (priority-shape) day — pure position change --
+
+def _priority_plan():
+    return {"shape": "priority", "header": "a short list to pull from",
+            "items": [{"project": "Alpha", "task": "draft", "id": "P1"},
+                      {"project": "Beta", "task": "email", "id": "P2"},
+                      {"project": "Gamma", "task": "call", "id": "P3"}],
+            "still_here": []}
+
+
+def test_priority_move_to_later_position(tmp_path, monkeypatch):
+    _redirect(tmp_path, monkeypatch)
+    plan_store.save_plan(_priority_plan(), source="generate")
+    updated = plan_store.move_priority_item_later("P1", 2)
+    assert [i["id"] for i in updated["items"]] == ["P2", "P3", "P1"]
+    # No times involved on a fragmented day — items still carry none.
+    assert "time" not in updated["items"][2]
+
+
+def test_priority_move_one_step(tmp_path, monkeypatch):
+    _redirect(tmp_path, monkeypatch)
+    plan_store.save_plan(_priority_plan(), source="generate")
+    updated = plan_store.move_priority_item_later("P1", 1)
+    assert [i["id"] for i in updated["items"]] == ["P2", "P1", "P3"]
+
+
+def test_priority_move_persists_and_preserves_stamp(tmp_path, monkeypatch):
+    _redirect(tmp_path, monkeypatch)
+    saved = plan_store.save_plan(_priority_plan(), source="refresh")
+    plan_store.move_priority_item_later("P1", 1)
+    reloaded = plan_store.load_plan()
+    assert [i["id"] for i in reloaded["items"]] == ["P2", "P1", "P3"]
+    assert reloaded["generated_at"] == saved["generated_at"]
+    assert reloaded["source"] == "refresh"
+
+
+def test_priority_move_rejects_not_later_and_out_of_range(tmp_path, monkeypatch):
+    _redirect(tmp_path, monkeypatch)
+    plan_store.save_plan(_priority_plan(), source="generate")
+    import pytest
+    with pytest.raises(ValueError):
+        plan_store.move_priority_item_later("P3", 1)   # earlier spot
+    with pytest.raises(ValueError):
+        plan_store.move_priority_item_later("P2", 1)   # same spot (no-op)
+    with pytest.raises(ValueError):
+        plan_store.move_priority_item_later("P1", 9)   # out of range
+
+
+def test_priority_move_raises_on_missing_id_clock_shape_or_no_cache(tmp_path, monkeypatch):
+    _redirect(tmp_path, monkeypatch)
+    import pytest
+    with pytest.raises(LookupError):
+        plan_store.move_priority_item_later("P1", 1)   # no cache
+    plan_store.save_plan(_priority_plan(), source="generate")
+    with pytest.raises(LookupError):
+        plan_store.move_priority_item_later("NOPE", 1)
+    plan_store.save_plan(_clock_plan(), source="generate")
+    with pytest.raises(LookupError):
+        plan_store.move_priority_item_later("T1", 1)   # clock plan has no priority list

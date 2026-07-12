@@ -303,6 +303,33 @@ def move_item_later(task_id, target_block_index, position=None):
     return plan
 
 
+def move_priority_item_later(task_id, position):
+    """Move one item LATER in a fragmented-day (priority-shape) plan. `position` is the item's
+    FINAL index in the flat list (the tap-target the overlay showed). Pure position change —
+    priority items carry no clock times, so there is nothing to re-flow. Same honesty rule as
+    move_item_later: a day-of adjustment to the cache; the next generation replaces it.
+    Preserves generated_at/source.
+
+    Raises LookupError (no cached plan / no priority list / id absent) and ValueError
+    (position not strictly later, or out of range)."""
+    plan = load_plan()
+    if plan is None:
+        raise LookupError("no cached plan to move within")
+    items = plan.get("items")
+    if not items:
+        raise LookupError("plan has no priority list to reorder (a clock-shape day moves via "
+                          "move_item_later)")
+    src_pos = next((i for i, it in enumerate(items) if it.get("id") == task_id), None)
+    if src_pos is None:
+        raise LookupError(f"no item with id {task_id!r} to move")
+    if not (src_pos < position <= len(items) - 1):
+        raise ValueError("can only move a task to a later spot in the list")
+    item = items.pop(src_pos)
+    items.insert(position, item)   # after the pop, inserting at `position` = final index
+    _write_plan(plan)
+    return plan
+
+
 # --- generation status (for async generate-and-poll) ------------------------
 # A long generation (the LLM call) no longer blocks the HTTP request — the server kicks it
 # off in the background and the overlay polls this status. Lives in its own small file so a
