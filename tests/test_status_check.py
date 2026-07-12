@@ -17,8 +17,9 @@ def _stream(id="s1", name="Stream one", engagement=None, tasks=(), last_surfaced
     return {"id": id, "name": name, "engagement": engagement, "context": None,
             "last_surfaced": last_surfaced, "tasks": list(tasks)}
 
-def _task(id="t1", name="a step", done=False):
-    return {"id": id, "name": name, "status": "Done" if done else "Ready",
+def _task(id="t1", name="a step", done=False, status=None):
+    return {"id": id, "name": name,
+            "status": status or ("Done" if done else "Ready"),
             "done": done, "order": None, "linked_ids": []}
 
 NOW = dt.datetime(2026, 7, 11, 12, 0)
@@ -32,6 +33,19 @@ def test_done_stream_with_open_tasks_is_flagged():
     assert len(f) == 1
     assert "done_with_open_tasks" in f[0]["kinds"]
     assert f[0]["open_task_count"] == 1
+
+def test_parked_tasks_dont_count_against_done():
+    """June's rule (2026-07-12): Parked = deferred-by-design backlog, not unfinished
+    work — a Done stream carrying only Parked open tasks is honest, not a mismatch."""
+    s = _stream(engagement="Done",
+                tasks=[_task(done=True), _task(id="t2", status="Parked")])
+    assert sc.build_findings([s], now=NOW) == []
+
+def test_unparked_open_task_still_counts_against_done():
+    s = _stream(engagement="Done",
+                tasks=[_task(id="t1", status="Parked"), _task(id="t2", status="Ready")])
+    f = sc.build_findings([s], now=NOW)
+    assert f and "done_with_open_tasks" in f[0]["kinds"]
 
 def test_active_stream_with_all_tasks_done_is_found():
     s = _stream(engagement="Steady", tasks=[_task(done=True), _task(id="t2", done=True)],
@@ -266,6 +280,14 @@ def test_gate_downgrades_stream_close_with_open_tasks(gated_repo):
     s = _stream(engagement="Steady", tasks=[_task(done=True), _task(id="t2", done=False)])
     out = sc.gate_verdicts([fix(_autofix())], _streams_by_id(s), d)
     assert out["auto_fix"] == [] and "open task" in out["downgraded"][0]["downgrade_reason"]
+
+def test_gate_allows_stream_close_when_only_parked_remain(gated_repo):
+    """Parked backlog doesn't block a demonstrably-complete close (June's 2026-07-12 rule)."""
+    d, sha, fix = gated_repo
+    s = _stream(engagement="Steady",
+                tasks=[_task(done=True), _task(id="t2", status="Parked")])
+    out = sc.gate_verdicts([fix(_autofix())], _streams_by_id(s), d)
+    assert len(out["auto_fix"]) == 1 and out["downgraded"] == []
 
 def test_gate_downgrades_disallowed_change_kinds(gated_repo):
     """Reopening / demoting are never autonomous — even a 'positive-evidence' reopen

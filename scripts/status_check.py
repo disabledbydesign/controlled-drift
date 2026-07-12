@@ -168,9 +168,12 @@ def build_findings(streams, now=None):
     for s in streams:
         open_tasks = [t for t in s["tasks"] if not t["done"]]
         done_tasks = [t for t in s["tasks"] if t["done"]]
+        # June's rule (2026-07-12): a Parked task is deferred-by-design backlog, not
+        # unfinished work — it never counts against a stream's Done.
+        open_unparked = [t for t in open_tasks if (t.get("status") or "") != "Parked"]
         eng = s["engagement"]
         kinds = []
-        if eng == "Done" and open_tasks:
+        if eng == "Done" and open_unparked:
             kinds.append("done_with_open_tasks")
         if eng != "Done" and s["tasks"] and not open_tasks:
             kinds.append("active_all_tasks_done")
@@ -344,7 +347,8 @@ def _autofix_block_reason(v, streams_by_id, repo_dir):
     if kind == "mark_stream_done":
         if change.get("target_id") != stream["id"]:
             return "target_id does not match the stream"
-        open_tasks = [t for t in stream["tasks"] if not t["done"]]
+        open_tasks = [t for t in stream["tasks"]
+                      if not t["done"] and (t.get("status") or "") != "Parked"]
         if open_tasks:
             return (f"stream still has {len(open_tasks)} open task(s) — "
                     "not demonstrably complete")
