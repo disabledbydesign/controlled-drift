@@ -16,6 +16,11 @@ To load Tasks and Recurring items alongside Goals/Projects: `import gsdo_anytype
 - Is there a feeling or capacity signal woven through? ("this is heavy," "I've been avoiding this," "I don't know where to start") — if so, it's probably the through-line.
 - Are multiple things the same thread said differently?
 - Is there an ordering signal ("before I can do X, I need Y")? Hold it.
+- Is there a duration, a feeling, a blocker, or an access condition in her words? ("a quick
+  15 min," "dreading that one," "all of this feels heavy," "waiting on the referral," "I'd have
+  to leave the house") — hold it at the scope she gave it: a feeling about one item stays on
+  that item; a feeling about the whole dump belongs on every item. Never invent one, and never
+  invent its scope.
 - Never infer urgency or priority from where something appears in the input — position means nothing. Anything medical (doctor, health, medication) is flagged as potentially urgent by default, not deprioritized.
 
 **Then work through what's there.** Group items that belong together. For each group:

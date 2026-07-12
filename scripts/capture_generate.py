@@ -142,6 +142,15 @@ tools or MCP to look anything up. Therefore:
 - **Capacity/affect.** If a feeling or capacity signal runs through the input ("this is heavy,"
   "I've been avoiding this," frustration, urgency), capture it once in `capacity_read` with
   `source` = "stated" if June said it outright or "inferred" if you read it from how she wrote.
+- **Per-item fields.** If June names how long something takes, how she feels about something,
+  what it's waiting on, or an access condition (has to leave the house, can be done lying
+  down, needs a phone call), record it on the item(s) in `duration_min` / `affect` / `blocked_on` /
+  `access_conditions`. Only from her words — absent stays absent, and blank affect is fine.
+  For `affect`, honor the scope she gave the feeling: about one item → that item only; about
+  everything ("all of this feels heavy") → on every item, because that's the information she
+  provided. Never invent scope in either direction. `affect` goes on the object; `capacity_read`
+  stays the whole turn's session signal — set both when both are true, but don't auto-copy one
+  into the other. These feed the planner directly; a guessed duration mis-shapes her day.
 
 ## REQUIRED OUTPUT — THE JSON BLOCK ONLY
 
@@ -165,7 +174,11 @@ validation surface; the JSON carries it. Shape:
           "action": "create | skip",
           "dedup_note": "why skipped, if skipped, else null",
           "reasoning": "why this type and this link — June must be able to see the why",
-          "when": "<when June wants it, IN HER WORDS: 'today', a weekday like 'thursday', 'tomorrow', an ISO date, or 'someday'. EMPTY STRING if she didn't say. Never guess a time.>"
+          "when": "<when June wants it, IN HER WORDS: 'today', a weekday like 'thursday', 'tomorrow', an ISO date, or 'someday'. EMPTY STRING if she didn't say. Never guess a time.>",
+          "duration_min": <how many MINUTES this will take, as a number, ONLY if June said or clearly implied it ("a quick 15 min", "an hour"). null if she gave no signal — NEVER guess; a wrong guess is worse than leaving it unset.>,
+          "affect": "<how June feels about THIS item, in her words ('dreading it', 'excited about this one'). Match the SCOPE she gave the feeling: said about one item → only that item; said about the whole dump ('I'm dreading all of this') → put it on every item, because that's her information. Do NOT invent scope — never widen a single-item remark to the dump or narrow a dump-wide statement to one item. Empty string if she gave this item no signal (blank is fine). Never a number or rating.>",
+          "blocked_on": "<what this is waiting on, in June's words, if she said it's blocked/waiting ('waiting on Donna', 'once the key arrives'). Empty string if nothing.>",
+          "access_conditions": [<zero or more of EXACTLY these, only when her words indicate them: "Can-be-done-lying-down", "Involves-leaving-house", "Requires-talking-to-a-person". Empty list if none. Do NOT invent other values.>]
         }
       ]
     }
@@ -239,6 +252,15 @@ def parse_weed(model_text):
     parsed.setdefault("groups", [])
     parsed.setdefault("opening", "")
     parsed.setdefault("capacity_read", None)
+    # Per-item optional fields default so downstream never KeyErrors (mirrors how `when` and the
+    # other item keys are read with .get). Absent stays absent — None/"" here means "no signal",
+    # which build_optional_props turns into no written prop (the flat-default behavior).
+    for grp in parsed.get("groups", []):
+        for item in grp.get("items", []):
+            item.setdefault("duration_min", None)
+            item.setdefault("affect", "")
+            item.setdefault("blocked_on", "")
+            item.setdefault("access_conditions", [])
     return parsed
 
 

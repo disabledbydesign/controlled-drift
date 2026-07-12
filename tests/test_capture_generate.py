@@ -255,3 +255,33 @@ def test_history_feeds_followup_prompt(tmp_path, monkeypatch):
     cg.capture("actually link that to job search")
     # The earlier turn's raw input is in the second prompt, so a follow-up resolves against it.
     assert "first turn: call surgeon" in captured["prompt"]
+
+
+# --- Task 2: per-item optional fields parse + default ------------------------
+
+def test_parse_weed_reads_optional_fields():
+    raw = '''```json
+    {"opening":"o","capacity_read":null,"groups":[{"label":"g","through_line":"t","items":[
+      {"type":"Task","name":"Call surgeon","link":null,"status":"Ready","action":"create",
+       "reasoning":"r","duration_min":15,"affect":"been dreading this call",
+       "blocked_on":"the referral","access_conditions":["Involves-leaving-house"]}
+    ]}]}
+    ```'''
+    item = cg.parse_weed(raw)["groups"][0]["items"][0]
+    assert item["duration_min"] == 15
+    assert item["affect"] == "been dreading this call"
+    assert item["blocked_on"] == "the referral"
+    assert item["access_conditions"] == ["Involves-leaving-house"]
+
+
+def test_parse_weed_optional_fields_default_safely_when_absent():
+    raw = '''```json
+    {"opening":"o","capacity_read":null,"groups":[{"label":"g","through_line":"t","items":[
+      {"type":"Task","name":"X","link":null,"status":"Ready","action":"create","reasoning":"r"}
+    ]}]}
+    ```'''
+    item = cg.parse_weed(raw)["groups"][0]["items"][0]
+    assert item["duration_min"] is None
+    assert item["affect"] == ""
+    assert item["blocked_on"] == ""
+    assert item["access_conditions"] == []
