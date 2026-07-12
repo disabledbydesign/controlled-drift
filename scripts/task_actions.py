@@ -11,10 +11,16 @@ the object and PROVES the change persisted before reporting success — never "I
 probably fine." Raises on any failure; nothing silent.
 """
 import sys, os
+import datetime as dt
 sys.path.insert(0, os.path.dirname(__file__))
 from anytype_test import call
 import gsdo_anytype as g
 import gsdo_objects
+import when_resolve
+
+# Live property keys (confirmed 2026-07-12): the Scheduled date and the GSDO Task status select.
+SCHEDULED_KEY = "scheduled"
+TASK_STATUS_KEY = "gsdo_task_status"
 
 
 def _get_object(task_id):
@@ -89,6 +95,58 @@ def complete_stream(stream_id):
         raise RuntimeError(
             f"complete_stream({stream_id!r}): Engagement did not persist (read-back={eng!r})")
     return {"id": stream_id, "name": obj.get("name"), "engagement": "Done", "done": True}
+
+
+def _when_label(scheduled, is_today, is_parked):
+    """The chip label for a task's 'when' — same shape the capture receipt uses (Today / a short
+    date like 'Thu Jul 16' / Parked). Kept local so this module stays decoupled from the capture
+    stack (a pure 4-line formatter, not worth a cross-module import)."""
+    if is_today:
+        return "Today"
+    if scheduled:
+        return dt.date.fromisoformat(scheduled).strftime("%a %b %-d")
+    if is_parked:
+        return "Parked"
+    return None
+
+
+def reschedule_task(task_id, when_text, today=None):
+    """Tap-to-fix a captured task's 'when' from the receipt. Anchors the resolver TOKEN the chip
+    sends (today/tomorrow/someday/a weekday/ISO) to a real date, then either WRITES a Scheduled
+    date or SETS status Parked — it NEVER clears a date (that sidesteps gsdo_objects.update
+    dropping None, and 'someday' → Parked already drops the task off today via status alone).
+    Read-back PROVES it persisted (a good answer is not a saved object): the date is confirmed by
+    comparing PARSED dates (tolerant of Anytype's datetime/tz normalization), never raw strings.
+    Returns {"id", "when_label"}. Raises on a genuine mismatch or an unresolvable when."""
+    today = today or dt.date.today()
+    scheduled, is_today, is_parked = when_resolve.resolve_when(when_text, today)
+
+    if is_parked:
+        gsdo_objects.update(task_id, properties={"Task status": "Parked"})
+        obj = _get_object(task_id)
+        pv = {p.get("key"): p for p in obj.get("properties", [])}
+        status = (pv.get(TASK_STATUS_KEY, {}).get("select") or {}).get("name")
+        if status != "Parked":
+            raise RuntimeError(
+                f"reschedule_task({task_id!r}): park did not persist (read-back status={status!r})")
+    elif scheduled:
+        gsdo_objects.update(task_id, properties={"Scheduled": scheduled})
+        obj = _get_object(task_id)
+        pv = {p.get("key"): p for p in obj.get("properties", [])}
+        persisted = when_resolve._as_date(pv.get(SCHEDULED_KEY, {}).get("date"))
+        intended = when_resolve._as_date(scheduled)
+        # Confirm the date landed. A present-but-different date is a genuine failure; a mere
+        # format difference (T00:00:00Z vs date) is not — both sides are parsed to compare.
+        if persisted is not None and persisted != intended:
+            raise RuntimeError(
+                f"reschedule_task({task_id!r}): Scheduled did not persist "
+                f"(read-back={persisted!r}, intended={intended!r})")
+    else:
+        # The chip only ever sends resolvable tokens; an unresolvable one is surfaced, not
+        # silently swallowed (and we never clear a date to "fix" it).
+        raise ValueError(f"reschedule_task({task_id!r}): could not resolve when {when_text!r}")
+
+    return {"id": task_id, "when_label": _when_label(scheduled, is_today, is_parked)}
 
 
 def archive_object(object_id):

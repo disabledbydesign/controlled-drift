@@ -15,6 +15,7 @@ Routes:
   POST /api/refresh     start a fresh generation (async, 202); poll /api/status  [logs surfaced]
   POST /api/negotiate   {preset_id}|{message} -> start a renegotiation (async, 202); poll status
   POST /api/complete    {id} -> mark a task done in Anytype (read-back) + flip the cache
+  POST /api/task/reschedule {id, when} -> anchor a when-token to a date (read-back) {ok, when_label}
   POST /api/uncomplete  {id} -> undo: status back to Ready (read-back) + un-flip the cache
   GET  /api/session     ?stream=capture|negotiate -> recent session log entries (the receipt)
   POST /api/capture     {text} -> weed input into typed/linked Anytype objects (async, 202)
@@ -383,6 +384,25 @@ class Handler(BaseHTTPRequestHandler):
                 return
             plan = plan_store.mark_item_done(task_id)
             self._send(200, {"completed": confirmed, "plan": plan or {"empty": True}})
+            return
+
+        if self.path == "/api/task/reschedule":
+            body = self._read_json_body()
+            task_id = (body.get("id") or "").strip()
+            # The chip sends a resolver TOKEN (today/tomorrow/someday/a weekday/ISO), never a
+            # rendered date label — Python re-anchors it to a real date server-side.
+            when = (body.get("when") or "").strip()
+            if not task_id or not when:
+                self._send(400, {"error": "reschedule needs id and when"})
+                return
+            # Writes a Scheduled date or parks someday (never clears), with read-back. A failed
+            # reschedule surfaces honestly.
+            try:
+                out = task_actions.reschedule_task(task_id, when)
+            except Exception as e:
+                self._send(500, {"error": str(e)})
+                return
+            self._send(200, {"ok": True, "when_label": out.get("when_label")})
             return
 
         if self.path == "/api/uncomplete":
