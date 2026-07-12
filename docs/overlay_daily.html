@@ -163,7 +163,6 @@ body {
 .focus-alert-mark { font-size: 10px; color: var(--rose-dim); text-transform: uppercase; letter-spacing: .08em; flex-shrink: 0; padding-top: 1px; }
 
 /* honest "not wired yet" inline note (authoring lands in Task 3) */
-.focus-notyet { padding: 0 14px 10px; font-size: 11px; color: var(--text-dimmer); line-height: 1.4; font-style: italic; }
 
 /* "See this week" toggle */
 .focus-toggle-row { border-top: 1px solid var(--rose-border); }
@@ -887,7 +886,6 @@ textarea.add-field:focus { border-color: var(--gold); }
         <span class="focus-alert-mark">Now</span>
         <span id="focus-alert-text"></span>
       </div>
-      <div class="focus-notyet" id="focus-notyet" style="display:none">Editing and adding periods lands in the next build — for now this is a view.</div>
       <div class="focus-toggle-row">
         <button class="focus-toggle" onclick="toggleFocus('focus-slot', this)" aria-expanded="false">
           See this week
@@ -1363,10 +1361,6 @@ function toggleFocus(slotId, btn) {
   const open = slot.classList.toggle('open');
   if (btn) btn.setAttribute('aria-expanded', open ? 'true' : 'false');
 }
-function focusNotYet() {
-  const n = document.getElementById('focus-notyet');
-  if (n) n.style.display = 'block';
-}
 async function loadPeriod() {
   // Independent of the plan load — never block plan render. If there's no active period
   // (or the server is unreachable in static preview), the slot just stays hidden.
@@ -1542,7 +1536,7 @@ function renderReflect(reflect) {
       <span class="reflect-val-wrap">
         ${changed}<span class="reflect-value${missing ? ' missing' : ''}">${esc(it.display)}</span>
         <button class="reflect-fix" onclick="openFieldEditor('${it.key}')">fix</button>
-      </span></span></div>`;
+      </span></div>`;
   }).join('');
   const blockMsg = blocking.length
     ? `<div class="reflect-blocking">Still need: ${esc(blocking.join(', '))} — tap “fix” on Dates to add it.</div>` : '';
