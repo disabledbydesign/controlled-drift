@@ -2068,8 +2068,13 @@ async function cycleWhen(chip) {
       chip.textContent = data.when_label || token;
       chip.dataset.token = token;
       chip.className = 'when-chip' + (token === 'today' ? ' today' : (token === 'someday' ? ' parked' : ''));
+    } else {
+      // never leave her wondering whether it saved — the chip is unchanged AND we say so
+      setAddStatus("That change didn't save — tap the chip again.", true);
     }
-  } catch (_) { /* transient blip — leave the chip as it was */ }
+  } catch (_) {
+    setAddStatus("That change didn't save — tap the chip again.", true);
+  }
   chip.disabled = false;
 }
 

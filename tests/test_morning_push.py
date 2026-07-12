@@ -136,3 +136,46 @@ def test_run_falls_back_to_cached_plan_when_generation_fails(monkeypatch):
     assert rc == 0
     assert pushed == [True]   # pushed, flagged STALE
     assert "yesterday" in notes[0][0].lower()   # Mac title signals it's the prior plan
+
+
+# --- the phone push is content-free (June's privacy decision, 2026-07-12) -----
+# ntfy.sh is a public relay: the body must NEVER carry plan content (woven frame,
+# task names) — only "a plan is ready" + the tap-to-open link. A regression here
+# silently leaks June's plan text off-device with nothing else to catch it.
+
+def _capture_push(monkeypatch):
+    sent = []
+    import urllib.request
+    def fake_urlopen(req, timeout=None):
+        sent.append({"body": req.data.decode("utf-8"),
+                     "title": req.get_header("Title"),
+                     "click": req.get_header("Click")})
+        class R:  # minimal response object
+            pass
+        return R()
+    monkeypatch.setattr(urllib.request, "urlopen", fake_urlopen)
+    monkeypatch.setattr(mp, "_ntfy_topic", lambda: "test-topic")
+    monkeypatch.setattr(mp, "_overlay_url", lambda: "http://example.local:5050")
+    return sent
+
+_SENSITIVE_PLAN = {
+    "woven_frame": "SECRET-FRAME pay the medical bill before the deadline",
+    "blocks": [{"label": "Morning", "time": "9:00",
+                "items": [{"time": "9:00", "task": "SECRET-TASK call the lawyer"}]}],
+}
+
+def test_push_body_is_content_free(monkeypatch):
+    sent = _capture_push(monkeypatch)
+    assert mp._push_to_phone(_SENSITIVE_PLAN, stale=False) is True
+    body = sent[0]["body"]
+    assert "SECRET-FRAME" not in body and "SECRET-TASK" not in body
+    assert "pay the medical bill" not in body and "call the lawyer" not in body
+    assert sent[0]["click"]  # the tap-to-open link survives
+
+def test_stale_push_body_is_content_free_and_says_stale(monkeypatch):
+    sent = _capture_push(monkeypatch)
+    assert mp._push_to_phone(_SENSITIVE_PLAN, stale=True) is True
+    body = sent[0]["body"]
+    assert "SECRET-FRAME" not in body and "SECRET-TASK" not in body
+    assert "refresh" in body.lower()  # still honestly labelled as not-fresh
+    assert sent[0]["title"] == "Yesterday's plan"
