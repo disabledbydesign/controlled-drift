@@ -29,6 +29,7 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 
 sys.path.insert(0, os.path.dirname(__file__))
 import plan_store
+import project_summary
 import plan_generate
 import task_actions
 import capture_generate
@@ -230,6 +231,20 @@ class Handler(BaseHTTPRequestHandler):
                 self._send(500, {"error": f"projects load failed: {e}"})
             return
 
+        if self.path == "/api/project-summaries":
+            # Per-project 'what it is / next step' for the expandable work-stream rows — parsed
+            # deterministically from each project's Context (NO LLM), same tier as /api/map +
+            # /api/projects. Only projects whose Context actually parses appear here; the overlay
+            # falls back to the task list for the rest (honest empty, never fabricated text —
+            # divergence ledger H2). Named 'summaries', not 'focus': that word is the Focus
+            # Period's, and June flagged the collision.
+            try:
+                _g, projects, *_ = daily_plan.load_active_items(g.get_space_id())
+                self._send(200, {"summaries": project_summary.summary_map(projects)})
+            except Exception as e:
+                self._send(500, {"error": f"project summaries load failed: {e}"})
+            return
+
         if self.path == "/api/focus/status":
             # The authoring poller: is the structure step still running, did it land, did it fail?
             st = focus_store.get_status()
@@ -403,6 +418,43 @@ class Handler(BaseHTTPRequestHandler):
                 self._send(500, {"error": str(e)})
                 return
             self._send(200, {"ok": True, "when_label": out.get("when_label")})
+            return
+
+        if self.path == "/api/task/move":
+            # Tap-to-place, deterministic: relocate one task LATER in the CACHED plan at the
+            # tapped position, clock times re-flowed automatically from existing durations. No
+            # LLM, no reorder call, no Anytype write (contrast /api/negotiate, which regenerates).
+            # The move lives ONLY in the cache; the next generation rebuilds from Anytype and
+            # it's gone. The overlay copy says so — no false promise of persistence.
+            # Shapes: target_block present (int; optional int position, default append) -> clock
+            #         move; position only -> fragmented-day (priority-shape) reorder.
+            body = self._read_json_body()
+            task_id = (body.get("id") or "").strip()
+            target = body.get("target_block")
+            position = body.get("position")
+
+            def _bad_int(v):
+                # bool is an int subclass in Python — a JSON `true` must not pass as an index.
+                return v is not None and (not isinstance(v, int) or isinstance(v, bool))
+
+            if not task_id or _bad_int(target) or _bad_int(position):
+                self._send(400, {"error": "move needs a task id and integer target_block/position"})
+                return
+            if target is None and position is None:
+                self._send(400, {"error": "move needs a destination (target_block and/or position)"})
+                return
+            try:
+                if target is not None:
+                    plan = plan_store.move_item_later(task_id, target, position=position)
+                else:
+                    plan = plan_store.move_priority_item_later(task_id, position)
+            except ValueError as e:      # not later / out of range
+                self._send(400, {"error": str(e)})
+                return
+            except LookupError as e:     # no cache / wrong shape / id not found
+                self._send(404, {"error": str(e)})
+                return
+            self._send(200, {"ok": True, "plan": plan})
             return
 
         if self.path == "/api/uncomplete":

@@ -11,6 +11,8 @@ sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "scripts"))
 from http.server import ThreadingHTTPServer
 import server
 import plan_store
+import daily_plan
+import project_summary  # noqa: F401  (ensures the module imports cleanly in the server context)
 import plan_generate
 import capture_generate
 import task_actions
@@ -341,3 +343,82 @@ def test_capture_undo_empty_id_400(live_server):
     base, _ = live_server
     status, body = _post(base, "/api/capture/undo", {})
     assert status == 400 and "error" in body
+
+
+# --- /api/task/move + /api/project-summaries --------------------------------
+# NOTE: _post returns (status, parsed_dict) — not a raw string — so these read the dict
+# directly (matching the existing negotiate tests). _get returns a raw string body.
+
+def _seed_clock_plan():
+    plan_store.save_plan({
+        "woven_frame": "wf",
+        "blocks": [
+            {"label": "Morning", "time": "09:00 – 12:00",
+             "items": [{"time": "09:00 – 10:30", "project": "Alpha", "task": "draft", "id": "T1"}]},
+            {"label": "Afternoon", "time": "13:00 – 17:00",
+             "items": [{"time": "13:00 – 14:00", "project": "Gamma", "task": "call", "id": "T4"}]},
+        ],
+        "still_here": [],
+    }, source="generate")
+
+
+def test_move_relocates_and_reflows_in_cache(live_server):
+    base, _calls = live_server
+    _seed_clock_plan()
+    status, data = _post(base, "/api/task/move", {"id": "T1", "target_block": 1, "position": 1})
+    assert status == 200 and data["ok"] is True
+    moved = next(i for i in data["plan"]["blocks"][1]["items"] if i.get("id") == "T1")
+    assert moved["time"] == "14:00 – 15:30"   # re-flowed, never blanked
+    # And it actually persisted to the cache (not just echoed).
+    assert "T1" in [i.get("id") for i in plan_store.load_plan()["blocks"][1]["items"]]
+
+
+def test_move_priority_shape_reorders(live_server):
+    base, _ = live_server
+    plan_store.save_plan({"shape": "priority",
+                          "items": [{"task": "a", "id": "P1"}, {"task": "b", "id": "P2"}],
+                          "still_here": []}, source="generate")
+    status, data = _post(base, "/api/task/move", {"id": "P1", "position": 1})
+    assert status == 200
+    assert [i["id"] for i in data["plan"]["items"]] == ["P2", "P1"]
+
+
+def test_move_bad_body_is_400(live_server):
+    base, _ = live_server
+    status, _b = _post(base, "/api/task/move", {"id": "", "target_block": 1})
+    assert status == 400
+    status2, _b2 = _post(base, "/api/task/move", {"id": "T1"})           # no destination at all
+    assert status2 == 400
+    status3, _b3 = _post(base, "/api/task/move", {"id": "T1", "target_block": "later"})
+    assert status3 == 400
+    # A JSON boolean must not sneak through as an int (bool is an int subclass in Python).
+    status4, _b4 = _post(base, "/api/task/move", {"id": "T1", "target_block": True})
+    assert status4 == 400
+    status5, _b5 = _post(base, "/api/task/move", {"id": "T1", "position": True})
+    assert status5 == 400
+
+
+def test_move_unknown_id_is_404_and_not_later_is_400(live_server):
+    base, _ = live_server
+    _seed_clock_plan()
+    status, _b = _post(base, "/api/task/move", {"id": "NOPE", "target_block": 1})
+    assert status == 404
+    status2, _b2 = _post(base, "/api/task/move", {"id": "T4", "target_block": 0})
+    assert status2 == 400
+
+
+def test_project_summaries_route(live_server, monkeypatch):
+    base, _ = live_server
+    # load_active_items returns (goals, projects, tasks, ...) — mock to a 3-tuple; the route
+    # only reads element [1] (projects).
+    monkeypatch.setattr(daily_plan, "load_active_items", lambda sid: (
+        [],
+        [{"name": "Alpha", "context": "what it is — the build\nnext step — ship it"},
+         {"name": "Beta", "context": "no structured lines here"}],
+        [],
+    ))
+    status, body = _get(base, "/api/project-summaries")
+    data = json.loads(body)
+    assert status == 200
+    assert data["summaries"]["Alpha"] == {"what_it_is": "the build", "next_step": "ship it"}
+    assert "Beta" not in data["summaries"]   # unparseable → omitted, never fabricated
