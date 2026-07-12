@@ -162,7 +162,8 @@ validation surface; the JSON carries it. Shape:
           "status": "Ready | Needs Clarifying | null",
           "action": "create | skip",
           "dedup_note": "why skipped, if skipped, else null",
-          "reasoning": "why this type and this link — June must be able to see the why"
+          "reasoning": "why this type and this link — June must be able to see the why",
+          "when": "<when June wants it, IN HER WORDS: 'today', a weekday like 'thursday', 'tomorrow', an ISO date, or 'someday'. EMPTY STRING if she didn't say. Never guess a time.>"
         }
       ]
     }
