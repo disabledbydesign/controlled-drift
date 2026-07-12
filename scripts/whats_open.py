@@ -23,7 +23,7 @@ from orient_map import render_map
 
 def whats_open(start_dir=".", project=None):
     if project:
-        return render_map(project)
+        return _with_notice(render_map(project))
     ctx = load_context(start_dir)
     if not ctx or not ctx.get("projects"):
         return ("No Controlled Drift binding found for this directory.\n"
@@ -34,7 +34,16 @@ def whats_open(start_dir=".", project=None):
         name = p.get("name")
         if name:
             blocks.append(render_map(name))
-    return "\n\n".join(blocks) if blocks else "(binding found, but no named project to render)"
+    out = "\n\n".join(blocks) if blocks else "(binding found, but no named project to render)"
+    return _with_notice(out)
+
+
+def _with_notice(map_text):
+    """Append the status checker's notice (pending questions / overdue check) so the
+    map itself says when its own statuses are in doubt. Nothing pending -> unchanged."""
+    import status_check
+    notice = status_check.status_notice()
+    return f"{map_text}\n\n{notice}" if notice else map_text
 
 
 def main():
