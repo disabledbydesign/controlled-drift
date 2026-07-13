@@ -77,8 +77,9 @@ def test_resolve_ids_overwrites_mislabeled_task_from_id():
     plan = {"blocks": [{"items": [
         {"task": "Check rivets / Leatherworking", "project": "Leatherworking", "ref": "T1"},
     ]}]}
-    mislabels = pg._resolve_ids(plan, ref_map, tasks)
+    mislabels, resolved = pg._resolve_ids(plan, ref_map, tasks)
     item = plan["blocks"][0]["items"][0]
+    assert resolved == 1
     assert item["id"] == "id-real"
     assert item["task"] == "Open decision: aim to finish a manuscript"   # id wins over free text
     assert item["project"] == "Anthropic Fellows coding prep"           # project stamped from id
@@ -104,7 +105,7 @@ def test_resolve_ids_leaves_null_ref_item_untouched():
         {"task": "Lunch", "project": None, "ref": None},
         {"task": "email donna", "ref": None},        # exact (normalized) name match — not a mislabel
     ]}]}
-    mislabels = pg._resolve_ids(plan, ref_map, tasks)
+    mislabels, resolved = pg._resolve_ids(plan, ref_map, tasks)
     lunch, donna = plan["blocks"][0]["items"]
     assert lunch["task"] == "Lunch" and "id" not in lunch          # untouched, uncompletable
     assert donna["id"] == "id-a" and donna["task"] == "Email Donna"  # canonicalized, no drift

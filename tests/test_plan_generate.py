@@ -21,7 +21,7 @@ _CANNED = """Here is your plan in prose.
   "woven_frame": "a calm frame",
   "blocks": [
     {"label": "Morning", "time": "9:00 AM – 12:00 PM", "framing": "fresh",
-     "items": [{"time": "9:00 – 10:30 AM", "project": "Build", "task": "do the thing", "why": "momentum"}]}
+     "items": [{"time": "9:00 – 10:30 AM", "project": "Build", "task": "do the thing", "why": "momentum", "ref": "T1"}]}
   ],
   "still_here": [{"label": "Later thread", "note": "held, not dropped"}]
 }
@@ -166,6 +166,94 @@ def test_reorder_logs_correction_with_kind_and_before_after(tmp_path, monkeypatc
     assert before["woven_frame"] == "old"          # before captured
     assert after["woven_frame"] == "a calm frame"  # after captured
     assert surfaced                                # renegotiated plan also re-surfaces
+
+
+# --- the zero-ref validity guard (measured live 2026-07-11) -----------------
+
+# A plan whose one item resolves to NO id: unknown ref token + a task name that matches none
+# of the stubbed tasks. Structurally broken — every row unactionable.
+_CANNED_ZERO_REF = """```json
+{
+  "woven_frame": "a frame",
+  "blocks": [
+    {"label": "Morning", "time": "9:00 AM – 12:00 PM", "framing": "x",
+     "items": [{"time": "9:00 – 10:30 AM", "project": "Ghost", "task": "an unlisted thing", "why": "?", "ref": "T99"}]}
+  ],
+  "still_here": []
+}
+```"""
+
+
+def _read_gen_log(tmp_path):
+    import json
+    p = tmp_path / "generation_log.jsonl"
+    if not p.exists():
+        return []
+    return [json.loads(line) for line in p.read_text().splitlines() if line.strip()]
+
+
+def test_generate_plan_valid_plan_passes_and_does_not_retry(tmp_path, monkeypatch):
+    """A healthy plan (at least one ref resolves) is cached on the first attempt — no retry,
+    one success log, no zero_ref_plan event."""
+    _stub_pipeline(monkeypatch, tmp_path)
+    calls = {"n": 0}
+    real_generate = _CANNED
+    def once(prompt):
+        calls["n"] += 1
+        return real_generate
+    monkeypatch.setattr(pg, "generate", once)
+    saved = pg.generate_plan(source="morning")
+    assert saved["woven_frame"] == "a calm frame"
+    assert calls["n"] == 1                                   # no retry on a valid plan
+    log = _read_gen_log(tmp_path)
+    assert any(r["success"] for r in log)
+    assert not any(r.get("error_type") == "zero_ref_plan" for r in log)
+
+
+def test_generate_plan_retries_once_on_zero_ref_then_succeeds(tmp_path, monkeypatch):
+    """The intermittent fault: first generation is zero-ref, the retry resolves fine. June still
+    gets a real, cached plan; the fragility is logged as one zero_ref_plan event."""
+    _stub_pipeline(monkeypatch, tmp_path)
+    seq = iter([_CANNED_ZERO_REF, _CANNED])
+    monkeypatch.setattr(pg, "generate", lambda prompt: next(seq))
+    saved = pg.generate_plan(source="morning")
+    assert saved["woven_frame"] == "a calm frame"           # the retry's good plan was cached
+    log = _read_gen_log(tmp_path)
+    zero = [r for r in log if r.get("error_type") == "zero_ref_plan"]
+    assert len(zero) == 1                                    # the first (bad) attempt was logged
+    assert any(r["success"] for r in log)                   # the retry succeeded
+
+
+def test_generate_plan_zero_ref_twice_raises_and_logs(tmp_path, monkeypatch):
+    """Both attempts zero-ref → a real failure, raised so the caller's fallback fires (morning
+    push serves the stale cache). Two distinct zero_ref_plan events, no success, nothing cached."""
+    _stub_pipeline(monkeypatch, tmp_path)
+    monkeypatch.setattr(pg, "generate", lambda prompt: _CANNED_ZERO_REF)
+    with pytest.raises(pg.ZeroRefPlanError):
+        pg.generate_plan(source="morning")
+    log = _read_gen_log(tmp_path)
+    assert len([r for r in log if r.get("error_type") == "zero_ref_plan"]) == 2
+    assert not any(r["success"] for r in log)               # a dead plan was never logged as success
+    assert plan_store.load_plan() is None                    # nothing dead was cached
+
+
+def test_generate_plan_no_gated_tasks_is_valid(tmp_path, monkeypatch):
+    """A rest/wind-down plan with an empty gated task set is legitimately zero-ref — the guard
+    only fires when there WERE tasks to resolve. Such a plan passes through, no retry."""
+    monkeypatch.setenv("CD_CONFIG_DIR", str(tmp_path))
+    monkeypatch.setenv("CD_DATA_DIR", str(tmp_path))
+    monkeypatch.setattr(pg, "build_context",
+                        lambda capacity=None, start_time=None, end_time=None, extra=None, **kw:
+                        ("ctx", [], dt.datetime(2026, 6, 23, 20, 0), "clock"))
+    monkeypatch.setattr(pg, "log_surfaced_batch", lambda items, **k: None)
+    calls = {"n": 0}
+    def once(prompt):
+        calls["n"] += 1
+        return _CANNED_ZERO_REF
+    monkeypatch.setattr(pg, "generate", once)
+    saved = pg.generate_plan(source="morning")
+    assert calls["n"] == 1                                   # no retry: no tasks means not broken
+    assert saved["woven_frame"] == "a frame"
 
 
 # --- single-source auth: the durable-token wiring --------------------------

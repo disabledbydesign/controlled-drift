@@ -59,6 +59,7 @@ Most days you'll get the pre-computed **clock schedule** above — frame it as d
 - This is a negotiation proposal — everything is moveable. Expect and invite pushback; that's the design working, and corrections are data.
 - Nothing punitive about what's not in today's path — not-today is not failure.
 - Use the Python-computed times verbatim in the initial plan. Do not invent times or reorder items. (This applies to the initial automated generation only — renegotiations driven by June's request are expected to change the ordering.)
+- **Every task item MUST carry its `ref` token, copied verbatim from the TASK REFERENCE list in the inputs** (non-task items like Lunch or breaks get `ref: null`). A plan whose task items have no ref tokens is unusable — June can't mark anything done or move it. Never omit, invent, or renumber a token.
 - Progress reminders orient — they never grade.
 - If the output looks like a to-do list or a narrative + schedule printed separately, the format is wrong. It must be one integrated time-block plan.
 

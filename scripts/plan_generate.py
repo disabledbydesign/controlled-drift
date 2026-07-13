@@ -36,6 +36,20 @@ GEN_TIMEOUT = 300  # seconds. A full plan runs ~160s (JSON-only); 300 gives marg
                    # The real fix for speed is fewer tasks per plan (the prioritization work).
 
 
+class ZeroRefPlanError(RuntimeError):
+    """A generation whose plan items ALL resolved to no id — structurally unusable.
+
+    Measured live 2026-07-11: the LLM sometimes ignores the ref-token contract and emits
+    ref=None on every item (some runs, same prompt, resolve fine). A zero-ref plan LOOKS like
+    a plan but every row carries no id, so mark-done, move, and held-back threading all
+    silently fail — yet the current success path would cache it as a good plan. We treat that
+    as a failure (not a plan), so the existing failure fallbacks fire: the morning push serves
+    the labelled stale cache (which HAS working ids) rather than a dead plan, and the overlay
+    refresh reports the failure per its contract. Distinct from a partial resolution (some refs
+    missing is tolerated) — only the total-zero case is structural failure.
+    """
+
+
 # --- the pluggable LLM seam -------------------------------------------------
 
 def generate(prompt, backend=None, model=None):
@@ -803,8 +817,16 @@ def _norm(s):
 
 
 def _resolve_ids(plan, ref_map, tasks):
-    """Thread the real Anytype task id onto each plan item, in place. Returns the mislabel
-    count (how many resolved items the model had labelled with materially different text).
+    """Thread the real Anytype task id onto each plan item, in place. Returns
+    (mislabel_count, resolved_count):
+
+      mislabel_count how many resolved items the model had labelled with materially different
+                     text than the real (id-resolved) task name — the identity-drift measure.
+      resolved_count how many plan items resolved to a real task id at all. This is the
+                     resolution-health signal generate_plan reads: a plan where the gated task
+                     set is non-empty but resolved_count is ZERO is structurally broken (every
+                     row is unactionable), so generate_plan retries/fails on it instead of
+                     caching a dead plan. A partial resolution (some > 0) is valid.
 
     Primary path: the model echoed a `ref` token -> map it back through ref_map.
     Fallback: no/unknown token, but the item's task text matches a real task name exactly
@@ -834,15 +856,17 @@ def _resolve_ids(plan, ref_map, tasks):
     held_by_id = {t["id"]: (t.get("held_back") or 0) for t in tasks}
     held_names_by_id = {t["id"]: (t.get("held_back_names") or []) for t in tasks}
     mislabels = 0  # resolved items whose model text differed materially from the real name
+    resolved = 0   # items that resolved to a real task id (the resolution-health signal)
 
     def _resolve_item(item):
-        nonlocal mislabels
+        nonlocal mislabels, resolved
         ref = item.pop("ref", None)  # consume the token; the overlay only needs the id
         tid = ref_map.get(ref) if ref else None
         if not tid:
             tid = by_name.get(_norm(item.get("task")))
         if tid:
             item["id"] = tid
+            resolved += 1
             # Identity fields win over the model's free text now that the id is known. Compare
             # first (normalized) so the drift is measurable — a fallback name match is text-equal
             # by construction and never counts; a real relabel (the trust bug) does.
@@ -872,7 +896,7 @@ def _resolve_ids(plan, ref_map, tasks):
             _resolve_item(item)
     for item in plan.get("items", []):          # priority shape (flat)
         _resolve_item(item)
-    return mislabels
+    return mislabels, resolved
 
 
 def _ensure_all_tasks_accounted(plan, tasks):
@@ -950,19 +974,43 @@ def generate_plan(capacity=None, source="generate", extra=None):
     backend = os.environ.get("CD_BACKEND", "mistral")
     model = _active_model(backend)
     backend_label = f"{backend}/{model}" if model else backend
-    t0 = time.monotonic()
-    try:
-        model_text = generate(prompt)
-        plan = parse_plan(model_text)
-        mislabels = _resolve_ids(plan, ref_map, tasks)
-        _ensure_all_tasks_accounted(plan, tasks)
-    except Exception as e:
-        generation_log.log_generation(
-            backend=backend_label, duration_s=time.monotonic() - t0,
-            success=False, source=source,
-            error_type=type(e).__name__, error_msg=str(e),
-        )
-        raise
+
+    # Validity guard (measured live 2026-07-11): if the gated task set is non-empty but ZERO
+    # plan items resolve to a real id, the generation is a structural failure, not a plan — every
+    # row would be unactionable (no mark-done / move / held-back threading). Retry the LLM once
+    # (the fault is intermittent: same prompt, some runs resolve fine), and if the retry is also
+    # zero-ref, fail honestly so the caller's fallback fires (morning push -> labelled stale cache
+    # with working ids; /api/refresh -> its failure contract) rather than caching a dead plan.
+    plan = None
+    mislabels = 0
+    for attempt in range(1, 3):  # one try + one retry on a zero-ref plan
+        t0 = time.monotonic()
+        try:
+            model_text = generate(prompt)
+            plan = parse_plan(model_text)
+            mislabels, resolved = _resolve_ids(plan, ref_map, tasks)
+            _ensure_all_tasks_accounted(plan, tasks)
+        except Exception as e:
+            generation_log.log_generation(
+                backend=backend_label, duration_s=time.monotonic() - t0,
+                success=False, source=source,
+                error_type=type(e).__name__, error_msg=str(e),
+            )
+            raise
+        if tasks and resolved == 0:
+            # Zero-ref plan: log the distinct fragility event (keeps it measurable) and retry once;
+            # a second zero-ref plan is a real failure, raised so the failure paths fire.
+            generation_log.log_generation(
+                backend=backend_label, duration_s=time.monotonic() - t0,
+                success=False, source=source, error_type="zero_ref_plan",
+                error_msg=f"0 plan items resolved to a task id "
+                          f"(input had {len(tasks)} gated tasks; attempt {attempt}/2)",
+            )
+            if attempt < 2:
+                continue
+            raise ZeroRefPlanError(
+                f"plan generation resolved zero of {len(tasks)} gated tasks to ids across 2 attempts")
+        break  # a valid plan (some refs resolved, or no gated tasks to resolve)
     generation_log.log_generation(
         backend=backend_label, duration_s=time.monotonic() - t0,
         success=True, source=source,
@@ -1006,7 +1054,7 @@ def reorder(message, kind):
     try:
         model_text = generate(prompt)
         plan = parse_plan(model_text)
-        mislabels = _resolve_ids(plan, ref_map, tasks)
+        mislabels, _resolved = _resolve_ids(plan, ref_map, tasks)
         _ensure_all_tasks_accounted(plan, tasks)
     except Exception as e:
         generation_log.log_generation(
