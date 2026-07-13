@@ -15,3 +15,8 @@ __pycache__/
 Anytype Key.md
 # Runtime data the system writes at use time (not source).
 scripts/data/
+
+# Session-local / personal artifacts (June: ignore, 2026-07-12)
+.gsdot-log.md
+.claude/
+Julia Task Home*.png
