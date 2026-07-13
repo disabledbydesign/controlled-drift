@@ -375,19 +375,32 @@ def format_context(goals, projects, tasks, strategies, today_recurrings, neglect
             lines.append(f"- {r['name']} at {r['fixed_time'].strftime('%H:%M')}")
         lines.append("")
 
-    # Only show neglected items from ACTIVE projects (Steady/Sprint/Hyperfixation).
-    # Backburner/Needs-Clarifying/unset projects going quiet is EXPECTED — don't surface that as a problem.
-    # Also exclude: never-surfaced items (already in active lists), today's recurrings, already shown tasks.
+    # The "gone quiet" section: threads in an ACTIVE project (Steady/Sprint/Hyperfixation)
+    # that HAVE surfaced before but not lately — so the model can gently offer to bring them
+    # back (prompt §3 + "On the neglected items section"). Backburner/unset/Open going quiet is
+    # EXPECTED and handled by the gate, not surfaced here as a problem.
+    #   - require real surfacing history (last_surfaced is not None): a never-surfaced item is
+    #     absence, not "gone quiet", and already lives in the active lists above.
+    #   - a task belongs here if ANY of its linked projects is active; a project item, if it is
+    #     itself active. `linked_projects` and `type` are now populated by query_neglected — the
+    #     old code read a `linked_projects` key it never set, fell through to an impossible
+    #     set-inside-a-list fallback, so the whole section was unreachable. The old
+    #     `not in active_names` guard is also dropped: every item here is by definition active
+    #     (that is what active_project_names selects for), so that guard silently emptied it.
     active_engagement = {"Steady", "Sprint", "Hyperfixation"}
     active_project_names = {p["name"] for p in projects
                             if p.get("engagement") in active_engagement or p.get("engagement") is None}
-    active_names = {t["name"] for t in tasks} | {p["name"] for p in projects}
+    today_recurring_names = {r["name"] for r in today_recurrings}
+
+    def _in_active_project(n):
+        if n.get("type") == "project":
+            return n["name"] in active_project_names
+        return any(pn in active_project_names for pn in (n.get("linked_projects") or []))
+
     neglected_stale = [n for n in neglected
                        if n.get("last_surfaced") is not None
-                       and n["name"] not in {r["name"] for r in today_recurrings}
-                       and n["name"] not in active_names
-                       and any(pn in active_project_names
-                               for pn in (n.get("linked_projects") or [active_project_names]))]
+                       and n["name"] not in today_recurring_names
+                       and _in_active_project(n)]
     if neglected_stale:
         lines.append("## Items from active projects that have gone quiet")
         lines.append("(These are in Steady/Sprint projects and haven't appeared in a plan recently.)")
