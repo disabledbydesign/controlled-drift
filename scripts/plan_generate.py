@@ -1026,6 +1026,17 @@ def generate_plan(capacity=None, source="generate", extra=None):
         plan_snapshot_log.log_plan_snapshot(saved, source=source)
     except Exception as e:
         print(f"[warn] plan snapshot not written: {e}", file=sys.stderr)  # honest, non-breaking
+    # Spec §10 promise: keep the confirmed plan human-readable when the AI layer is down. Mirror
+    # it into ONE Anytype object (updated in place, no per-day accumulation — June's decision).
+    # BEST-EFFORT: a mirror failure (Anytype closed, API down) must never break or delay a
+    # generation, so this runs AFTER the cache write and swallows any error. This is the single
+    # seam both the morning push and /api/refresh reach (both call generate_plan), so one call
+    # here mirrors both — and it sits after the zero-ref raise, so only VALID plans are mirrored.
+    try:
+        import plan_mirror
+        plan_mirror.mirror_plan_safe(saved)
+    except Exception as e:
+        print(f"[warn] plan mirror skipped: {e}", file=sys.stderr)  # never break a generation
     # Learning loop: every generation records what surfaced (neglect/rhythm history).
     if tasks:
         log_surfaced_batch([{"id": t["id"], "name": t["name"], "type": "task"} for t in tasks])

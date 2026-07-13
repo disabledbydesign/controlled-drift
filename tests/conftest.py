@@ -23,6 +23,12 @@ os.environ["CD_CONFIG_DIR"] = os.path.join(_SANDBOX, "config")
 os.makedirs(os.environ["CD_DATA_DIR"], exist_ok=True)
 os.makedirs(os.environ["CD_CONFIG_DIR"], exist_ok=True)
 
+# Same structural guard for the LIVE Anytype plan mirror: any test that drives
+# generate_plan()'s success path would otherwise mirror a canned test plan into June's REAL
+# "Today's plan" note (the file sandbox above can't catch an API write). mirror_plan_safe()
+# checks this env first and no-ops. Tests of the mirror itself clear it / mock the write layer.
+os.environ["CD_DISABLE_PLAN_MIRROR"] = "1"
+
 import cd_paths  # noqa: E402  (must follow the env setup above)
 
 # Snapshot the REAL data dir (the on-disk default, ignoring the env override) to detect
