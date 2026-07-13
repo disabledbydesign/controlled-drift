@@ -420,43 +420,131 @@ def _match_extra(extra, projects, tasks):
     return named
 
 
-def _gate_and_collapse(tasks, projects, neglected, period, extra=None):
+def _parse_date(raw):
+    """Anytype date value -> a date, tolerantly. Accepts 'YYYY-MM-DD' and full ISO timestamps
+    ('...T00:00:00Z', '...+00:00'). None/blank/unparseable -> None (never raises — a malformed
+    date must not blind the pick, it just means 'no deadline signal here')."""
+    if not raw or not isinstance(raw, str):
+        return None
+    s = raw.strip()
+    if not s:
+        return None
+    try:
+        return dt.date.fromisoformat(s[:10])
+    except ValueError:
+        pass
+    try:
+        return dt.datetime.fromisoformat(s.replace("Z", "+00:00")).date()
+    except (ValueError, TypeError):
+        return None
+
+
+def _pick_within_thread(candidates, proj_deadline_raw, surface_dates):
+    """Pick a thread's ONE surfaced item by the honest signal (reconciled selection model,
+    docs/spec_reconciliation_selection_2026-07-11.md, item 4):
+
+      1. nearest deadline first — effective deadline = the task's own Due date, else the
+         project's Deadline (the thread's urgency floor). Any deadline outranks none.
+      2. else least-recently-surfaced — oldest surface time first; a NEVER-surfaced task is
+         maximally stale, so it sorts first.
+      3. else the current stable order — `min` returns the first minimum, so a total tie falls
+         back to exactly the given order. No hash.
+
+    Pure + deterministic: `candidates` in their given order, `surface_dates` {id -> datetime}
+    from the shared resolver, `proj_deadline_raw` the project's raw Deadline value (or None)."""
+    proj_floor = _parse_date(proj_deadline_raw)
+
+    def key(t):
+        eff = _parse_date(t.get("due_date")) or proj_floor
+        has_deadline = eff is not None
+        deadline_key = eff if has_deadline else dt.date.max
+        ls = surface_dates.get(t.get("id"))
+        ls_key = ls if ls is not None else dt.datetime.min   # never surfaced = most stale = first
+        return (0 if has_deadline else 1, deadline_key, ls_key)
+
+    return min(candidates, key=key)
+
+
+def _gate_and_collapse(tasks, projects, neglected, period, extra=None, surface_dates=None):
     """Engagement grain gate + one-next-move-per-thread (spec AI_LAYER_SPEC.md §2/§9; reconciled in
     docs/spec_reconciliation_selection_2026-07-11.md). Backburner/Open/unset are hidden unless the
     project is foregrounded (Focus Period) — and, for Backburner/unset only, unless neglected (Open
     is self-paced: never surfaced by neglect, only by foreground). Everything surfacing collapses to
-    ONE next move per project-thread. A task/project June named in `extra` is guaranteed through
-    (task-named bypasses hide AND collapse; project-named is foregrounded, still one move). Held-back
-    tasks are NOT dropped — they stay in Anytype, just not in today's plan ("nothing lost" = still
-    accessible in the store, not shown daily). No-project tasks are discrete actions: never collapsed
-    together."""
+    ONE next move per project-thread, PICKED by `_pick_within_thread` (nearest deadline, else
+    least-recently-surfaced, else stable order) — not the storage-order accident. A task/project June
+    named in `extra` is guaranteed through (task-named bypasses hide AND collapse; project-named is
+    foregrounded, still one move). Held-back tasks are NOT dropped — they stay in Anytype, just not in
+    today's plan; each surfaced item carries `held_back` (how many same-thread survivors are not shown)
+    so the renderer can label 'next in X · N more'. No-project tasks are discrete actions: never
+    collapsed together. `surface_dates` is injectable for pure testing; it defaults to the live log."""
     proj_eng = {p.get("name"): (p.get("engagement") or "unset") for p in projects}
+    proj_deadline = {p.get("name"): p.get("deadline") for p in projects}
     fg = set((period or {}).get("foreground") or [])
     neg_names = {n.get("name") for n in (neglected or []) if isinstance(n, dict)}
     named = _match_extra(extra, projects, tasks)
+    if surface_dates is None:
+        from surface_log import surfaced_dates
+        surface_dates = surfaced_dates()
 
     def proj_of(t):
         ps = t.get("linked_projects") or []
         return ps[0] if ps else ""
 
-    kept, seen_thread = [], set()
+    def is_forced(t):
+        return t.get("id") in named["task_ids"]
+
+    # Pass 1 — the hide gate (unchanged logic): which tasks survive to be considered at all.
+    survivors = []
     for t in tasks:
         proj = proj_of(t)
         eng = proj_eng.get(proj, "unset")
-        task_forced = t.get("id") in named["task_ids"]
-        foregrounded = proj in fg or proj in named["projects"] or task_forced
+        foregrounded = proj in fg or proj in named["projects"] or is_forced(t)
         if not foregrounded:
             if eng == "Open":
                 continue                                   # available, self-paced: not pushed, not nagged
             if eng in ("Backburner", "unset") and proj not in neg_names:
                 continue                                   # dormant: hidden unless neglected
-        # one next move per real project-thread; no-project tasks (proj == "") are discrete, not collapsed;
-        # an explicitly-named task bypasses the collapse so June always gets what she asked for.
-        if proj and proj in seen_thread and not task_forced:
-            continue
+        survivors.append(t)
+
+    # Pick each real thread's ONE representative from its survivors, by the honest signal.
+    by_thread = {}
+    for t in survivors:
+        proj = proj_of(t)
         if proj:
+            by_thread.setdefault(proj, []).append(t)
+    winner_id = {proj: _pick_within_thread(cands, proj_deadline.get(proj), surface_dates)["id"]
+                 for proj, cands in by_thread.items()}
+
+    # Pass 2 — collapse: keep the winner per thread; forced + no-project tasks always pass through.
+    # (Forced-first preserves prior behavior: a forced task counts as the thread's shown move, so a
+    # later non-forced move for the same thread is suppressed — the collapse still yields one move.)
+    kept, seen_thread = [], set()
+    for t in survivors:
+        proj = proj_of(t)
+        if not proj:
+            kept.append(t)                                 # discrete action — never collapsed
+            continue
+        if is_forced(t):
             seen_thread.add(proj)
+            kept.append(t)                                 # explicitly named — guaranteed through
+            continue
+        if proj in seen_thread:
+            continue
+        if t["id"] != winner_id[proj]:
+            continue                                       # not the signal pick — its winner comes later
+        seen_thread.add(proj)
         kept.append(t)
+
+    # Annotate each surfaced task with how many same-thread survivors are held back (for the honest
+    # 'N more' label the renderer builds). Counts survivors not shown; discrete/no-project tasks: 0.
+    shown_by_thread = {}
+    for t in kept:
+        proj = proj_of(t)
+        if proj:
+            shown_by_thread[proj] = shown_by_thread.get(proj, 0) + 1
+    for t in kept:
+        proj = proj_of(t)
+        t["held_back"] = (len(by_thread.get(proj, [])) - shown_by_thread.get(proj, 0)) if proj else 0
     return kept
 
 
@@ -509,7 +597,9 @@ def build_context(capacity=None, start_time=None, end_time=None, extra=None):
     # docs/spec_reconciliation_selection_2026-07-11.md): honor engagement DETERMINISTICALLY (not
     # just as an LLM hint) so the plan is a handful of real next-moves, not the whole pile. The
     # held-back tasks stay in Anytype — this only changes what today's plan shows.
-    schedulable = _gate_and_collapse(schedulable, projects, neglected, period, extra=extra)
+    from surface_log import surfaced_dates
+    schedulable = _gate_and_collapse(schedulable, projects, neglected, period, extra=extra,
+                                     surface_dates=surfaced_dates())
 
     # Output SHAPE (Phase 6, Task 6): a fragmented / unknown-timing day (a caregiving window, or
     # a period that asks for a priority list) can't be expressed as a clock schedule — forcing one
@@ -565,7 +655,11 @@ def _build_task_refs(tasks):
     for i, t in enumerate(tasks, start=1):
         token = f"T{i}"
         ref_map[token] = t["id"]
-        lines.append(f"  {token} — {t['name']}")
+        # Each item is its thread's ONE next move (nearest-due / longest-quiet), picked in the
+        # gate. Surface the held-back count so the plan can honestly say "next in X · N more".
+        held = t.get("held_back") or 0
+        suffix = f"  · {held} more in this thread" if held > 0 else ""
+        lines.append(f"  {token} — {t['name']}{suffix}")
     return ref_map, "\n".join(lines)
 
 
