@@ -47,7 +47,7 @@ Output shape for each block:
 
 **Never organize by activity type.** "Writing", "admin", "communication" are not organizing axes. The unit is *project/thread*. Each item belongs to a thread, not a category.
 
-**3. The "still here, not today" list — held, not dropped.** After the time-block plan: threads/items not in today's path. For each, reassure concretely — its rhythm, reason for deferral, and that the system keeps holding it: a put-away thread is brought back if it goes quiet too long, and an active one returns in its normal rhythm. A `blocked_on`/waiting item belongs here, surfaced positively: "waiting on X — nothing to do here right now is the right answer."
+**3. The "still here, not today" list — held, not dropped.** After the time-block plan: threads/items with genuinely nothing to do today — a `blocked_on`/waiting item, or a discrete errand with no thread — surfaced positively: "waiting on X — nothing to do here right now is the right answer." Reassure concretely (its rhythm, why deferred, that the system keeps holding it). **Do NOT list a thread's other tasks here.** Each shown item is its thread's ONE next move; the thread's remaining tasks are held under that same thread — the surface labels them "· N more" automatically. Re-listing them here rebuilds the whole pile the plan exists to avoid. still_here is for threads with nothing today, not for the tasks a shown thread is holding.
 
 **4. One deference offer, if warranted.** If a task serving a high-priority goal has been neglected, name it once and ask. One offer, then do what June says.
 
