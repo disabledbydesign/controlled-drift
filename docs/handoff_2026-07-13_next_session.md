@@ -33,5 +33,10 @@ The system went from "June can't bear to open it" to integrated and live: select
 - Every capture to Anytype: read-back then ding. Plain language to June, no metaphors, concept before label.
 - Checker autonomy: auto-close streams AND tasks, always commit-evidence-gated (June, late 2026-07-12).
 
+## Overnight facts for the 9am check
+- Zero-ref guard REFINED late (commit after f9bd198): fails only when the plan CLAIMS scheduled focused work with no ids; an honest light-day/all-still-here shape passes. Test pins the low-spoon case.
+- Observed pattern (evidence in generation_log.jsonl): morning/midday generations resolve refs (fully or partially — partial passes); LATE-EVENING generations reliably claim focused items with zero refs → guard correctly rejects, good cache preserved (verified live twice post-fix). If the 9am run fails all rolls (3 push retries × 2 guard attempts + claude-backend fallback), June gets the honestly-labelled stale cache — investigate via the "Make the plan ref handshake structurally reliable" Anytype task, which now has rich measured evidence.
+- The cached plan going into the night: 2026-07-12 22:27, valid (2 ids), mirrored to Anytype.
+
 ## Known loose ends (small, tracked in Anytype unless noted)
 - Ref-handshake reliability (Anytype task, evidence in generation_log); flaky test-sandbox leak (Anytype task); mislabel_count runs high by design (documented in check_plan docstring); status_check.py:320-323 comment still says "open question" about AUTO_FIX_KINDS — update to "decided: both" when convenient; adopted memory-pass logic has no dedicated tests (noted in adoption report); drift-skill in-repo mirror stale vs global; global skills still unversioned (Anytype task exists).
