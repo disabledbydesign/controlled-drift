@@ -25,9 +25,14 @@ import gsdo_objects
 # The single stable object we find-or-create then update every generation. Dedup is by
 # normalized name (gsdo_objects.find_existing / create), so this name IS the idempotency key —
 # keep it stable.
+#
+# Type is the built-in PAGE, not Note — found live (2026-07-12): Anytype Note objects have NO
+# name (the passed name folds into the body; the `name` field reads back empty), so
+# find-or-create-by-name can never match a Note and every generation would create a NEW note —
+# exactly the accumulation June said no to. A Page keeps a real name + a readable body.
 MIRROR_NAME = "Today's plan — Controlled Drift"
-NOTE_TYPE_KEY = "note"          # built-in Note type key (find_existing keys on type_key)
-NOTE_TYPE_NAME = "Note"         # friendly name for gsdo_objects.create
+MIRROR_TYPE_KEY = "page"        # find_existing keys on type_key
+MIRROR_TYPE_NAME = "Page"       # friendly name for gsdo_objects.create
 
 FOOTER = ("This is a copy for when the main surface is down. "
           "The live plan is in the overlay.")
@@ -138,13 +143,13 @@ def mirror_plan(plan, now=None):
     mirror_plan_safe() instead.
     """
     body = render_body(plan, now=now)
-    existing_id = gsdo_objects.find_existing(NOTE_TYPE_KEY, MIRROR_NAME)
+    existing_id = gsdo_objects.find_existing(MIRROR_TYPE_KEY, MIRROR_NAME)
     if existing_id:
         oid = existing_id
         gsdo_objects.update(oid, body=body)
     else:
         # First run: create carries the body straight in (create sends `body`).
-        oid = gsdo_objects.create(NOTE_TYPE_NAME, MIRROR_NAME, body=body)
+        oid = gsdo_objects.create(MIRROR_TYPE_NAME, MIRROR_NAME, body=body)
 
     # Read-back: prove the body actually landed. The GET returns the rendered body under
     # `markdown` (escaped) and a `snippet` preview. The probe is the AGE LINE — the first line
