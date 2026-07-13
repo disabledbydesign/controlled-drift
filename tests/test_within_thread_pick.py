@@ -111,12 +111,16 @@ def test_gate_picks_the_signal_winner_not_storage_order():
 
 
 def test_gate_records_held_back_count():
+    # b is least-recently-surfaced -> it's the shown move; a and c are the 2 held back.
     tasks = [{"id": "a", "name": "a", "linked_projects": ["P"], "due_date": None},
              {"id": "b", "name": "b", "linked_projects": ["P"], "due_date": None},
              {"id": "c", "name": "c", "linked_projects": ["P"], "due_date": None}]
     projects = [_proj("P")]
-    kept = pg._gate_and_collapse(tasks, projects, [], None, surface_dates={})
+    surface = {"a": dt.datetime(2026, 7, 11), "b": dt.datetime(2026, 6, 18),
+               "c": dt.datetime(2026, 7, 10)}
+    kept = pg._gate_and_collapse(tasks, projects, [], None, surface_dates=surface)
     assert len(kept) == 1
+    assert kept[0]["id"] == "b"                         # the signal pick is the one shown
     assert kept[0]["held_back"] == 2                    # 3 in thread, 1 shown -> 2 held
 
 
