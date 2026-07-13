@@ -161,6 +161,27 @@ def test_post_settings_rejects_unknown_backend(live_server, monkeypatch):
     assert json.loads(body)["backend"] == "mistral"
 
 
+def test_settings_health_absent_when_no_failures(live_server):
+    # A clean week says nothing — the health section must not become a standing nag fixture.
+    base, _ = live_server
+    _, body = _get(base, "/api/settings")
+    assert json.loads(body)["health"] == {}
+
+
+def test_settings_health_surfaces_recent_capture_failures(live_server):
+    # A logged capture failure (generation_failed) must reach June via /api/settings — giving
+    # session_store.failures() the reader it never had. The 'prompt_large' size warning is a
+    # capacity signal, not a failed action, so it must NOT inflate the count into a scare.
+    base, _ = live_server
+    session_store.log_failure("capture", "generation_failed", {"error": "connection reset"})
+    session_store.log_failure("capture", "prompt_large", {"approx_tokens": 30000})
+    _, body = _get(base, "/api/settings")
+    health = json.loads(body)["health"]
+    assert health["count"] == 1                      # prompt_large excluded
+    assert "hit an error" in health["line"]
+    assert "nothing you did" in health["line"]       # names that the trouble wasn't hers
+
+
 # --- POST routes ------------------------------------------------------------
 
 def _wait_idle(base, timeout=5.0):

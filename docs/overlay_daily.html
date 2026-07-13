@@ -77,6 +77,8 @@ body {
   letter-spacing: 0.08em;
   margin-bottom: 9px;
 }
+/* Health line: a quiet, plain read on recent capture failures — dim, not an alarm. */
+.settings-health { font-size: 12px; color: var(--text-dim); line-height: 1.45; }
 .backend-opt {
   display: flex;
   align-items: flex-start;
@@ -1221,6 +1223,13 @@ textarea.add-field:focus { border-color: var(--gold); }
     <div class="settings-section">
       <div class="settings-label">what your daily plan includes</div>
       <div id="hobby-toggle"></div>
+    </div>
+    <!-- Health line: surfaces recent capture failures the session log records but nothing read
+         back. Hidden entirely when the last week was clean (no permanent nag fixture).
+         API: GET /api/settings → health.line -->
+    <div class="settings-section" id="health-section" style="display:none">
+      <div class="settings-label">how the system's been doing</div>
+      <div class="settings-health" id="health-line"></div>
     </div>
   </div>
 
@@ -2392,7 +2401,22 @@ async function loadSettings() {
     _includeHobby = !!data.include_hobby_block;
     renderBackends();
     renderHobbyToggle();
+    renderHealth(data.health);
   } catch (_) { /* static preview — leave panel empty */ }
+}
+
+// Recent capture failures the session log recorded but nothing surfaced. Shown dim, and only
+// when there's something to say — a clean week hides the section entirely (no standing nag).
+function renderHealth(health) {
+  const section = document.getElementById('health-section');
+  const line = document.getElementById('health-line');
+  if (!section || !line) return;
+  if (health && health.line) {
+    line.textContent = health.line;
+    section.style.display = '';
+  } else {
+    section.style.display = 'none';
+  }
 }
 
 // The hobby/fun toggle. State is legible in WORDS (on:/off: sentence), not by the dot alone —

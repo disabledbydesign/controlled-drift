@@ -69,6 +69,35 @@ def _save_settings(data):
         json.dump(data, f, indent=2)
     os.replace(tmp, path)
 
+
+# session_store logs capture failures loudly (never silent) via log_failure, but nothing ever
+# READ them back — failures() had zero callers, so the health signal died on disk (the exact
+# can't-attribute-the-degradation failure the session log exists to defeat). This gives it its
+# first reader, on a surface June actually opens (the gear). Deterministic + June-facing: plain
+# words, no metaphors, no jargon, and it names that the trouble wasn't hers.
+_HEALTH_WINDOW_HOURS = 24 * 7   # a week — enough to catch "capture's been erroring lately"
+
+
+def _health_summary():
+    """A quiet health line for the Settings tab, or {} when the last week was clean.
+
+    Counts real failed actions only; the 'prompt_large' entry is a size warning, not a failed
+    capture, so it never inflates the count into a scare. Best-effort — a health read must never
+    take the settings view down (the log is diagnostics, not load-bearing state)."""
+    try:
+        recent = [f for f in session_store.failures(hours=_HEALTH_WINDOW_HOURS)
+                  if f.get("kind") != "prompt_large"]
+    except Exception:
+        return {}
+    if not recent:
+        return {}
+    n = len(recent)
+    thing = "time" if n == 1 else "times"
+    line = (f"Heads up: capturing a task hit an error {n} {thing} in the last week — "
+            "nothing you did, and the system caught each one. If capture has felt off "
+            "lately, that's why.")
+    return {"line": line, "count": n}
+
 # A generation (the LLM call) takes ~60-110s — far longer than a phone browser will hold a
 # connection open, so it must NOT block the HTTP request (that's the "build my plan from bed"
 # timeout: the phone gives up, the server finishes into a dead socket). Instead we kick the
@@ -281,7 +310,8 @@ class Handler(BaseHTTPRequestHandler):
             current = os.environ.get("CD_BACKEND", "mistral")
             options = [{"id": b, **plan_generate.backend_descriptor(b)} for b in VALID_BACKENDS]
             self._send(200, {"backend": current, "options": options,
-                             "include_hobby_block": _load_settings().get("include_hobby_block", False)})
+                             "include_hobby_block": _load_settings().get("include_hobby_block", False),
+                             "health": _health_summary()})
             return
 
         if urlparse(self.path).path == "/api/session":
