@@ -952,8 +952,10 @@ def _retime_clock_plan(plan, tasks, all_anchors, start_time, end_time):
     (Python re-adds the authoritative meals/appointments/recurring + breaks, at their real fixed
     times, via build_schedule), reruns build_schedule, and rebuilds plan['blocks'] with the true
     times. A task the model deferred simply isn't here — it never gets scheduled, and
-    _ensure_all_tasks_accounted has already parked it in still_here. No-op for the priority shape
-    (no clock). Mutates + returns plan."""
+    _ensure_all_tasks_accounted has already parked it in still_here. Ends by re-running that
+    accounting on the rebuilt blocks: this pass runs AFTER the caller's accounting, so anything
+    IT can't place (end_time overflow) must be parked here or it vanishes silently. No-op for
+    the priority shape (no clock). Mutates + returns plan."""
     if plan.get("shape") != "clock":
         return plan
     import daily_plan as dp
@@ -980,7 +982,11 @@ def _retime_clock_plan(plan, tasks, all_anchors, start_time, end_time):
     for block in plan.get("blocks", []):
         for it in block.get("items", []):
             name = it.get("task") or it.get("name") or ""
-            if it.get("interstitial"):
+            # JSON rule 3 tells the model to flag ≤15-min REAL tasks interstitial too ("Bring
+            # quilt in"), so the flag alone doesn't mean "Python-owned break": only an id-LESS
+            # interstitial is the model's own break/filler. An id-carrying one is a captured
+            # task — dropping it was the live 2026-07-13 silent-drop (quilt/kitchen/drive-to-SF).
+            if it.get("interstitial") and not it.get("id"):
                 continue                       # a model-written break — Python recomputes breaks
             # An echo can only be an id-LESS item: a real composed task always resolved to an id via
             # its ref token, while an echoed anchor (Lunch/appt/chore) is ref:null → id-less. Guarding
@@ -996,6 +1002,12 @@ def _retime_clock_plan(plan, tasks, all_anchors, start_time, end_time):
     framing_by_label = {b.get("label"): b.get("framing", "") for b in plan.get("blocks", [])}
     scheduled = dp.build_schedule(composed, all_anchors, start_time, end_time=end_time)
     plan["blocks"] = dp.blocks_from_scheduled(scheduled, framing_by_label)
+    # Re-run the accounting net on the REBUILT blocks. build_schedule stops placing flexible
+    # items at end_time (an evening run can place NONE), so the rebuilt blocks can hold fewer
+    # tasks than the caller's accounting pass saw — and a drop here, after that pass, is
+    # exactly the silent vanish the net exists to catch (live 2026-07-13: three real tasks
+    # lost from the cached plan). Whatever couldn't be placed lands in still_here instead.
+    _ensure_all_tasks_accounted(plan, tasks)
     return plan
 
 

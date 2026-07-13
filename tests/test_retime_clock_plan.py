@@ -153,6 +153,76 @@ def test_priority_shape_is_left_untouched():
     assert plan == before                                     # no clock to assign
 
 
+def test_interstitial_real_task_survives_retime():
+    # JSON rule 3 tells the model to mark ≤15-min REAL chores interstitial ("Bring quilt in").
+    # An interstitial row that carries a task id is a captured task, not a Python-owned break —
+    # it must stay scheduled (the live 2026-07-13 silent-drop: quilt/kitchen/drive-to-SF).
+    tasks = [{"id": "q", "name": "Bring quilt in from the yard", "duration_min": 10}]
+    plan = _clock_plan([
+        {"time": "x", "task": "Bring quilt in from the yard", "project": None, "why": None,
+         "interstitial": True, "id": "q"},
+    ])
+    pg._retime_clock_plan(plan, tasks, all_anchors=[],
+                          start_time=dt.datetime(2026, 7, 13, 10, 0),
+                          end_time=dt.datetime(2026, 7, 13, 18, 0))
+    names = [t for t, _ in _times(plan)]
+    assert "Bring quilt in from the yard" in names            # scheduled, not discarded
+    assert plan["still_here"] == []                           # and not parked either
+
+
+def test_idless_interstitial_break_is_still_dropped_and_not_parked():
+    # A model-written break (no id) stays Python's to recompute: dropped from blocks, and NOT
+    # force-parked into still_here (it is not a task; the accounting net keys on real tasks).
+    tasks = [{"id": "a", "name": "Alpha", "duration_min": 30}]
+    plan = _clock_plan([
+        {"time": "x", "task": "Alpha", "project": None, "why": "w", "interstitial": False, "id": "a"},
+        {"time": "x", "task": "Quick stretch", "project": None, "why": None, "interstitial": True},
+    ])
+    pg._retime_clock_plan(plan, tasks, all_anchors=[],
+                          start_time=dt.datetime(2026, 7, 13, 10, 0),
+                          end_time=dt.datetime(2026, 7, 13, 18, 0))
+    names = [t for t, _ in _times(plan)]
+    assert "Quick stretch" not in names
+    assert all(sh.get("label") != "Quick stretch" for sh in plan["still_here"])
+
+
+def test_task_that_does_not_fit_before_end_time_is_parked_not_lost():
+    # build_schedule stops placing flexible items at end_time. Because the retime runs AFTER the
+    # caller's accounting pass, an overflow drop here used to vanish without a trace — it must
+    # land in still_here instead.
+    tasks = [{"id": "a", "name": "Alpha", "duration_min": 60},
+             {"id": "b", "name": "Beta", "duration_min": 60}]
+    plan = _clock_plan([
+        {"time": "x", "task": "Alpha", "project": None, "why": "w1", "interstitial": False, "id": "a"},
+        {"time": "x", "task": "Beta", "project": None, "why": "w2", "interstitial": False, "id": "b"},
+    ])
+    pg._retime_clock_plan(plan, tasks, all_anchors=[],
+                          start_time=dt.datetime(2026, 7, 13, 17, 0),
+                          end_time=dt.datetime(2026, 7, 13, 18, 0))
+    names = [t for t, _ in _times(plan)]
+    assert names == ["Alpha"]                                 # only Alpha fits before 18:00
+    labels = {sh["label"] for sh in plan["still_here"]}
+    assert "Beta" in labels                                   # the overflow is visible, not lost
+
+
+def test_evening_generation_parks_everything_instead_of_emptying_the_plan():
+    # A refresh after the workday end (start > end_time): nothing flexible fits at all. The plan
+    # must degrade to the honest all-still-here shape — never an empty plan that silently
+    # overwrites the morning's cache (deterministic evening failure, found 2026-07-13).
+    tasks = [{"id": "a", "name": "Alpha", "duration_min": 30},
+             {"id": "b", "name": "Beta", "duration_min": 60}]
+    plan = _clock_plan([
+        {"time": "x", "task": "Alpha", "project": None, "why": "w1", "interstitial": False, "id": "a"},
+        {"time": "x", "task": "Beta", "project": None, "why": "w2", "interstitial": False, "id": "b"},
+    ])
+    pg._retime_clock_plan(plan, tasks, all_anchors=[],
+                          start_time=dt.datetime(2026, 7, 13, 20, 0),
+                          end_time=dt.datetime(2026, 7, 13, 18, 0))
+    assert _times(plan) == []                                 # nothing schedulable this late
+    labels = {sh["label"] for sh in plan["still_here"]}
+    assert {"Alpha", "Beta"} <= labels                        # every task visibly parked, none lost
+
+
 def test_no_project_discrete_task_survives_the_gate():
     # The gate bug: a task with no linked project was hidden as if it were an unset-engagement
     # dormant project. It must survive (discrete standalone action).
