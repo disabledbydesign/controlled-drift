@@ -15,7 +15,9 @@ sys.path.insert(0, os.path.dirname(__file__))
 from anytype_test import call
 import surface_log
 
-def find_neglected(items, now, days=3):
+def find_neglected(items, now, days=16):
+    # 16 days — June's calibration 2026-07-12, aligned with the upkeep-strategy threshold;
+    # per-priority calibration is the future Strategy-driven version.
     """Pure. items: list of {"last_surfaced": datetime|None, ...}. Returns the neglected ones."""
     cutoff = now - dt.timedelta(days=days)
     out = []
@@ -114,7 +116,9 @@ def neglect_candidates(data, surface_dates, surfaced_key=None):
     return items
 
 
-def query_neglected(days=3, now=None):
+def query_neglected(days=16, now=None):
+    # 16 days — June's calibration 2026-07-12, aligned with the upkeep-strategy threshold;
+    # per-priority calibration is the future Strategy-driven version.
     """Live wrapper: read surfaceable Tasks + Projects from Anytype, return the neglected
     ones. Staleness comes from the surface log (surface_log.surfaced_dates); the Anytype
     'Last surfaced' field is a fallback only. NOTE: no pagination yet — fine for the

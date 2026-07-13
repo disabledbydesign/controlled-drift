@@ -176,7 +176,9 @@ def load_active_items(sid):
     return goals, projects, tasks, strategies, today_recurrings, period_ctx
 
 
-def load_neglected(days=3):
+def load_neglected(days=16):
+    # 16 days — June's calibration 2026-07-12, aligned with the upkeep-strategy threshold;
+    # per-priority calibration is the future Strategy-driven version.
     """Items not surfaced in N days (Tasks + Projects)."""
     try:
         return query_neglected(days=days)
