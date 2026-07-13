@@ -39,6 +39,69 @@ def _norm_name(s):
     import re
     return re.sub(r"\s+", " ", (s or "").strip().lower())
 
+# --- shared link-KIND guard --------------------------------------------------
+# The data-model rule: a Task's / Recurring's project link may only point at a Project, and a
+# Project's Goal link only at a Goal. This enforcement lived ONLY in the overlay's capture path
+# (capture_generate, keyed on the P#/G# link tokens), so MCP writes and drift-skill writes
+# bypassed it entirely and COULD link a Task to a Goal — type-mismatched, corrupt data. Moving
+# the rule here, into the shared write layer every writer goes through, means it can't drift by
+# path. Same outcome the overlay chose: a wrong-kind link is DROPPED (no link beats a mismatched
+# one), never raised — so a legitimate UNLINKED create is untouched and only a corrupt link is
+# refused, nothing more.
+#
+# Keyed by the type_key being created; the value maps each link property (by display NAME, since
+# every real caller passes display names — see CLAUDE.md and capture_generate) to the type_key
+# the link must resolve to.
+_LINK_KIND = {
+    "task":           {"Linked Projects": "gsdo_project"},
+    "gsdo_recurring": {"Project link":    "gsdo_project"},
+    "gsdo_project":   {"Goal link":       "gsdo_goal"},
+}
+
+def _object_type_key(sid, oid):
+    """The type key of an existing object, or None if it can't be read. Best-effort by design: a
+    link we CAN'T verify is left alone — we only ever drop a link we can positively prove is
+    wrong-kind, because refusing an unverifiable link could break a legitimate write."""
+    try:
+        st, b = call("GET", f"/spaces/{sid}/objects/{oid}")
+    except Exception:
+        return None
+    if st != 200 or not isinstance(b, dict) or "object" not in b:
+        return None
+    return b.get("object", {}).get("type", {}).get("key")
+
+def guard_link_kinds(sid, type_key, properties):
+    """Return a copy of `properties` with any positively-wrong-kind link value dropped. Warns on
+    each drop (never silent — a dropped link is signal). All ids on a link dropped -> that link
+    property is removed entirely, so the object is created with no link rather than a bad one
+    (the overlay's exact choice). Only link props for this type are inspected; everything else
+    passes through untouched, so unlinked and non-link creates are unaffected."""
+    rules = _LINK_KIND.get(type_key)
+    if not rules or not properties:
+        return properties
+    out = dict(properties)
+    for prop_name, expected_key in rules.items():
+        if prop_name not in out:
+            continue
+        val = out[prop_name]
+        if not val:
+            continue
+        ids = val if isinstance(val, list) else [val]
+        kept = []
+        for oid in ids:
+            actual = _object_type_key(sid, oid)
+            if actual is not None and actual != expected_key:
+                print(f"[gsdo_objects] refusing wrong-kind link on {prop_name!r}: {oid} is a "
+                      f"{actual!r}, expected a {expected_key!r} — dropped (no link beats a bad one)",
+                      file=sys.stderr)
+                continue
+            kept.append(oid)
+        if kept:
+            out[prop_name] = kept if isinstance(val, list) else kept[0]
+        else:
+            del out[prop_name]   # every id was wrong-kind -> create with no link at all
+    return out
+
 def find_existing(type_key, name):
     """Id of an existing object of the SAME type with the same normalized name, or None.
 
@@ -70,6 +133,9 @@ def create_object(type_key, name, body=None, properties=None):
     existing_id = find_existing(type_key, name)
     if existing_id:
         return existing_id
+    # Shared link-KIND guard: drop any wrong-kind link (Task->Goal, etc.) before writing, so every
+    # writer — MCP, drift skill, overlay — inherits the rule that used to live only in the overlay.
+    properties = guard_link_kinds(sid, type_key, properties)
     props = []
     for pname, value in (properties or {}).items():
         if value is None:

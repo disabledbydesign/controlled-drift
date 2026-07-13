@@ -63,6 +63,51 @@ def test_unknown_select_option_raises():
                        properties={"Task status": "Nonsense"})
         _delete(oid)  # safety if it wrongly succeeded
 
+def test_guard_keeps_right_kind_link(monkeypatch):
+    # A Task linked to a real Project is untouched — the guard only refuses wrong kinds.
+    monkeypatch.setattr(o, "_object_type_key", lambda sid, oid: "gsdo_project")
+    props = o.guard_link_kinds("sid", "task", {"Linked Projects": ["proj-1"], "Task status": "Ready"})
+    assert props == {"Linked Projects": ["proj-1"], "Task status": "Ready"}
+
+def test_guard_drops_wrong_kind_link(monkeypatch):
+    # A Task linked to a GOAL (wrong kind) — the link is dropped, the object still gets created,
+    # and no bad link is written. Non-link properties are left alone.
+    monkeypatch.setattr(o, "_object_type_key", lambda sid, oid: "gsdo_goal")
+    props = o.guard_link_kinds("sid", "task", {"Linked Projects": ["goal-1"], "Task status": "Ready"})
+    assert "Linked Projects" not in props        # every id wrong-kind -> no link at all
+    assert props == {"Task status": "Ready"}
+
+def test_guard_keeps_right_drops_wrong_in_mixed_list(monkeypatch):
+    kinds = {"proj-1": "gsdo_project", "goal-9": "gsdo_goal"}
+    monkeypatch.setattr(o, "_object_type_key", lambda sid, oid: kinds[oid])
+    props = o.guard_link_kinds("sid", "task", {"Linked Projects": ["proj-1", "goal-9"]})
+    assert props["Linked Projects"] == ["proj-1"]  # the wrong-kind one is dropped, right kept
+
+def test_guard_keeps_unverifiable_link(monkeypatch):
+    # A link whose target can't be read is KEPT — we only drop what we can prove is wrong-kind.
+    monkeypatch.setattr(o, "_object_type_key", lambda sid, oid: None)
+    props = o.guard_link_kinds("sid", "task", {"Linked Projects": ["mystery"]})
+    assert props == {"Linked Projects": ["mystery"]}
+
+def test_guard_enforces_project_and_recurring_rules(monkeypatch):
+    # Project -> Goal is the rule; a Project linked to another Project is refused. And a Recurring
+    # links to a Project. Each type's own link property + expected kind.
+    monkeypatch.setattr(o, "_object_type_key", lambda sid, oid: "gsdo_project")
+    proj = o.guard_link_kinds("sid", "gsdo_project", {"Goal link": ["proj-x"]})
+    assert "Goal link" not in proj                 # a Project is not a Goal -> dropped
+    rec = o.guard_link_kinds("sid", "gsdo_recurring", {"Project link": ["proj-x"]})
+    assert rec == {"Project link": ["proj-x"]}     # Recurring -> Project is right-kind
+
+def test_guard_untouched_for_unlinked_and_nonlink_creates(monkeypatch):
+    # No link property present, and a type with no link rule (Goal): guard never fetches, never
+    # changes anything — legitimate unlinked creates are not broken.
+    called = {"n": 0}
+    def _boom(sid, oid): called["n"] += 1; return "gsdo_project"
+    monkeypatch.setattr(o, "_object_type_key", _boom)
+    assert o.guard_link_kinds("sid", "task", {"Task status": "Ready"}) == {"Task status": "Ready"}
+    assert o.guard_link_kinds("sid", "gsdo_goal", {"Goal status": "Active"}) == {"Goal status": "Active"}
+    assert called["n"] == 0                          # nothing to verify -> no network reads
+
 def test_create_dedups_on_exact_name_same_type():
     """Two create() calls with the identical name + type return the SAME id, not two objects.
 
