@@ -432,6 +432,18 @@ textarea.fe-input { resize: vertical; min-height: 64px; line-height: 1.45; }
 }
 .plan-item.open .item-why { display: block; }
 
+/* "· N more" — this thread's other items, held (not shown). The count sits inline on the row;
+   the names reveal on expand. Held items are not today's moves, so no checkbox — just names. */
+.item-more { color: var(--text-dim); font-size: 12px; white-space: nowrap; }
+.item-heldback {
+  padding-left: 87px;   /* align under the task text, like .item-desc / .item-why */
+  margin-top: 3px;
+  display: none;
+}
+.plan-item.open .item-heldback { display: block; }
+.heldback-line { font-size: 12px; color: var(--text-dim); line-height: 1.4; padding: 1px 0; }
+.heldback-lead { color: var(--text-dimmer); font-size: 11px; }
+
 /* ── interstitial items — slim in-line markers, not full work blocks ── */
 .plan-item.interstitial {
   padding: 3px 14px 3px;
@@ -1863,6 +1875,23 @@ function moveChipHtml(id, bi) {
   return `<button class="move-chip" title="move this later in the day" onclick="event.stopPropagation(); startPlacing('${esc(id)}', ${blockArg})">move ›</button>`;
 }
 
+// "· N more" chip: this thread's other items are held (not shown). Rendered inline after the
+// task, honest and plain (no metaphor). Returns '' when nothing is held for this thread.
+function moreChipHtml(item) {
+  const n = item.held_back || 0;
+  if (n <= 0) return '';
+  return `<span class="item-sep"> · </span><span class="item-more">${n} more</span>`;
+}
+// The held-back names, revealed on expand — reuses the row's existing .open toggle. Plain list,
+// no checkboxes: these are not today's moves, just what the thread is holding under it.
+function heldBackHtml(item) {
+  const names = item.held_back_names || [];
+  if (!names.length) return '';
+  const lead = `<div class="heldback-lead">held under this thread, not today:</div>`;
+  return `<div class="item-heldback">${lead}${
+    names.map(nm => `<div class="heldback-line">${esc(nm)}</div>`).join('')}</div>`;
+}
+
 function renderFlatItem(item, showProject, bi) {
   const slim = !!item.interstitial;
   const cls = ['plan-item', item.done ? 'done' : '', slim ? 'interstitial' : ''].filter(Boolean).join(' ');
@@ -1878,9 +1907,11 @@ function renderFlatItem(item, showProject, bi) {
         <span class="item-label">
           ${!slim && showProject && item.project ? `<span class="item-project">${esc(item.project)}</span><span class="item-sep"> · </span>` : ''}
           <span class="item-task">${esc(item.task)}</span>
+          ${slim ? '' : moreChipHtml(item)}
         </span>
         ${move}
       </div>
+      ${!slim ? heldBackHtml(item) : ''}
       ${!slim && item.why ? `<div class="item-why">${esc(item.why)}</div>` : ''}
     </div>`;
 }
@@ -2021,12 +2052,11 @@ function renderPlan(plan) {
     }).join('');
   }
   if (plan.still_here) {
-    // Label only — the note is context that lives in Anytype, not scan-view material. The whole
-    // section is collapsed behind a count so it never out-lengths the actual plan.
-    const n = plan.still_here.length;
+    // Label only — the note is context that lives in Anytype, not scan-view material. NO global
+    // count: the reconciled model retired the flat "still here (N)" pile in favor of each thread's
+    // own "· N more". What lands here now is only genuinely thread-less / waiting items.
     const labelText = document.getElementById('still-label-text');
-    if (labelText) labelText.textContent =
-      n ? `still here, not today (${n})` : 'still here, not today';
+    if (labelText) labelText.textContent = 'still here, not today';
     document.getElementById('still-here-items').innerHTML = plan.still_here.map(s => `
       <div class="still-item">
         <div class="still-dot"></div>
@@ -2045,9 +2075,11 @@ function renderPriorityItem(it) {
         <span class="item-label">
           ${it.project ? `<span class="item-project">${esc(it.project)}</span><span class="item-sep"> · </span>` : ''}
           <span class="item-task">${esc(it.task)}</span>
+          ${moreChipHtml(it)}
         </span>
         ${moveChipHtml(it.id, null)}
       </div>
+      ${heldBackHtml(it)}
       ${it.why ? `<div class="item-why">${esc(it.why)}</div>` : ''}
     </div>`;
 }
