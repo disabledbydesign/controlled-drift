@@ -131,6 +131,10 @@ def load_active_items(sid):
                                "access": access,
                                "blocked_on": pv("gsdo_blocked_on", "text"),
                                "context": pv("gsdo_context", "text"),
+                               # Built-in Due date (the DEADLINE — distinct from Scheduled, the
+                               # start-considering date). The within-thread pick reads this as the
+                               # nearest-deadline signal; raw Anytype date value, None when unset.
+                               "due_date": pv("due_date", "date"),
                                "linked_projects": linked_projects})
 
         elif tkey == "gsdo_strategy":
