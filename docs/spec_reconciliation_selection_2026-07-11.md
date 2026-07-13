@@ -34,6 +34,7 @@ The **grain gate**, kept to the minimal *queryable* set the selector filters on.
 Cross-cutting, time-bounded, June-authored (the keystone). Re-weights for the current stretch; **does not overwrite `engagement`** — when the period ends, the baseline is intact.
 
 - **foreground → elevate.** **This is where "Sprint" lives** — foregrounding a project is how you intensify it for a phase.
+  - **⟳ AMENDED (June, 2026-07-12): sprint and foreground are NOT identical.** Sprint means dedicating full or nearly-full focus to a project because it needs to get done — stronger than "elevated this phase." Foreground stays the general elevation; sprint is a distinct, stronger mode within the period layer (likely shape: a per-period flag on a foregrounded project that claims most of the day's real estate instead of one move). Design owed — tracked in Anytype ("Sprint mode design"). The Engagement-select cleanup (removing the old Sprint option) waits for this design so the concept has a home before the old label disappears.
 - **foreground activates a Steady project.** A consequence June flagged as valuable: foreground is what makes a Steady project *active this phase* — which gives the mechanism to **rotate over Steady projects in a later build** (surface a different subset of Steady threads each phase, so they don't all compete every day). *Document this link when merging to the spec.*
 - **paused → suppress** (a normally-active project drops this phase).
 - **workday bounds / output format / availability** → as already built.
