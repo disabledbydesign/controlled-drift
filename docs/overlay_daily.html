@@ -296,6 +296,16 @@ textarea.fe-input { resize: vertical; min-height: 64px; line-height: 1.45; }
 }
 .woven-text.expanded { display: block; }
 
+/* Plan age — a quiet, honest timestamp of when this plan was built. If the morning
+   generation fails, yesterday's plan is what's on screen; without this line it would look
+   like today's. Dim by design: an honest fact, not an alert. */
+.plan-age {
+  padding: 9px 14px 0;
+  font-size: 12px;
+  color: var(--text-dim);
+  line-height: 1.4;
+}
+
 /* ── TODAY: time blocks ── */
 /* Nonlinear → map routing (Task 7): a gentle pointer to the map for self-directed work */
 .map-pointer {
@@ -982,6 +992,10 @@ textarea.add-field:focus { border-color: var(--gold); }
         Two goals are live today: staying a scholar-builder and keeping the material floor intact. The plan gives survival its minimum daily due first — not because it matters more, but because that order keeps both moving without the guilt-drag between them. There's real forward motion in both threads today.
       </div>
     </div>
+
+    <!-- Plan age: when this plan was built, in plain relative words. Populated by
+         renderPlanAge() from plan.generated_at; hidden until a real plan loads. -->
+    <div class="plan-age" id="plan-age" style="display:none"></div>
 
     <!-- Time blocks.
          Source: daily_list.md LLM output, parsed into blocks.
@@ -1918,8 +1932,42 @@ function renderGroup(g, bi) {
 // ── Plan renderer — called when /api/plan or /api/negotiate returns ─────────
 // Expects: { woven_frame, blocks: [{label, time, framing, items: [{time, project, task, why}]}],
 //            still_here: [{label, note}] }
+// The plan's age, in plain relative words — so a plan left over from yesterday (a failed
+// morning generation) never reads as today's. No metaphors; a dim honest fact, not a warning.
+function renderPlanAge(iso) {
+  const el = document.getElementById('plan-age');
+  if (!el) return;
+  const built = iso ? new Date(iso) : null;
+  if (!built || isNaN(built.getTime())) { el.style.display = 'none'; el.textContent = ''; return; }
+  const now = new Date();
+  const startOfDay = d => new Date(d.getFullYear(), d.getMonth(), d.getDate());
+  const dayDiff = Math.round((startOfDay(now) - startOfDay(built)) / 86400000);
+  const h = built.getHours();
+  const partOfDay = h < 12 ? 'morning' : h < 17 ? 'afternoon' : 'evening';
+  const time = built.toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' });
+  let text, stale;
+  if (dayDiff <= 0) {              // built today
+    text = `built this ${partOfDay} at ${time}`;
+    stale = false;
+  } else if (dayDiff === 1) {      // yesterday — the morning-generation-failed case
+    text = `built yesterday ${partOfDay} at ${time}`;
+    stale = true;
+  } else {                        // older still — unambiguous date, not a colliding weekday
+    const dateStr = built.toLocaleDateString([], { month: 'short', day: 'numeric' });
+    text = `built ${dateStr} at ${time}`;
+    stale = true;
+  }
+  if (stale) text += ' — tap Fresh plan for today’s';
+  el.textContent = text;
+  el.style.display = '';
+}
+
 function renderPlan(plan) {
   _lastPlan = plan;
+  // Track the plan's build time so re-renders that don't carry it (a preset renegotiation)
+  // keep showing the right age instead of blanking it.
+  if (plan.generated_at) _planGeneratedAt = plan.generated_at;
+  renderPlanAge(_planGeneratedAt);
   if (plan.woven_frame) {
     document.getElementById('woven-frame-text').textContent = plan.woven_frame;
   }
