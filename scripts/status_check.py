@@ -43,6 +43,7 @@ import sys, os, re, json, subprocess, time, datetime as dt
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 import cd_paths
 import neglect
+import surface_log
 # Same-repo private-helper reuse is the established convention here (whats_open.py,
 # memory_pass.py do the same) — deliberate coupling, one source of truth for parsing.
 import orient_map
@@ -60,57 +61,21 @@ _PARKED = ("Backburner",)
 
 # --- layer 1: evidence ---------------------------------------------------------
 
+# The staleness resolver now lives in surface_log (shared with neglect.py — one source
+# of truth). These thin wrappers keep the checker's call sites + tests stable.
+# REVISED 2026-07-12: the surface log is the LIVE staleness source; Anytype's 'Last
+# surfaced' field is written only by an interactive CLI path June doesn't use (5 of 137
+# tasks, none newer than 2026-06-18), so it is a fallback only.
 def _surface_log_dates(path=None):
-    """task_id -> most-recent surfaced datetime, from the append-only surface log.
-
-    REVISED 2026-07-12: this is the LIVE staleness source. Anytype's 'Last surfaced'
-    field is written only by an interactive CLI path June doesn't use (5 of 137 tasks,
-    none newer than 2026-06-18), so trusting it would flag nearly every stream. The
-    surface log is append-only and current — every generated plan writes it via
-    surface_log.log_surfaced_batch. Naive datetimes (the log writes local isoformat);
-    a malformed line is skipped, never fatal (an unreadable line must not blind the
-    whole staleness read)."""
-    p = path or cd_paths.data_file("surface_log.jsonl")
-    out = {}
-    try:
-        with open(p, encoding="utf-8") as f:
-            for line in f:
-                line = line.strip()
-                if not line:
-                    continue
-                try:
-                    rec = json.loads(line)
-                except json.JSONDecodeError:
-                    continue
-                if not isinstance(rec, dict):
-                    continue
-                tid, ts = rec.get("id"), rec.get("ts")
-                if not tid or not ts:
-                    continue
-                try:
-                    when = dt.datetime.fromisoformat(ts)
-                except (ValueError, TypeError):
-                    continue
-                if when.tzinfo is not None:
-                    when = when.replace(tzinfo=None)
-                if tid not in out or when > out[tid]:
-                    out[tid] = when
-    except FileNotFoundError:
-        pass
-    return out
+    """task_id -> most-recent surfaced datetime, from the append-only surface log."""
+    return surface_log.surfaced_dates(path=path)
 
 
 def _effective_last_surfaced(tasks, surface_dates, anytype_ls):
-    """The stream's last-surfaced date + where it came from. The surface log wins; the
-    Anytype field is used only when NO task of this stream appears in the log. Returns
-    (datetime|None, "log"|"anytype"|None). None source == no surfacing data anywhere —
-    that is absence, not staleness (see build_findings)."""
-    log_hits = [surface_dates[t["id"]] for t in tasks if t.get("id") in surface_dates]
-    if log_hits:
-        return max(log_hits), "log"
-    if anytype_ls is not None:
-        return anytype_ls, "anytype"
-    return None, None
+    """The stream's last-surfaced date + where it came from — surface log first, the
+    Anytype field only as fallback. (datetime|None, "log"|"anytype"|None); None source ==
+    no surfacing data anywhere (absence, not staleness — see build_findings)."""
+    return surface_log.effective_last_surfaced(tasks, surface_dates, anytype_ls)
 
 
 def load_streams(project_name):
