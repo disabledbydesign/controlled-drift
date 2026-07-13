@@ -100,11 +100,13 @@ class _WriteRecorder:
             return oid
         monkeypatch.setattr(gsdo_objects, "create", _create)
         monkeypatch.setattr(gsdo_objects, "update", _update)
-        # Read-back GET returns a body containing the footer, so the verify passes.
+        # Read-back GET returns a body containing THIS write's age line (the per-write probe),
+        # so the verify passes. _CLOCK_PLAN was generated 2026-07-12 21:50 → "today at 9:50 PM"
+        # from either `now` the tests use.
         monkeypatch.setattr(anytype_test, "call",
                             lambda method, path, payload=None: (200, {"object": {
                                 "id": "note-1",
-                                "markdown": "x The live plan is in the overlay. x"}}))
+                                "markdown": "Built today at 9:50 PM.\nrest of body"}}))
 
 
 def test_mirror_creates_once_then_updates_same_object(monkeypatch):
@@ -119,15 +121,19 @@ def test_mirror_creates_once_then_updates_same_object(monkeypatch):
     assert "Clean the toilet" in rec.updated[0][1]  # update carries the rendered body
 
 
-def test_mirror_read_back_failure_raises(monkeypatch):
+def test_mirror_read_back_stale_body_raises(monkeypatch):
+    # A stale body from a PREVIOUS write (different age line) must FAIL the verify — the
+    # probe is per-write, so "some old mirror persists" can't pass as "this write persisted".
     rec = _WriteRecorder()
     rec.install(monkeypatch)
     import anytype_test
     monkeypatch.setattr(anytype_test, "call",
                         lambda method, path, payload=None: (200, {"object": {
-                            "id": "note-1", "markdown": "stale body, no footer"}}))
+                            "id": "note-1",
+                            "markdown": "Built yesterday at 8:00 AM.\nold plan body\n"
+                                        + plan_mirror.FOOTER}}))
     with pytest.raises(RuntimeError):
-        plan_mirror.mirror_plan(_CLOCK_PLAN)
+        plan_mirror.mirror_plan(_CLOCK_PLAN, now=dt.datetime(2026, 7, 12, 22, 0))
 
 
 # --- best-effort wrapper ------------------------------------------------------

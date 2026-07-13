@@ -147,8 +147,10 @@ def mirror_plan(plan, now=None):
         oid = gsdo_objects.create(NOTE_TYPE_NAME, MIRROR_NAME, body=body)
 
     # Read-back: prove the body actually landed. The GET returns the rendered body under
-    # `markdown` (escaped) and a `snippet` preview; the footer's plain words survive escaping,
-    # so a substring check on the footer confirms this write — not a stale one.
+    # `markdown` (escaped) and a `snippet` preview. The probe is the AGE LINE — the first line
+    # of the body we just wrote — because it changes with every generation; probing something
+    # constant (the footer) would false-pass on a STALE body left by a previous write
+    # (cross-family review finding, 2026-07-12).
     import gsdo_anytype as g
     from anytype_test import call
     sid = g.get_space_id()
@@ -159,10 +161,11 @@ def mirror_plan(plan, now=None):
     got = (obj.get("markdown") or "") + " " + (obj.get("snippet") or "")
     # Strip Markdown backslash-escapes before matching (Anytype escapes _, -, etc.).
     got_plain = got.replace("\\", "")
-    probe = "The live plan is in the overlay"
+    probe = body.splitlines()[0].replace("\\", "")
     if probe not in got_plain:
         raise RuntimeError(
-            f"plan_mirror: mirror note {oid!r} body did not persist (read-back missing footer)")
+            f"plan_mirror: mirror note {oid!r} body did not persist "
+            f"(read-back missing this write's age line {probe!r})")
     return oid
 
 
