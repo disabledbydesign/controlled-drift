@@ -48,13 +48,12 @@ _LINK_PROP = {"Task": "Linked Projects", "Recurring": "Project link", "Project":
 # corrupt data) — a wrong-kind token is dropped, never applied. Same rule as the daily plan's
 # id-threading: no valid match → no link, never the wrong one.
 #
-# ⚠️ DIVERGENCE TO WATCH (flagged for June, 2026-06-23): this guard is OVERLAY-ONLY, because the
-# P#/G# tokens are an overlay mechanism. The Claude Code drift skill links objects directly
-# (the instance picks the id) and has NO equivalent guard, so it COULD link a Task to a Goal.
-# The underlying data-model rule ("a Task's Linked Projects must point at a Project, a Project's
-# Goal link at a Goal") belongs in the SHARED write layer (gsdo_objects.create) so both paths
-# inherit it and can't drift. Until that consolidation lands, this is the only enforcement and
-# the Claude Code path relies on instance judgment. See docs/session_layer_design.md.
+# CONSOLIDATION LANDED (2026-07-12): the underlying data-model rule — a Task's/Recurring's project
+# link must point at a Project, a Project's Goal link at a Goal — now ALSO lives in the SHARED
+# write layer (gsdo_objects.guard_link_kinds, applied inside create_object), so the drift skill
+# and MCP writes inherit it too and can no longer link a Task to a Goal. This token-level check
+# stays as the overlay's first line (it maps P#/G# tokens before a real id even exists); the
+# shared guard is the backstop every writer passes through. See docs/session_layer_design.md.
 _LINK_TOKEN_PREFIX = {"Task": "P", "Recurring": "P", "Project": "G"}
 
 # If the assembled prompt grows past this rough token estimate we log it (never silent) — the
