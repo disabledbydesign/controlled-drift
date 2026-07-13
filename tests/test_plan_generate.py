@@ -237,6 +237,38 @@ def test_generate_plan_zero_ref_twice_raises_and_logs(tmp_path, monkeypatch):
     assert plan_store.load_plan() is None                    # nothing dead was cached
 
 
+_CANNED_LIGHT_DAY = """```json
+{
+  "woven_frame": "a gentle evening",
+  "blocks": [
+    {"label": "Evening", "time": "8:00 – 9:00 PM", "framing": "wind down",
+     "items": [{"time": "8:00 – 8:15 PM", "project": null, "task": "Make tea", "why": null, "ref": null, "interstitial": true}]}
+  ],
+  "still_here": [{"project": "Job search", "task": "the held thread", "note": "back tomorrow"}]
+}
+```"""
+
+
+def test_generate_plan_light_day_all_in_still_here_is_valid(tmp_path, monkeypatch):
+    """A plan that schedules NO focused work — blocks hold only interstitials, every gated task
+    honestly in still_here — is a legitimate light-day shape (late evening; a gentle low-spoon
+    day), NOT a zero-ref failure. Observed live 2026-07-12: the first guard version failed 5/5
+    evening regenerations this way; on June's first low-spoon morning it would have spuriously
+    served the stale fallback."""
+    _stub_pipeline(monkeypatch, tmp_path)
+    calls = {"n": 0}
+    def once(prompt):
+        calls["n"] += 1
+        return _CANNED_LIGHT_DAY
+    monkeypatch.setattr(pg, "generate", once)
+    saved = pg.generate_plan(source="morning")
+    assert saved["woven_frame"] == "a gentle evening"        # cached, not failed
+    assert calls["n"] == 1                                   # no retry
+    log = _read_gen_log(tmp_path)
+    assert not any(r.get("error_type") == "zero_ref_plan" for r in log)
+    assert any(r["success"] for r in log)
+
+
 def test_generate_plan_no_gated_tasks_is_valid(tmp_path, monkeypatch):
     """A rest/wind-down plan with an empty gated task set is legitimately zero-ref — the guard
     only fires when there WERE tasks to resolve. Such a plan passes through, no retry."""

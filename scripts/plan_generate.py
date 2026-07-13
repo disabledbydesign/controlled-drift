@@ -997,7 +997,15 @@ def generate_plan(capacity=None, source="generate", extra=None):
                 error_type=type(e).__name__, error_msg=str(e),
             )
             raise
-        if tasks and resolved == 0:
+        # Only items that CLAIM to be focused work count against resolution health. A plan
+        # whose blocks hold nothing but interstitials (breaks, meals) with every gated task
+        # honestly in still_here is a legitimate light-day shape — a late evening, or a
+        # gentle low-spoon day — not a structural failure (observed live 2026-07-12: the
+        # first guard version failed 5/5 evening regenerations for exactly this reason).
+        claimed = sum(1 for b in plan.get("blocks", []) for it in b.get("items", [])
+                      if not it.get("interstitial"))
+        claimed += sum(1 for it in plan.get("items", []) if not it.get("interstitial"))
+        if tasks and claimed > 0 and resolved == 0:
             # Zero-ref plan: log the distinct fragility event (keeps it measurable) and retry once;
             # a second zero-ref plan is a real failure, raised so the failure paths fire.
             generation_log.log_generation(
