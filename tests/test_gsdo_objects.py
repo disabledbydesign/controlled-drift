@@ -129,3 +129,23 @@ def test_create_dedups_on_exact_name_same_type():
     finally:
         for oid in {oid1, oid2, oid3} - {None}:
             _delete(oid)
+
+def test_update_body_uses_markdown_key_live():
+    """update(body=...) actually changes the object's body — the create/update asymmetry.
+
+    Verified live 2026-07-12: PATCH silently IGNORES a `body` field (200, no change); the
+    body only updates via `markdown`. This test locks that discovery in against the real
+    API: create a Note with body v1, update to v2, read back that v2 persisted.
+    """
+    oid = None
+    try:
+        oid = o.create("Note", "__test body update (gsdo-test)__", body="first version body")
+        o.update(oid, body="second version body")
+        sid = g.get_space_id()
+        rb = call("GET", f"/spaces/{sid}/objects/{oid}")[1].get("object", {})
+        got = (rb.get("markdown") or "") + (rb.get("snippet") or "")
+        assert "second version body" in got.replace("\\", "")
+        assert "first version body" not in got.replace("\\", "")
+    finally:
+        if oid:
+            _delete(oid)

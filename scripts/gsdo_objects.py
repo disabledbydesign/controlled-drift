@@ -161,22 +161,30 @@ def create(type_name, name, body=None, properties=None):
         raise ValueError(f"create: type {type_name!r} not found")
     return create_object(t.get("key"), name, body=body, properties=properties)
 
-def update(object_id, name=None, properties=None):
-    """Update an existing object's name and/or properties.
+def update(object_id, name=None, properties=None, body=None):
+    """Update an existing object's name, properties, and/or body (Markdown).
 
     properties: {prop_name_or_key: value} — resolved + formatted the same way as
     create (select option names -> tag ids, etc.). Use this instead of hand-rolling
     PATCH calls: it handles the value-shape resolution that raw select writes get wrong.
 
+    body: the object's Markdown body. NOTE the create/update asymmetry (verified live
+    2026-07-12): create() sends the body under `body`, but the PATCH endpoint SILENTLY
+    IGNORES `body` (returns 200, no change) and only updates the body via `markdown`. So
+    an update sends the text under `markdown` — matching the update-object schema.
+
     Examples:
       update(stream_id, name="Finish the daily-plan pipeline")
       update(stream_id, properties={"Context": "what it is — ...\\nnext step — ..."})
       update(stream_id, properties={"Engagement": "Done"})   # resolves "Done" -> tag id
+      update(note_id, body="# Today's plan\\n...")            # sent as `markdown` on PATCH
     """
     sid = g.get_space_id()
     payload = {}
     if name is not None:
         payload["name"] = name
+    if body is not None:
+        payload["markdown"] = body   # PATCH updates the body via `markdown`, NOT `body`
     props = []
     for pname, value in (properties or {}).items():
         if value is None:
@@ -188,7 +196,7 @@ def update(object_id, name=None, properties=None):
     if props:
         payload["properties"] = props
     if not payload:
-        raise ValueError("update: nothing to change (pass name and/or properties)")
+        raise ValueError("update: nothing to change (pass name, properties, and/or body)")
     st, b = call("PATCH", f"/spaces/{sid}/objects/{object_id}", payload)
     if st not in (200, 201):
         raise RuntimeError(f"update {object_id!r} failed: {st} {b}")
