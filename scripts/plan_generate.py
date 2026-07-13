@@ -535,16 +535,23 @@ def _gate_and_collapse(tasks, projects, neglected, period, extra=None, surface_d
         seen_thread.add(proj)
         kept.append(t)
 
-    # Annotate each surfaced task with how many same-thread survivors are held back (for the honest
-    # 'N more' label the renderer builds). Counts survivors not shown; discrete/no-project tasks: 0.
-    shown_by_thread = {}
+    # Annotate each surfaced task with its same-thread survivors that are held back (for the honest
+    # 'N more' label + drill-down the renderer builds). `held_back` is the count (tests + the LLM
+    # task-ref line depend on the int); `held_back_names` lists those not-shown items so the overlay
+    # can reveal them on expand — held, not dropped. Discrete/no-project tasks: 0 / [].
+    shown_ids_by_thread = {}
     for t in kept:
         proj = proj_of(t)
         if proj:
-            shown_by_thread[proj] = shown_by_thread.get(proj, 0) + 1
+            shown_ids_by_thread.setdefault(proj, set()).add(t["id"])
     for t in kept:
         proj = proj_of(t)
-        t["held_back"] = (len(by_thread.get(proj, [])) - shown_by_thread.get(proj, 0)) if proj else 0
+        if not proj:
+            t["held_back"], t["held_back_names"] = 0, []
+            continue
+        shown_ids = shown_ids_by_thread.get(proj, set())
+        held = [c["name"] for c in by_thread.get(proj, []) if c["id"] not in shown_ids]
+        t["held_back"], t["held_back_names"] = len(held), held
     return kept
 
 
@@ -806,6 +813,11 @@ def _resolve_ids(plan, ref_map, tasks):
     """
     by_name = {_norm(t["name"]): t["id"] for t in tasks}
     context_by_id = {t["id"]: (t.get("context") or "").strip() for t in tasks}
+    # Per-thread held-back data (count + names of this thread's not-today items), keyed by the
+    # shown task's id. Python owns this map — the LLM only echoes a ref token, never the count —
+    # so the honest 'N more' reaches the cached plan JSON without the model rebuilding the pile.
+    held_by_id = {t["id"]: (t.get("held_back") or 0) for t in tasks}
+    held_names_by_id = {t["id"]: (t.get("held_back_names") or []) for t in tasks}
 
     def _resolve_item(item):
         ref = item.pop("ref", None)  # consume the token; the overlay only needs the id
@@ -820,6 +832,12 @@ def _resolve_ids(plan, ref_map, tasks):
             desc = context_by_id.get(tid)
             if desc:
                 item["description"] = desc
+            # Carry this thread's held-back count + names so the row can label '· N more' and
+            # reveal the held items on expand. Only when >0 — a thread with nothing held stays clean.
+            held = held_by_id.get(tid, 0)
+            if held > 0:
+                item["held_back"] = held
+                item["held_back_names"] = held_names_by_id.get(tid, [])
 
     for block in plan.get("blocks", []):        # clock shape
         for item in block.get("items", []):

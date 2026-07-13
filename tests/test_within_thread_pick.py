@@ -156,3 +156,52 @@ def test_task_ref_line_carries_held_back():
     assert "T1 — Draft the section" in table
     assert "2 more in this thread" in table            # the honest per-thread count reaches the model
     assert "T2 — Email Donna" in table                 # no annotation when nothing held back
+
+
+# --- per-thread rendering (Task 5): held_back NAMES + threading onto the plan JSON ----------
+
+def test_gate_records_held_back_names():
+    # b is shown; a and c are held. The names of the held items travel with the shown one so the
+    # renderer can reveal them on expand — held, not dropped.
+    tasks = [{"id": "a", "name": "task a", "linked_projects": ["P"], "due_date": None},
+             {"id": "b", "name": "task b", "linked_projects": ["P"], "due_date": None},
+             {"id": "c", "name": "task c", "linked_projects": ["P"], "due_date": None}]
+    projects = [_proj("P")]
+    surface = {"a": dt.datetime(2026, 7, 11), "b": dt.datetime(2026, 6, 18),
+               "c": dt.datetime(2026, 7, 10)}
+    kept = pg._gate_and_collapse(tasks, projects, [], None, surface_dates=surface)
+    assert kept[0]["id"] == "b"
+    assert kept[0]["held_back"] == 2
+    assert set(kept[0]["held_back_names"]) == {"task a", "task c"}   # the shown item is not among them
+
+
+def test_gate_no_held_names_when_thread_is_alone():
+    tasks = [{"id": "a", "name": "only move", "linked_projects": ["P"], "due_date": None}]
+    kept = pg._gate_and_collapse(tasks, [_proj("P")], [], None, surface_dates={})
+    assert kept[0]["held_back"] == 0
+    assert kept[0]["held_back_names"] == []
+
+
+def test_resolve_ids_threads_held_back_onto_plan_item():
+    # Python owns the id->held-back map; the model only echoes the ref token. The count + names
+    # must land on the plan item (via the id) so the overlay renders '· N more' + the drill-down.
+    tasks = [{"id": "id-b", "name": "task b", "held_back": 2, "held_back_names": ["task a", "task c"]}]
+    ref_map = {"T1": "id-b"}
+    plan = {"blocks": [{"items": [{"task": "Do task b", "ref": "T1"}]}]}
+    pg._resolve_ids(plan, ref_map, tasks)
+    item = plan["blocks"][0]["items"][0]
+    assert item["id"] == "id-b"
+    assert item["held_back"] == 2
+    assert item["held_back_names"] == ["task a", "task c"]
+
+
+def test_resolve_ids_omits_held_back_when_zero():
+    # A thread with nothing held stays clean — no held_back keys on the item at all.
+    tasks = [{"id": "id-x", "name": "solo", "held_back": 0, "held_back_names": []}]
+    ref_map = {"T1": "id-x"}
+    plan = {"items": [{"task": "Solo move", "ref": "T1"}]}     # priority (flat) shape
+    pg._resolve_ids(plan, ref_map, tasks)
+    item = plan["items"][0]
+    assert item["id"] == "id-x"
+    assert "held_back" not in item
+    assert "held_back_names" not in item
