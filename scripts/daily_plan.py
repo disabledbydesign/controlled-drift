@@ -220,10 +220,14 @@ def format_context(goals, projects, tasks, strategies, today_recurrings, neglect
     lines.append("")
 
     if period:
-        lines.append("## This period — the configuration June authored")
+        lines.append("## TODAY'S FOCUS PERIOD — June authored this in her own words. It is the "
+                     "authoritative instruction for composing today's plan: follow it, and let it "
+                     "govern the order, the selection, and how much fits — over any generic default. "
+                     "A gentle/low-spoon intent means fewer items, lighter moves, and deferring "
+                     "demanding work to still_here.")
         lines.append(f"- {period.get('name') or '(unnamed period)'}")
         if period.get("intent"):
-            lines.append(f"- Intent: {period['intent']}")
+            lines.append(f"- June's intent, in her words (honor this literally): {period['intent']}")
         if is_off:
             lines.append("- Today is marked a DAY OFF — plan rest/protected time, not survival "
                          "work (unless June says otherwise or a hard deadline conflicts).")
@@ -631,12 +635,13 @@ def format_schedule_blocks(scheduled):
         return _round_to_5(t).strftime("%H:%M")
 
     lines = []
-    lines.append("## Pre-computed clock schedule — your output skeleton")
-    lines.append("Python owns times and order. Your job:")
-    lines.append("  1. Write 1-2 sentence narrative framing for each block (what it's for, energy note).")
-    lines.append("  2. List each item with its clock time verbatim.")
-    lines.append("  3. Produce ONE integrated plan — not a narrative followed by a separate schedule.")
-    lines.append("  Do not change times or reorder items.")
+    lines.append("## Candidate moves — a SUGGESTED starting order (recompose freely)")
+    lines.append("These are today's eligible next-moves in a calm default order. YOU compose the day:")
+    lines.append("  1. Choose which of these belong in today (you need not include all — defer the")
+    lines.append("     rest to still_here), ordered by the Focus Period intent + Strategies + capacity.")
+    lines.append("  2. Write 1-2 sentence framing for each block (what it's for, energy note).")
+    lines.append("  3. Produce ONE integrated plan. Put a placeholder time on each item — Python")
+    lines.append("     computes the final clock times from YOUR order (you don't do the arithmetic).")
     lines.append("")
 
     for label, items in blocks.items():
@@ -653,6 +658,73 @@ def format_schedule_blocks(scheduled):
         lines.append("")
 
     return "\n".join(lines)
+
+
+def blocks_from_scheduled(scheduled, framing_by_label=None):
+    """Turn a Python-computed schedule (build_schedule output) into plan-dict blocks — the
+    authoritative-times counterpart to format_schedule_blocks (which emits prompt TEXT). This is the
+    'Python places it in time' step (AI_LAYER_SPEC:69) applied AFTER the LLM composes the order.
+
+    Each scheduled item is either a COMPOSED item (a real task the LLM chose — carries `_composed`,
+    plus task/project/why/id/held_back threaded by _resolve_ids) or an ANCHOR that build_schedule
+    injected (meal, break, recurring). Composed items keep their display fields; anchors become plain
+    rows (no id — matching the pre-existing behavior that meals/breaks/chores show no done-affordance).
+    Emits the SAME `HH:MM – HH:MM` en-dash time-string contract format_schedule_blocks uses (three
+    downstream consumers parse it by string ops)."""
+    from collections import OrderedDict
+    framing_by_label = framing_by_label or {}
+    grouped: OrderedDict = OrderedDict()
+    for item in scheduled:
+        start = item.get("start_time")
+        if not start:
+            continue
+        grouped.setdefault(_block_label(start.hour), []).append(item)
+
+    def _fmt(t):
+        return _round_to_5(t).strftime("%H:%M")
+
+    blocks = []
+    for label, items in grouped.items():
+        b_start = items[0]["start_time"]
+        b_end = items[-1].get("end_time") or items[-1]["start_time"]
+        out_items = []
+        for it in items:
+            s, e = it.get("start_time"), it.get("end_time")
+            time_str = f"{_fmt(s)} – {_fmt(e)}" if s and e else ""
+            composed = bool(it.get("_composed"))
+            row = {
+                "time": time_str,
+                "task": it.get("task") or it.get("name"),
+                "project": it.get("project") if composed else None,
+                "why": it.get("why") if composed else None,
+                # a real composed task keeps its own (false) interstitial flag; an anchor is an
+                # interstitial only when it's a Python-inserted break (meals/chores are not).
+                "interstitial": bool(it.get("interstitial")) if composed else bool(it.get("_break")),
+            }
+            if composed:
+                if it.get("id"):
+                    row["id"] = it["id"]
+                if it.get("held_back"):
+                    row["held_back"] = it["held_back"]
+                    row["held_back_names"] = it.get("held_back_names", [])
+                if it.get("description"):
+                    row["description"] = it["description"]
+            elif it.get("id") and not it.get("_break"):
+                # A recurring chore/appointment anchor carries a real Anytype id. Expose it so the
+                # overlay renders a checkbox, and flag it `recurring` so completion is a local
+                # "done for today" (a cache flip — NOT an Anytype status write: Recurring objects
+                # have no Task status, and they recur, so done-forever would be wrong). Meals and
+                # Python-inserted breaks have no id / are breaks → stay un-checkable, as before.
+                row["id"] = it["id"]
+                row["recurring"] = True
+            out_items.append(row)
+        blocks.append({
+            "label": label,
+            "time": f"{_fmt(b_start)} – {_fmt(b_end)}",
+            "framing": framing_by_label.get(label, ""),
+            "items": out_items,
+        })
+    return blocks
 
 
 PRIORITY_LIST_CAP = 6

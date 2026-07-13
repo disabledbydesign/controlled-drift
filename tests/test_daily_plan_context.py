@@ -19,7 +19,7 @@ def test_context_includes_period_meaning_and_side():
                 _proj("Autograder", side="Wellbeing")]
     ctx = daily_plan.format_context([], projects, [], [], [], [], "low",
                                     period=period, is_off=False, in_window=True)
-    assert "## This period" in ctx
+    assert "## TODAY'S FOCUS PERIOD" in ctx           # authoritative header (was passive "## This period")
     assert "survival first" in ctx                    # intent
     assert "caregiving" in ctx                        # availability_note shown (in_window)
     assert "side: Obligation" in ctx

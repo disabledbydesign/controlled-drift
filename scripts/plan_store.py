@@ -147,6 +147,21 @@ def mark_item_done(task_id):
     return plan
 
 
+def is_recurring_item(task_id):
+    """True if the cached plan carries this id on a RECURRING anchor row (a chore/appointment,
+    flagged `recurring` by blocks_from_scheduled). The completion endpoint reads this to route a
+    chore checkoff to a local 'done for today' (cache flip) instead of an Anytype Task-status write
+    — Recurring objects have no Task status and they recur, so writing done-forever would be wrong."""
+    plan = load_plan()
+    if plan is None:
+        return False
+    for block in plan.get("blocks", []):
+        for item in block.get("items", []):
+            if item.get("id") == task_id and item.get("recurring"):
+                return True
+    return False
+
+
 def mark_item_undone(task_id):
     """Undo a checkoff in the cache (the mis-tap fix): set done=False on every cached plan
     item with this task id, so reopening the overlay shows it un-checked again. Mirror of

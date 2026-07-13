@@ -420,7 +420,16 @@ class Handler(BaseHTTPRequestHandler):
             if not task_id:
                 self._send(400, {"error": "complete needs a task id"})
                 return
-            # Mark done in Anytype (with read-back), then flip the cache so the surface
+            # A recurring chore/appointment: "done for today" — flip the cache only, NO Anytype
+            # write (Recurring objects have no Task status, and they recur; done-forever is wrong).
+            # It comes back next cycle when the plan regenerates. This is what lets June finally
+            # check off the dishes (2026-07-13).
+            if plan_store.is_recurring_item(task_id):
+                plan = plan_store.mark_item_done(task_id)
+                self._send(200, {"completed": {"id": task_id, "done": True, "recurring": True},
+                                 "plan": plan or {"empty": True}})
+                return
+            # A real task: mark done in Anytype (with read-back), then flip the cache so the surface
             # shows it checked without a regeneration. A failed close surfaces honestly.
             try:
                 confirmed = task_actions.complete_task(task_id)
@@ -493,8 +502,13 @@ class Handler(BaseHTTPRequestHandler):
             if not task_id:
                 self._send(400, {"error": "uncomplete needs a task id"})
                 return
-            # Undo a completion (mis-tap fix): status back to Ready in Anytype (read-back),
-            # then un-check the cache. A failed undo surfaces honestly.
+            # A recurring chore: undo is a local cache un-flip only (nothing was written to Anytype).
+            if plan_store.is_recurring_item(task_id):
+                plan = plan_store.mark_item_undone(task_id)
+                self._send(200, {"uncompleted": {"id": task_id, "done": False, "recurring": True},
+                                 "plan": plan or {"empty": True}})
+                return
+            # A real task: status back to Ready in Anytype (read-back), then un-check the cache.
             try:
                 confirmed = task_actions.uncomplete_task(task_id)
             except Exception as e:

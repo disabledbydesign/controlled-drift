@@ -242,7 +242,7 @@ def backend_descriptor(backend):
 
 def build_prompt(capacity=None, extra=None):
     """Build the full generation prompt. Public for the compare script and manual testing."""
-    full_context, tasks, start_time, shape = build_context(capacity=capacity)
+    full_context, tasks, start_time, shape, _anchors, _end = build_context(capacity=capacity)
     ref_map, task_table = _build_task_refs(tasks)
     prompt = _assemble_prompt(full_context, start_time, capacity=capacity,
                               extra=extra, task_table=task_table, shape=shape)
@@ -343,9 +343,11 @@ schedule would be a lie today. So the output is a **priority list to pull from**
 schedule: a short, ordered set of what matters most, so when a window opens she takes the next
 one that fits. **Do NOT invent clock times. Do NOT group into morning/afternoon blocks.**
 
-The order is ALREADY DECIDED (foreground-first) in the priority list in the inputs above — keep
-that order. Your job is to rewrite each item into plain language, add a grounded `why`, write a
-short warm woven frame, and a one-line `header` naming what today's shape is and why.
+You compose this list: choose which candidate moves belong today and put them in the order that
+serves June's Focus Period intent + her active Strategies + her capacity (you do NOT have to
+include every candidate — deferring to still_here is expected, especially on a low day). Then
+rewrite each item into plain language, add a grounded `why`, write a short warm woven frame, and a
+one-line `header` naming what today's shape is and why.
 
 ## REQUIRED OUTPUT — THE JSON BLOCK ONLY
 
@@ -358,7 +360,7 @@ Output **ONLY** the single fenced ```json block — nothing before or after. Use
   no jargon); `why` is one sentence grounded in her actual goal/project (what this produces or
   moves — never invented); `project` is the project/thread name or null; `ref` is the task's
   reference token from TASK REFERENCE (so she can mark it done), null if it isn't a listed task.
-- keep the list SHORT (the inputs already cap it) and in the given order — do not reorder.
+- keep the list SHORT; order it by your judgment (intent + strategies + capacity), most-fitting first.
 
 ```json
 {
@@ -382,12 +384,14 @@ before or after — just the block.
 # --- context assembly (reuses daily_plan, minus the interactive input/print) -
 
 def select_and_order_tasks(tasks, period):
-    """Order tasks foreground-first and DROP paused-project tasks (the period overrides the
-    enduring engagement). With no period, preserves the prior date-seeded hash order exactly —
-    unchanged behavior. Matching is by the period's resolved foreground/paused project NAMES
-    (themselves resolved from stored ids in load_active_items) against each task's linked_projects.
-    This is the real reprioritization the addendum wants — not just a prose hint to the model."""
-    import hashlib
+    """Filter paused-project tasks and present the rest in a STABLE, foreground-first order for the
+    LLM to compose from — this is NOT the final day order. Ordering + selection are the LLM's job
+    (AI_LAYER_SPEC:69: "the LLM proposes ordering and content; Python places it in time"). The old
+    date-seeded MD5 hash here WAS the drift (structural_diagnosis_2026-07-11:14, spec_reconciliation_
+    selection_2026-07-11:5) — it shuffled the day deterministically-but-arbitrarily while the LLM was
+    barred from re-sequencing, so an arbitrary order reached June dressed in prose. Now the order is
+    just a calm, stable presentation (foreground first, then linked-before-discrete, then by name);
+    the composer decides the real sequence from the Focus Period intent + Strategies + capacity."""
     fg = set((period or {}).get("foreground") or [])
     paused = set((period or {}).get("paused") or [])
 
@@ -396,13 +400,12 @@ def select_and_order_tasks(tasks, period):
         return projs[0] if projs else ""
 
     kept = [t for t in tasks if _proj(t) not in paused]
-    seed = hashlib.md5(dt.date.today().isoformat().encode()).hexdigest()
 
     def _key(t):
         proj = _proj(t)
-        order = int(hashlib.md5((proj + seed).encode()).hexdigest()[:4], 16)
-        # foreground first; within that, linked-before-unlinked (unchanged); then hash order
-        return (0 if proj in fg else 1, 1 if not proj else 0, order)
+        # foreground first; then linked-before-discrete; then a stable alphabetical tiebreak (NOT a
+        # hash — the arbitrary daily shuffle was the drift). The LLM re-sequences from here.
+        return (0 if proj in fg else 1, 1 if not proj else 0, proj.lower(), (t.get("name") or "").lower())
 
     return sorted(kept, key=_key)
 
@@ -507,10 +510,20 @@ def _gate_and_collapse(tasks, projects, neglected, period, extra=None, surface_d
     def is_forced(t):
         return t.get("id") in named["task_ids"]
 
-    # Pass 1 — the hide gate (unchanged logic): which tasks survive to be considered at all.
+    # Pass 1 — the hide gate: which tasks survive to be considered at all.
     survivors = []
     for t in tasks:
         proj = proj_of(t)
+        if not proj:
+            # A task with NO linked project is a discrete standalone action (call the surgeon, go
+            # for a walk, organize letters) — not a dormant project. Pass 2 already intends to keep
+            # every no-project task ("discrete action — never collapsed"), but the old code hid them
+            # HERE: proj_eng.get("", "unset") collided the empty-string project with the unset-
+            # engagement default, so discrete tasks only ever surfaced once 16-days stale. They are
+            # always eligible for the day. (June, 2026-07-13 — restoring the design's discrete
+            # actions; the LLM composer decides how many actually fit today.)
+            survivors.append(t)
+            continue
         eng = proj_eng.get(proj, "unset")
         foregrounded = proj in fg or proj in named["projects"] or is_forced(t)
         if not foregrounded:
@@ -658,7 +671,9 @@ def build_context(capacity=None, start_time=None, end_time=None, extra=None):
     full_context = context_block + "\n" + schedule_block
     # Return schedulable (not all tasks): wellbeing work is the open block, so it isn't
     # individually accounted / surfaced / ref-tokened downstream (never-pick-her-threads).
-    return full_context, schedulable, start_time, shape
+    # all_anchors + end_time are handed back so the post-generation re-time pass (_retime_clock_plan)
+    # can place the LLM's COMPOSED order in time using the same fixed anchors the suggestion used.
+    return full_context, schedulable, start_time, shape, all_anchors, end_time
 
 
 def _build_task_refs(tasks):
@@ -927,6 +942,63 @@ def _ensure_all_tasks_accounted(plan, tasks):
     return plan
 
 
+def _retime_clock_plan(plan, tasks, all_anchors, start_time, end_time):
+    """Python places the LLM's COMPOSED order in time — the '...Python places it in time
+    (determinism)' half of AI_LAYER_SPEC:69, applied AFTER the model composes selection + order.
+
+    Restores the design the build drifted from (structural_diagnosis_2026-07-11): the LLM now owns
+    WHICH tasks and IN WHAT ORDER; this pass owns only the clock arithmetic. It reads the model's
+    chosen real-task items in the order it wrote them, DROPS the model's echoed anchors/breaks
+    (Python re-adds the authoritative meals/appointments/recurring + breaks, at their real fixed
+    times, via build_schedule), reruns build_schedule, and rebuilds plan['blocks'] with the true
+    times. A task the model deferred simply isn't here — it never gets scheduled, and
+    _ensure_all_tasks_accounted has already parked it in still_here. No-op for the priority shape
+    (no clock). Mutates + returns plan."""
+    if plan.get("shape") != "clock":
+        return plan
+    import daily_plan as dp
+
+    def _match_key(s):
+        # Strip parentheticals the model tends to echo ("(~30min)", "(was 09:00)", "(virtual)")
+        # so an anchor matches its echo despite decoration; normalize the rest.
+        return _norm(re.sub(r"\([^)]*\)", "", s or ""))
+
+    anchor_keys = {k for k in (_match_key(a.get("name")) for a in (all_anchors or [])) if k}
+
+    def _is_anchor_echo(name):
+        # Python re-adds every authoritative anchor (meal/appt/recurring) at its real fixed time,
+        # so any item the model echoed for one must be dropped — else it double-books (Lunch twice,
+        # "Attend X" beside "X"). Match by substring either direction after stripping decoration,
+        # because the model renames anchors freely ("Attend SF LGBT…" vs "SF LGBT…").
+        k = _match_key(name)
+        if not k:
+            return False
+        return any(k == a or a in k or k in a for a in anchor_keys)
+
+    dur_by_id = {t["id"]: t.get("duration_min") for t in tasks}
+    composed = []
+    for block in plan.get("blocks", []):
+        for it in block.get("items", []):
+            name = it.get("task") or it.get("name") or ""
+            if it.get("interstitial"):
+                continue                       # a model-written break — Python recomputes breaks
+            # An echo can only be an id-LESS item: a real composed task always resolved to an id via
+            # its ref token, while an echoed anchor (Lunch/appt/chore) is ref:null → id-less. Guarding
+            # on `id` means the substring match can never silently drop a real task that merely happens
+            # to contain an anchor word ("lunch meeting" keeps its id, so it stays).
+            if not it.get("id") and _is_anchor_echo(name):
+                continue                       # a model-echoed meal/appt/chore — Python re-adds it
+            fi = dict(it)                       # carry task/project/why/id/held_back/description through
+            fi["name"] = name                   # build_schedule keys on 'name'
+            fi["duration_min"] = dur_by_id.get(it.get("id")) or it.get("duration_min")
+            fi["_composed"] = True              # tags real items so blocks_from_scheduled can tell them from anchors
+            composed.append(fi)
+    framing_by_label = {b.get("label"): b.get("framing", "") for b in plan.get("blocks", [])}
+    scheduled = dp.build_schedule(composed, all_anchors, start_time, end_time=end_time)
+    plan["blocks"] = dp.blocks_from_scheduled(scheduled, framing_by_label)
+    return plan
+
+
 # --- parsing the model output ----------------------------------------------
 
 def parse_plan(model_text):
@@ -967,7 +1039,7 @@ def generate_plan(capacity=None, source="generate", extra=None):
     framing below): a fresh generation still selects from the whole active list, but her words
     are the strongest signal for what to prioritize. Writes cache, logs what surfaced.
     """
-    full_context, tasks, start_time, shape = build_context(capacity=capacity, extra=extra)
+    full_context, tasks, start_time, shape, all_anchors, end_time = build_context(capacity=capacity, extra=extra)
     ref_map, task_table = _build_task_refs(tasks)
     prompt = _assemble_prompt(full_context, start_time, capacity=capacity, task_table=task_table,
                               extra=extra, request_kind="generate", shape=shape)
@@ -1019,6 +1091,11 @@ def generate_plan(capacity=None, source="generate", extra=None):
             raise ZeroRefPlanError(
                 f"plan generation resolved zero of {len(tasks)} gated tasks to ids across 2 attempts")
         break  # a valid plan (some refs resolved, or no gated tasks to resolve)
+    # The plan is valid — now Python places the LLM's COMPOSED order in time (AI_LAYER_SPEC:69).
+    # Done AFTER the zero-ref guard so the guard reads the model's own interstitial flags (anchors
+    # re-added here as non-interstitial rows must not be miscounted as claimed focused work), and
+    # BEFORE check_plan/save so the logged + cached blocks carry the authoritative clock times.
+    _retime_clock_plan(plan, tasks, all_anchors, start_time, end_time)
     generation_log.log_generation(
         backend=backend_label, duration_s=time.monotonic() - t0,
         success=True, source=source,
@@ -1060,7 +1137,7 @@ def reorder(message, kind):
     re-surfaces (the renegotiated plan is what she's now working from).
     """
     before = plan_store.load_plan()
-    full_context, tasks, start_time, shape = build_context(extra=message)
+    full_context, tasks, start_time, shape, all_anchors, end_time = build_context(extra=message)
     ref_map, task_table = _build_task_refs(tasks)
     history = session_store.recent_entries("negotiate")
     current_plan_summary = _format_current_plan(before)
@@ -1075,6 +1152,8 @@ def reorder(message, kind):
         plan = parse_plan(model_text)
         mislabels, _resolved = _resolve_ids(plan, ref_map, tasks)
         _ensure_all_tasks_accounted(plan, tasks)
+        # Python re-times June's newly composed order (AI_LAYER_SPEC:69), same as generate_plan.
+        _retime_clock_plan(plan, tasks, all_anchors, start_time, end_time)
     except Exception as e:
         generation_log.log_generation(
             backend=backend_label, duration_s=time.monotonic() - t0,
