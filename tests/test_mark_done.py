@@ -63,6 +63,73 @@ def test_resolve_ids_no_match_leaves_item_without_id():
         assert "id" not in item
 
 
+# --- identity-field overwrite: the label must match the id it acts on -------
+
+def test_resolve_ids_overwrites_mislabeled_task_from_id():
+    """The live 2026-07-11 trust bug: the model wrote one task's words on a row whose ref
+    resolves to a DIFFERENT task. June taps 'done' on the words she reads → the id completes
+    a task she never saw. Once the id resolves, the displayed label MUST become the resolved
+    task's real name, and the drift must be counted."""
+    ref_map = {"T1": "id-real"}
+    tasks = [{"id": "id-real",
+              "name": "Open decision: aim to finish a manuscript",
+              "linked_projects": ["Anthropic Fellows coding prep"]}]
+    plan = {"blocks": [{"items": [
+        {"task": "Check rivets / Leatherworking", "project": "Leatherworking", "ref": "T1"},
+    ]}]}
+    mislabels = pg._resolve_ids(plan, ref_map, tasks)
+    item = plan["blocks"][0]["items"][0]
+    assert item["id"] == "id-real"
+    assert item["task"] == "Open decision: aim to finish a manuscript"   # id wins over free text
+    assert item["project"] == "Anthropic Fellows coding prep"           # project stamped from id
+    assert mislabels == 1                                                # the drift is measured
+
+
+def test_resolve_ids_stamps_project_from_resolved_task():
+    """When the resolved task carries a project, the item's project is overwritten to it —
+    even if the model left project null or wrong."""
+    ref_map = {"T1": "id-a"}
+    tasks = [{"id": "id-a", "name": "Draft the intro", "linked_projects": ["The Book"]}]
+    plan = {"items": [{"task": "Draft the intro", "project": None, "ref": "T1"}]}   # priority shape
+    pg._resolve_ids(plan, ref_map, tasks)
+    assert plan["items"][0]["project"] == "The Book"
+
+
+def test_resolve_ids_leaves_null_ref_item_untouched():
+    """A non-task item (Lunch — ref null, no name match) keeps its model text and gets no id;
+    a legitimate label with no drift is not counted as a mislabel."""
+    ref_map = {"T1": "id-a"}
+    tasks = [{"id": "id-a", "name": "Email Donna"}]
+    plan = {"blocks": [{"items": [
+        {"task": "Lunch", "project": None, "ref": None},
+        {"task": "email donna", "ref": None},        # exact (normalized) name match — not a mislabel
+    ]}]}
+    mislabels = pg._resolve_ids(plan, ref_map, tasks)
+    lunch, donna = plan["blocks"][0]["items"]
+    assert lunch["task"] == "Lunch" and "id" not in lunch          # untouched, uncompletable
+    assert donna["id"] == "id-a" and donna["task"] == "Email Donna"  # canonicalized, no drift
+    assert mislabels == 0
+
+
+def test_resolve_ids_keeps_model_project_when_resolved_task_has_none():
+    """If the resolved task carries no project, the model's project text is left alone (only a
+    real project name overwrites)."""
+    ref_map = {"T1": "id-a"}
+    tasks = [{"id": "id-a", "name": "Call the plumber"}]           # no linked_projects
+    plan = {"items": [{"task": "Call plumber", "project": "Household", "ref": "T1"}]}
+    pg._resolve_ids(plan, ref_map, tasks)
+    assert plan["items"][0]["task"] == "Call the plumber"
+    assert plan["items"][0]["project"] == "Household"             # kept — nothing real to overwrite
+
+
+def test_check_plan_logs_mislabel_count():
+    """The mislabel count reaches the generation log's structural payload (only when provided)."""
+    import generation_log
+    plan = {"woven_frame": "f", "blocks": [{"items": [{"task": "x", "id": "i"}]}], "still_here": []}
+    assert generation_log.check_plan(plan, n_input_tasks=1, mislabel_count=2)["mislabel_count"] == 2
+    assert "mislabel_count" not in generation_log.check_plan(plan, n_input_tasks=1)
+
+
 # --- the cache flip ---------------------------------------------------------
 
 def _seed_plan(tmp_path, monkeypatch):

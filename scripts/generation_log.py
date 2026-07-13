@@ -39,10 +39,14 @@ def log_generation(backend, duration_s, success, source=None,
         f.write(json.dumps(rec) + "\n")
 
 
-def check_plan(plan, n_input_tasks=None):
+def check_plan(plan, n_input_tasks=None, mislabel_count=None):
     """Basic structural facts about a parsed plan. Not a score — just what's there.
 
-    n_input_tasks: how many tasks were in the input context.
+    n_input_tasks:  how many tasks were in the input context.
+    mislabel_count: how many resolved items the model had labelled with materially different
+                    text than the real (id-resolved) task name — the identity-drift measure the
+                    _resolve_ids overwrite corrects. High is expected (the model rewrites labels
+                    into plain action language by design); it's logged so the drift is trackable.
     """
     woven_frame = (plan.get("woven_frame") or "").strip()
     blocks = plan.get("blocks", [])
@@ -59,6 +63,8 @@ def check_plan(plan, n_input_tasks=None):
     }
     if n_input_tasks is not None:
         result["input_task_count"] = n_input_tasks
+    if mislabel_count is not None:
+        result["mislabel_count"] = mislabel_count
     return result
 
 

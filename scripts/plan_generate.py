@@ -803,29 +803,57 @@ def _norm(s):
 
 
 def _resolve_ids(plan, ref_map, tasks):
-    """Thread the real Anytype task id onto each plan item, in place.
+    """Thread the real Anytype task id onto each plan item, in place. Returns the mislabel
+    count (how many resolved items the model had labelled with materially different text).
 
     Primary path: the model echoed a `ref` token -> map it back through ref_map.
     Fallback: no/unknown token, but the item's task text matches a real task name exactly
     (normalized) -> use that id. This is deliberately STRICT (exact normalized equality, not
     substring) — a loose match risks marking the WRONG task done, the one error worse than
     no id at all. No match -> the item simply carries no id and shows no done-affordance.
+
+    Identity fields follow the id, not the model's free text: once a ref resolves, the item's
+    displayed `task` (and `project`, if the resolved task carries one) is OVERWRITTEN with the
+    resolved task's REAL name. The id is what actions key on (mark-done + move chips read
+    item["id"] — verified nothing downstream string-matches item["task"]), so a row that READS
+    "Check rivets / Leatherworking" but whose id resolves to "Open decision: finish a manuscript"
+    (observed live 2026-07-11) would complete a task June never read. That is the one failure this
+    surface cannot afford. Overwriting with the full canonical name is correct even when the model
+    legitimately shortened it for display — identity beats brevity, and the overlay truncates
+    gracefully. Non-task items (Lunch, breaks — ref null, no name match) keep their model text.
     """
     by_name = {_norm(t["name"]): t["id"] for t in tasks}
     context_by_id = {t["id"]: (t.get("context") or "").strip() for t in tasks}
+    # Python-owned identity fields, keyed by real id: the canonical task name, and the task's
+    # project (first linked project, if any). The overwrite below reads from these.
+    name_by_id = {t["id"]: t["name"] for t in tasks}
+    proj_by_id = {t["id"]: (t.get("linked_projects") or [None])[0] for t in tasks}
     # Per-thread held-back data (count + names of this thread's not-today items), keyed by the
     # shown task's id. Python owns this map — the LLM only echoes a ref token, never the count —
     # so the honest 'N more' reaches the cached plan JSON without the model rebuilding the pile.
     held_by_id = {t["id"]: (t.get("held_back") or 0) for t in tasks}
     held_names_by_id = {t["id"]: (t.get("held_back_names") or []) for t in tasks}
+    mislabels = 0  # resolved items whose model text differed materially from the real name
 
     def _resolve_item(item):
+        nonlocal mislabels
         ref = item.pop("ref", None)  # consume the token; the overlay only needs the id
         tid = ref_map.get(ref) if ref else None
         if not tid:
             tid = by_name.get(_norm(item.get("task")))
         if tid:
             item["id"] = tid
+            # Identity fields win over the model's free text now that the id is known. Compare
+            # first (normalized) so the drift is measurable — a fallback name match is text-equal
+            # by construction and never counts; a real relabel (the trust bug) does.
+            real_name = name_by_id.get(tid)
+            if real_name:
+                if _norm(item.get("task")) != _norm(real_name):
+                    mislabels += 1
+                item["task"] = real_name
+            real_proj = proj_by_id.get(tid)
+            if real_proj:
+                item["project"] = real_proj
             # Carry the task's stored description (its Context field) onto the item so the
             # overlay can show it on expand. Empty for most tasks until the weed writes one;
             # the overlay only renders the slot when there's text.
@@ -844,7 +872,7 @@ def _resolve_ids(plan, ref_map, tasks):
             _resolve_item(item)
     for item in plan.get("items", []):          # priority shape (flat)
         _resolve_item(item)
-    return plan
+    return mislabels
 
 
 def _ensure_all_tasks_accounted(plan, tasks):
@@ -926,7 +954,7 @@ def generate_plan(capacity=None, source="generate", extra=None):
     try:
         model_text = generate(prompt)
         plan = parse_plan(model_text)
-        _resolve_ids(plan, ref_map, tasks)
+        mislabels = _resolve_ids(plan, ref_map, tasks)
         _ensure_all_tasks_accounted(plan, tasks)
     except Exception as e:
         generation_log.log_generation(
@@ -938,7 +966,8 @@ def generate_plan(capacity=None, source="generate", extra=None):
     generation_log.log_generation(
         backend=backend_label, duration_s=time.monotonic() - t0,
         success=True, source=source,
-        structural=generation_log.check_plan(plan, n_input_tasks=len(tasks)),
+        structural=generation_log.check_plan(plan, n_input_tasks=len(tasks),
+                                             mislabel_count=mislabels),
     )
     saved = plan_store.save_plan(plan, source=source)
     # Learning loop: durable snapshot of the full generated plan — the planned side of
@@ -977,7 +1006,7 @@ def reorder(message, kind):
     try:
         model_text = generate(prompt)
         plan = parse_plan(model_text)
-        _resolve_ids(plan, ref_map, tasks)
+        mislabels = _resolve_ids(plan, ref_map, tasks)
         _ensure_all_tasks_accounted(plan, tasks)
     except Exception as e:
         generation_log.log_generation(
@@ -989,7 +1018,8 @@ def reorder(message, kind):
     generation_log.log_generation(
         backend=backend_label, duration_s=time.monotonic() - t0,
         success=True, source=kind,
-        structural=generation_log.check_plan(plan, n_input_tasks=len(tasks)),
+        structural=generation_log.check_plan(plan, n_input_tasks=len(tasks),
+                                             mislabel_count=mislabels),
     )
     saved = plan_store.save_plan(plan, source=kind)
 
