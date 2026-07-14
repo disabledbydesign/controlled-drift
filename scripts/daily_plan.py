@@ -114,6 +114,9 @@ def load_active_items(sid):
                               "engagement_notes": pvn("Engagement notes", "text"),
                               "side": side,
                               "is_workstream": bool((props.get("is_workstream") or {}).get("checkbox")),
+                              # Block chunk length (minutes). Read BY NAME — Anytype auto-generated
+                              # its key (block_chunk_min, no gsdo_ prefix), like Engagement/Side.
+                              "chunk_min": pvn("Block chunk min", "number"),
                               "parent_project_id": parent_project_id})
 
     # Side inheritance (June, 2026-07-13): a subproject's Side is read from its nearest

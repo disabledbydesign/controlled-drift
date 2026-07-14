@@ -31,7 +31,17 @@ def build_project():
     # work that doesn't is Wellbeing. Structurally separates the two sides everywhere they
     # surface: neglect may be offered on the Obligation side; the Wellbeing side is never
     # nagged (only ever surfaced as under-rest/under-play).
-    p_side        = g.ensure_property("Side", "select", ["Obligation", "Wellbeing", "Fun / hobby"])
+    # "Daily life" added 2026-07-14: the always-eligible chore track (medical / household /
+    # self-care / social). Present in the live space already; adding it here keeps the model
+    # DEFINITION matching reality, so a rebuild can't silently wipe the daily-life track the
+    # display-grain design (decision 1) rests on. ensure_select_options is additive/idempotent.
+    p_side        = g.ensure_property("Side", "select",
+                                      ["Obligation", "Wellbeing", "Fun / hobby", "Daily life"])
+    # Block chunk length (minutes) — the per-project duration of a "work on X" block, a durable
+    # preference June sets (like Side/Engagement), read back to place the block as a clock-time
+    # slot. Anytype auto-generates this field's key, so it is READ BY NAME ("Block chunk min"),
+    # not by a gsdo_ key. (display_grain_design.md decision 2.)
+    p_block_chunk = g.ensure_property("Block chunk min", "number")
     # Arc ordering — dependency-vs-sequence refinement (guard #6: June needs to understand why).
     # Depends on: hard dependency links (X can't start until Y is done; enforced in orient_map.py).
     # Arc position rationale: full plain-language reasoning for where this stream sits in the arc.
@@ -41,7 +51,8 @@ def build_project():
     key = g.ensure_type("Project", "Projects",
                         [p_goal_link, p_description, p_reaching, p_deadline,
                          p_parent, p_excitement, p_docs, p_affective, p_barriers,
-                         p_context, p_engagement, p_eng_notes, p_side, p_depends, p_arc_why])
+                         p_context, p_engagement, p_eng_notes, p_side, p_block_chunk,
+                         p_depends, p_arc_why])
     print(f"[ok] Project type ready: key={key}")
     return key
 
