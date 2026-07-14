@@ -40,6 +40,32 @@ def classify(project):
     return "block"
 
 
+def block_unit(project, shape, arc, chunk_min):
+    """A "work on X" block as a TASK-SHAPED dict with a SYNTHETIC id (block:<project_id>).
+
+    The synthetic id is what lets a block ride the existing id-keyed pipeline exactly like a
+    task: _build_task_refs tokenizes it, the LLM orders it by focus/strategy, _resolve_ids /
+    _retime / blocks_from_scheduled key on it. The block-only fields (block, shape, arc,
+    chunk_min) are Python-owned and re-attached by id downstream — the model only ever echoes
+    the ref token, never these. `duration_min == chunk_min` so the scheduler can place the slot.
+
+      shape     "arc"  → opens to a step arc (project has direct tasks)
+                "chunk"→ a bare chunk of time (task-less bundle of subprojects)
+      arc       the [{"text","state"}] list from project_arc, or None for a bare chunk
+      chunk_min the block's length in minutes (block_duration.get_chunk_min)
+    """
+    return {"id": f"block:{project['id']}",
+            "name": f"Work on {project['name']}",
+            "block": True,
+            "project_id": project["id"],
+            "project": project["name"],
+            "shape": shape,
+            "arc": arc,
+            "chunk_min": chunk_min,
+            "duration_min": chunk_min,
+            "linked_projects": [project["name"]]}
+
+
 def _id_list(raw):
     """Normalize an objects-relation value to a list of id strings.
 

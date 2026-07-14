@@ -18,6 +18,7 @@ import sys, os, datetime as dt, json
 sys.path.insert(0, os.path.dirname(__file__))
 from anytype_test import call
 import gsdo_anytype as g
+import grain
 from datetime_seam import recurring_items_for_today
 from neglect import active_untouched
 from scheduler import schedule, DEFAULT_DURATION_MIN
@@ -136,6 +137,13 @@ def load_active_items(sid):
     # classifier (grain.classify) filters the whole subtree out of block-grain, as orient_map
     # already does via _is_workstream's ancestor walk.
     _inherit_is_workstream(projects)
+
+    # Attach each project's step arc HERE, where the raw `data` (which keeps done tasks, unlike
+    # the daily-plan task list) and proj_id_to_name both live — so build_context can emit a block's
+    # arc with no re-fetch and no return-signature change. A block reads project["arc"]:
+    # non-empty → opens to that arc; None → a bare chunk. (display_grain_design.md decision 5.)
+    for p in projects:
+        p["arc"] = grain.project_arc(p["name"], data, proj_id_to_name)
 
     for obj in data:
         t = obj.get("type")

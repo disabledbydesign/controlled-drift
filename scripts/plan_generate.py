@@ -29,6 +29,7 @@ import session_store
 import cd_paths
 import generation_log
 import grain
+import block_duration
 
 PROMPT_PATH = os.path.join(os.path.dirname(__file__), "..", "prompts", "daily_list.md")
 GEN_TIMEOUT = 300  # seconds. A full plan runs ~160s (JSON-only); 300 gives margin for a
@@ -486,6 +487,25 @@ def _pick_within_thread(candidates, proj_deadline_raw, surface_dates):
     return min(candidates, key=key)
 
 
+def _surfaces(eng, foregrounded, neglected):
+    """The engagement show/hide rule, in ONE place. Does a project surface today?
+
+    - foregrounded (in a Focus Period, or June-named/forced) → always yes.
+    - Open → no unless foregrounded (available, self-paced: never pushed, never nagged).
+    - Backburner / unset → no unless neglected (dormant, but resurfaced when stale).
+    - anything else (Steady, Sprint, Hyperfixation, …) → yes.
+
+    Shared by the task hide-gate (_gate_and_collapse) and the container-block pass (_blockify)
+    so a task-less block project surfaces on exactly the same rule its tasks would have."""
+    if foregrounded:
+        return True
+    if eng == "Open":
+        return False
+    if eng in ("Backburner", "unset") and not neglected:
+        return False
+    return True
+
+
 def _gate_and_collapse(tasks, projects, neglected, period, extra=None, surface_dates=None,
                        rollover_ids=None):
     """Engagement grain gate + one-next-move-per-thread (spec AI_LAYER_SPEC.md §2/§9; reconciled in
@@ -541,11 +561,8 @@ def _gate_and_collapse(tasks, projects, neglected, period, extra=None, surface_d
             continue
         eng = proj_eng.get(proj, "unset")
         foregrounded = proj in fg or proj in named["projects"] or is_forced(t)
-        if not foregrounded:
-            if eng == "Open":
-                continue                                   # available, self-paced: not pushed, not nagged
-            if eng in ("Backburner", "unset") and proj not in neg_names:
-                continue                                   # dormant: hidden unless neglected
+        if not _surfaces(eng, foregrounded, proj in neg_names):
+            continue
         survivors.append(t)
 
     # Pick each real thread's ONE representative from its survivors, by the honest signal.
@@ -605,6 +622,58 @@ def _gate_and_collapse(tasks, projects, neglected, period, extra=None, surface_d
     return kept
 
 
+def _blockify(kept, projects, period, neglected):
+    """Turn the gate's task list into the grain the daily plan surfaces: real project work
+    becomes a "work on X" BLOCK; discrete tasks (daily-life chores, no-project actions) stay
+    tasks. Two emission paths, both feeding the SAME list the LLM orders — nothing is placed
+    behind the model (display_grain_design.md decision 1, 8; plan Task 6).
+
+      1. Arc/thread blocks — a block-classified project whose task(s) survived the gate: its
+         collapsed thread is replaced by ONE block_unit. Its arc is the project's full step
+         progression (project["arc"], done steps included), not the single surviving task.
+      2. Container blocks — a block-classified, non-workstream project with NO surviving task
+         that still surfaces on the engagement gate (Steady / foregrounded): a bare chunk. This
+         is the scholarly-writing / GRA headline case — task-less bundles that are real work.
+
+    Workstreams and Fun/hobby never reach here (classify → excluded); daily-life chores classify
+    → task and pass through unchanged."""
+    by_name = {p.get("name"): p for p in projects}
+
+    def proj_of(t):
+        ps = t.get("linked_projects") or []
+        return ps[0] if ps else ""
+
+    def _unit(proj):
+        arc = proj.get("arc")
+        return grain.block_unit(proj, "arc" if arc else "chunk", arc,
+                                block_duration.get_chunk_min(proj))
+
+    out, consumed = [], set()
+    # Path 1: block-classified threads → one block; everything else stays a task.
+    for t in kept:
+        proj = by_name.get(proj_of(t))
+        if proj and grain.classify(proj) == "block":
+            name = proj["name"]
+            if name not in consumed:
+                consumed.add(name)
+                out.append(_unit(proj))
+            # a same-thread survivor after the first: the block already represents it — drop.
+        else:
+            out.append(t)
+
+    # Path 2: task-less block projects that surface on the gate (containers).
+    fg = set((period or {}).get("foreground") or [])
+    neg_names = {n.get("name") for n in (neglected or []) if isinstance(n, dict)}
+    for proj in projects:
+        name = proj.get("name")
+        if name in consumed or grain.classify(proj) != "block":
+            continue
+        eng = proj.get("engagement") or "unset"
+        if _surfaces(eng, name in fg, name in neg_names):
+            out.append(_unit(proj))
+    return out
+
+
 def build_context(capacity=None, start_time=None, end_time=None, extra=None):
     """Load active items + compute the clock schedule, returning the full prompt context.
 
@@ -661,6 +730,9 @@ def build_context(capacity=None, start_time=None, end_time=None, extra=None):
     from surface_log import surfaced_dates
     schedulable = _gate_and_collapse(schedulable, projects, neglected, period, extra=extra,
                                      surface_dates=surfaced_dates(), rollover_ids=rollover_ids)
+    # Grain: real project work → "work on X" blocks (one per surviving thread + one per surfacing
+    # task-less container); discrete tasks stay tasks. Emitted into the SAME list the LLM orders.
+    schedulable = _blockify(schedulable, projects, period, neglected)
 
     # Output SHAPE (Phase 6, Task 6): a fragmented / unknown-timing day (a caregiving window, or
     # a period that asks for a priority list) can't be expressed as a clock schedule — forcing one
