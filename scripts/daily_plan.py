@@ -19,7 +19,7 @@ sys.path.insert(0, os.path.dirname(__file__))
 from anytype_test import call
 import gsdo_anytype as g
 from datetime_seam import recurring_items_for_today
-from neglect import query_neglected
+from neglect import active_untouched
 from scheduler import schedule, DEFAULT_DURATION_MIN
 from surface_log import log_surfaced_batch
 from plan_corrections_log import log_correction
@@ -98,7 +98,29 @@ def load_active_items(sid):
                               "side": side,
                               "parent_project_id": parent_project_id})
 
-        elif tkey == "task":
+    # Side inheritance (June, 2026-07-13): a subproject's Side is read from its nearest
+    # ancestor when unset, rather than duplicating the parent's value onto every subproject.
+    # parent_project_id was already captured per project above; this just resolves the chain.
+    _by_id = {p["id"]: p for p in projects}
+    for p in projects:
+        seen, cur = set(), p
+        while cur.get("side") is None and cur.get("parent_project_id") in _by_id and cur["id"] not in seen:
+            seen.add(cur["id"])
+            cur = _by_id[cur["parent_project_id"]]
+        if p.get("side") is None and cur is not p:
+            p["side"] = cur.get("side")
+
+    for obj in data:
+        t = obj.get("type")
+        tkey = t.get("key") if isinstance(t, dict) else t
+        name = obj.get("name", "")
+        oid = obj.get("id")
+        props = {p.get("key"): p for p in obj.get("properties", [])}
+
+        def pv(key, kind):
+            return _prop_val(props, key, kind)
+
+        if tkey == "task":
             # The system's task status lives in the GSDO `gsdo_task_status` select (Active /
             # Ready / Done / Parked / …) — NOT the built-in `status`, which is vestigial and
             # always empty. Reading the built-in one silently included Done/Parked tasks in the
@@ -179,9 +201,13 @@ def load_active_items(sid):
 def load_neglected(days=16):
     # 16 days — June's calibration 2026-07-12, aligned with the upkeep-strategy threshold;
     # per-priority calibration is the future Strategy-driven version.
-    """Items not surfaced in N days (Tasks + Projects)."""
+    """Active projects (Steady/Sprint/Hyperfixation) that aren't getting finished. Switched
+    2026-07-13 from the dormant/Backburner-by-last-surfaced query to the active-untouched-by-
+    last-COMPLETION cohort: an active project resurfaces every day regardless, so "neglect"
+    has to mean not-getting-worked-on, not not-surfaced; dormant resurfacing is a separate,
+    later cohort (neglect.dormant_neglected), intentionally unwired here for now."""
     try:
-        return query_neglected(days=days)
+        return active_untouched(days=days)
     except Exception as e:
         print(f"[warn] neglect query failed: {e}", file=sys.stderr)
         return []
@@ -270,7 +296,8 @@ def format_context(goals, projects, tasks, strategies, today_recurrings, neglect
 
     if goals:
         lines.append("## Active goals")
-        lines.append("(engagement: Sprint → priority context; Steady → normal; Backburner → note but de-emphasize)")
+        lines.append("(engagement: Steady → normal; Backburner → note but de-emphasize. What's "
+                     "elevated right now comes from the Focus Period foreground, not the tag.)")
         for g_ in goals:
             eng = g_.get("engagement") or "Steady"
             line = f"- {g_['name']} [{eng}]"
@@ -288,8 +315,10 @@ def format_context(goals, projects, tasks, strategies, today_recurrings, neglect
 
     if projects:
         lines.append("## Active projects")
-        lines.append("(engagement: Sprint/Hyperfixation → priority real estate; Steady → daily move;"
-                     " Backburner → only if neglected; Needs Clarifying → flag it)")
+        lines.append("(engagement: Steady → a normal daily move; Backburner → only if neglected;"
+                     " Needs Clarifying → flag it. What's elevated right now is set by the Focus"
+                     " Period foreground, not the engagement tag — don't inflate a project's space"
+                     " just for its label.)")
         lines.append("(sub-projects are indented under their parent)")
 
         fg = set((period or {}).get("foreground") or [])
@@ -385,21 +414,16 @@ def format_context(goals, projects, tasks, strategies, today_recurrings, neglect
             lines.append(f"- {r['name']} at {r['fixed_time'].strftime('%H:%M')}")
         lines.append("")
 
-    # The "gone quiet" section: threads in an ACTIVE project (Steady/Sprint/Hyperfixation)
-    # that HAVE surfaced before but not lately — so the model can gently offer to bring them
-    # back (prompt §3 + "On the neglected items section"). Backburner/unset/Open going quiet is
-    # EXPECTED and handled by the gate, not surfaced here as a problem.
-    #   - require real surfacing history (last_surfaced is not None): a never-surfaced item is
-    #     absence, not "gone quiet", and already lives in the active lists above.
-    #   - a task belongs here if ANY of its linked projects is active; a project item, if it is
-    #     itself active. `linked_projects` and `type` are now populated by query_neglected — the
-    #     old code read a `linked_projects` key it never set, fell through to an impossible
-    #     set-inside-a-list fallback, so the whole section was unreachable. The old
-    #     `not in active_names` guard is also dropped: every item here is by definition active
-    #     (that is what active_project_names selects for), so that guard silently emptied it.
+    # The "not getting to" section: ACTIVE projects (Steady/Sprint/Hyperfixation) June keeps
+    # seeing but isn't FINISHING anything in. `neglected` is now the active-untouched cohort
+    # (neglect.active_untouched: stale by last-COMPLETION, not last-surface — an active project
+    # surfaces a move every day, so "not surfaced lately" could never catch it). The model can
+    # gently offer to bring one back (prompt §3). Backburner/unset/Open going quiet is EXPECTED
+    # and handled by the gate, not surfaced here. `last_completed` is the datetime the cohort
+    # flagged on (None when the project has never had a completion).
     active_engagement = {"Steady", "Sprint", "Hyperfixation"}
     active_project_names = {p["name"] for p in projects
-                            if p.get("engagement") in active_engagement or p.get("engagement") is None}
+                            if p.get("engagement") in active_engagement}
     today_recurring_names = {r["name"] for r in today_recurrings}
 
     def _in_active_project(n):
@@ -408,15 +432,16 @@ def format_context(goals, projects, tasks, strategies, today_recurrings, neglect
         return any(pn in active_project_names for pn in (n.get("linked_projects") or []))
 
     neglected_stale = [n for n in neglected
-                       if n.get("last_surfaced") is not None
-                       and n["name"] not in today_recurring_names
+                       if n["name"] not in today_recurring_names
                        and _in_active_project(n)]
     if neglected_stale:
-        lines.append("## Items from active projects that have gone quiet")
-        lines.append("(These are in Steady/Sprint projects and haven't appeared in a plan recently.)")
+        lines.append("## Active projects you're not getting to")
+        lines.append("(These are active projects where nothing has been finished in a while. "
+                     "Gently offer to bring one back into focus if it fits — don't nag.)")
         for n in neglected_stale:
-            ls = n.get("last_surfaced")
-            lines.append(f"- {n['name']} (last seen {ls.date()})")
+            lc = n.get("last_completed")
+            when = f"last finished something {lc.date()}" if lc else "nothing finished in it yet"
+            lines.append(f"- {n['name']} ({when})")
         lines.append("")
 
     return "\n".join(lines)
@@ -774,7 +799,13 @@ def include_hobby_block():
         return HOBBY_BLOCK_DEFAULT
 
 def partition_by_side(tasks, projects):
-    """Split tasks into (schedulable, wellbeing).
+    """Split tasks into (schedulable, hobby_excluded).
+
+    Naming fix (June, 2026-07-13): this used to return (schedulable, wellbeing) — a leftover
+    name from the old two-category (Obligation/Wellbeing) model, from before "Fun / hobby" was
+    split out as its own third category. The logic was always correct (only Fun/hobby gets
+    excluded; Wellbeing stays schedulable, per the docstring below) — only the variable name and
+    surrounding comments still said "wellbeing" for what is actually the hobby-excluded bucket.
 
     A task is "fun / hobby" (self-directed creative / dev — the kind the system must NOT pick a
     thread *within*, per the never-pick-her-threads / linear-vs-nonlinear principle) iff at least
@@ -783,22 +814,22 @@ def partition_by_side(tasks, projects):
     (walks, meals — _is_rest_item) always stays schedulable regardless of side**, so exercise/rest
     is never dropped as "hobby." Fun/hobby tasks are, by default, kept out (INCLUDE_HOBBY_BLOCK=False)."""
     side_by_name = {p["name"]: p.get("side") for p in projects}
-    schedulable, wellbeing = [], []
+    schedulable, hobby_excluded = [], []
     for t in tasks:
         if _is_rest_item(t):
             schedulable.append(t)  # necessary rest always stays, whatever it's linked to
             continue
         sides = [side_by_name.get(pn) for pn in (t.get("linked_projects") or [])]
         is_hobby = any(s == "Fun / hobby" for s in sides) and not any(s in ("Obligation", "Wellbeing") for s in sides)
-        (wellbeing if is_hobby else schedulable).append(t)
-    return schedulable, wellbeing
+        (hobby_excluded if is_hobby else schedulable).append(t)
+    return schedulable, hobby_excluded
 
 
-def open_hobby_block(wellbeing_tasks, duration_min=OPEN_HOBBY_BLOCK_MIN):
+def open_hobby_block(hobby_tasks, duration_min=OPEN_HOBBY_BLOCK_MIN):
     """One open, self-directed block INSTEAD of system-picked hobby tasks: the system protects
-    the time; June chooses the thread (from the Wellbeing projects shown in context / the map).
-    Returns a flexible schedule item, or None when there's no wellbeing work to protect time for."""
-    if not wellbeing_tasks:
+    the time; June chooses the thread (from the Fun/hobby projects shown in context / the map).
+    Returns a flexible schedule item, or None when there's no hobby work to protect time for."""
+    if not hobby_tasks:
         return None
     return {"name": "Fun / hobby time — your choice of what to work on",
             "duration_min": duration_min, "fixed_time": None, "_open_block": True}
@@ -839,9 +870,22 @@ def run():
     # Foreground drives selection; paused-project tasks are dropped.
     start_time = _round_to_5(dt.datetime.now())
     ordered = plan_generate.select_and_order_tasks(tasks, period)
-    # Wellbeing-side (hobby/creative/dev) work is kept out of the plan by default; rest stays.
-    schedulable, wellbeing = partition_by_side(ordered, projects)
-    hobby = open_hobby_block(wellbeing) if include_hobby_block() else None
+    # Fun/hobby-side (self-directed creative/dev) work is kept out of the plan by default;
+    # necessary rest stays regardless of side (see partition_by_side). Wellbeing-side work
+    # (walks, care) is NOT excluded here — only Fun/hobby is.
+    schedulable, hobby_excluded = partition_by_side(ordered, projects)
+    # Engagement gate + one-move-per-thread — the SAME reduction the overlay path applies
+    # (plan_generate.build_context). Without it, the chat "what should I do today" plan was built
+    # from the WHOLE active pile — the overwhelm the 2026-07-11 selection fix removed on the overlay
+    # but never reached this second, diverged pipeline. Now both paths gate identically.
+    from surface_log import surfaced_dates
+    schedulable = plan_generate._gate_and_collapse(schedulable, projects, neglected, period,
+                                                   surface_dates=surfaced_dates())
+    # NOTE (deliberate scope, 2026-07-13): rollover_ids is intentionally NOT passed here. Rollover
+    # lives on the overlay/morning path (plan_generate.build_context), the only path that writes plan
+    # snapshots. This chat path gets the overwhelm gate but not carry-over; wiring rollover through
+    # here (incl. the "carried over" context block) is a deliberate follow-up, not a silent omission.
+    hobby = open_hobby_block(hobby_excluded) if include_hobby_block() else None
     shape = fp.resolve_output_shape(period, in_window)
     scheduled = []
     if shape == "priority":

@@ -42,16 +42,17 @@ _PRIORITY_PLAN = {
 
 # --- rendering (pure) --------------------------------------------------------
 
-def test_render_clock_plan_age_first_blocks_still_footer():
+def test_render_clock_plan_age_first_blocks_no_still_footer():
     now = dt.datetime(2026, 7, 12, 22, 0)
     body = plan_mirror.render_body(_CLOCK_PLAN, now=now)
     lines = body.splitlines()
     assert lines[0] == "Built today at 9:50 PM."          # age line first
     assert "**09:00 – 12:00 — Morning**" in body           # block header: time + label
     assert "- 09:00 – 09:15  Clean the toilet" in body     # item: time + name
-    assert "Still waiting — not on today's plan:" in body
-    assert "- Paper revision — held for a focused session" in body
-    assert "- Waiting on surgeon's office" in body          # note-less item renders bare
+    # still_here is no longer DISPLAYED (June's decision, 2026-07-13) — the data is retained on
+    # the plan for later infrastructure, but the mirror must not render the leftover pile.
+    assert "Still waiting — not on today's plan:" not in body
+    assert "Paper revision" not in body
     assert body.rstrip().endswith(plan_mirror.FOOTER)       # honest two-surfaces footer last
 
 

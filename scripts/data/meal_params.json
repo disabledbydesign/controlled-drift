@@ -1,7 +1,0 @@
-{
-  "lunch": {
-    "default_hour": 12.75,
-    "window_end_hour": 15,
-    "duration_min": 30
-  }
-}

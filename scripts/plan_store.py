@@ -121,6 +121,18 @@ def load_plan():
         return None
 
 
+def _iter_items(plan):
+    """Every schedulable item in a cached plan, across BOTH shapes: a clock day keeps rows under
+    blocks[]; a fragmented/priority day keeps them in a flat items[] list with no blocks. Iterating
+    only blocks[] was the mark-done-doesn't-stick bug on fragmented days — the Anytype write landed
+    but the cache never changed, so reopening showed the task unchecked."""
+    for block in plan.get("blocks", []):
+        for item in block.get("items", []):
+            yield item
+    for item in plan.get("items", []):
+        yield item
+
+
 def mark_item_done(task_id):
     """Flip done=true on every cached plan item carrying this Anytype task id, so reopening
     the overlay shows it checked WITHOUT a regeneration (closing a task must not cost an LLM
@@ -133,11 +145,10 @@ def mark_item_done(task_id):
     if plan is None:
         return None
     changed = False
-    for block in plan.get("blocks", []):
-        for item in block.get("items", []):
-            if item.get("id") == task_id:
-                item["done"] = True
-                changed = True
+    for item in _iter_items(plan):
+        if item.get("id") == task_id:
+            item["done"] = True
+            changed = True
     if changed:
         path = _plan_path()
         tmp = path + ".tmp"
@@ -155,10 +166,9 @@ def is_recurring_item(task_id):
     plan = load_plan()
     if plan is None:
         return False
-    for block in plan.get("blocks", []):
-        for item in block.get("items", []):
-            if item.get("id") == task_id and item.get("recurring"):
-                return True
+    for item in _iter_items(plan):
+        if item.get("id") == task_id and item.get("recurring"):
+            return True
     return False
 
 
@@ -170,11 +180,10 @@ def mark_item_undone(task_id):
     if plan is None:
         return None
     changed = False
-    for block in plan.get("blocks", []):
-        for item in block.get("items", []):
-            if item.get("id") == task_id and item.get("done"):
-                item["done"] = False
-                changed = True
+    for item in _iter_items(plan):
+        if item.get("id") == task_id and item.get("done"):
+            item["done"] = False
+            changed = True
     if changed:
         path = _plan_path()
         tmp = path + ".tmp"

@@ -1092,18 +1092,9 @@ textarea.add-field:focus { border-color: var(--gold); }
       <span class="map-pointer-go">Open the map to pick a thread ›</span>
     </div>
 
-    <!-- Still here, not today.
-         Source: daily_list.md LLM output, final section.
-         API: GET /api/plan → plan.still_here[] -->
-    <div class="still-section" id="still-section">
-      <div class="still-label" onclick="document.getElementById('still-section').classList.toggle('open')">
-        <span class="still-expand">›</span><span id="still-label-text">still here, not today</span>
-      </div>
-      <div class="still-items-inner" id="still-here-items">
-        <div class="still-item"><div class="still-dot"></div>Calendar integration</div>
-        <div class="still-item"><div class="still-dot"></div>Park migration from Reframe</div>
-      </div>
-    </div>
+    <!-- "Still here, not today" section intentionally not rendered here (June's decision,
+         2026-07-13): plan.still_here data is still produced and read by other infrastructure,
+         it's just no longer displayed on the daily overlay. -->
 
     <!-- Action buttons — rendered from GET /api/actions (the VARIABLE button schema).
          Fresh plan (refresh) is always first; the rest come from actions.json, so the
@@ -2051,18 +2042,10 @@ function renderPlan(plan) {
       </div>`;
     }).join('');
   }
-  if (plan.still_here) {
-    // Label only — the note is context that lives in Anytype, not scan-view material. NO global
-    // count: the reconciled model retired the flat "still here (N)" pile in favor of each thread's
-    // own "· N more". What lands here now is only genuinely thread-less / waiting items.
-    const labelText = document.getElementById('still-label-text');
-    if (labelText) labelText.textContent = 'still here, not today';
-    document.getElementById('still-here-items').innerHTML = plan.still_here.map(s => `
-      <div class="still-item">
-        <div class="still-dot"></div>
-        ${esc(s.label)}
-      </div>`).join('');
-  }
+  // "Still here, not today" is intentionally not rendered (June's decision, 2026-07-13):
+  // plan.still_here is retained in the data model and read by other infrastructure, it's
+  // just no longer displayed here — showing the leftover pile rebuilt the overwhelming
+  // to-do list the daily plan exists to spare her from.
 }
 
 // A single priority-list item (Task 6/6D): no clock time, same done-affordance as clock items.

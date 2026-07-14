@@ -51,6 +51,14 @@ def complete_task(task_id):
     if status != "Done":
         raise RuntimeError(
             f"complete_task({task_id!r}): Task status did not persist (read-back={status!r})")
+    # Durable actual-side record (the completed half of planned-vs-actual). Logged only AFTER
+    # the read-back proof, so a logged completion always reflects a real one. Best-effort: the
+    # completion already persisted in Anytype — a logging hiccup must never fail it.
+    try:
+        import completion_log
+        completion_log.log_completion(task_id, obj.get("name"))
+    except Exception:
+        pass
     return {"id": task_id, "name": obj.get("name"), "status": "Done", "done": True}
 
 
@@ -71,6 +79,11 @@ def uncomplete_task(task_id):
     if status != "Ready":
         raise RuntimeError(
             f"uncomplete_task({task_id!r}): Task status did not persist (read-back={status!r})")
+    try:
+        import completion_log
+        completion_log.log_uncompletion(task_id)
+    except Exception:
+        pass
     return {"id": task_id, "name": obj.get("name"), "status": "Ready", "done": False}
 
 

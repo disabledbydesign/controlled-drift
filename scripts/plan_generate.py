@@ -281,7 +281,10 @@ Use exactly this shape (keep clock times verbatim from the schedule — 24-hour 
 is null for items with no project like Lunch; `why` is the short upward-link phrase,
 omit/null if none; `ref` is the task-reference token — see TASK REFERENCE in the inputs —
 for items that ARE one of the listed tasks, and null for non-task items like Lunch, breaks,
-or household chores):
+or household chores). One optional field — `user_set`: set `"user_set": true` on a meal item
+(Lunch) ONLY when June explicitly asked to move it to a specific time this turn ("lunch at 2",
+"push lunch later"). It tells the system to honor her time today and learn from it. Leave it off
+on a normal day):
 
 **THREE RULES FOR EVERY ITEM:**
 
@@ -482,7 +485,8 @@ def _pick_within_thread(candidates, proj_deadline_raw, surface_dates):
     return min(candidates, key=key)
 
 
-def _gate_and_collapse(tasks, projects, neglected, period, extra=None, surface_dates=None):
+def _gate_and_collapse(tasks, projects, neglected, period, extra=None, surface_dates=None,
+                       rollover_ids=None):
     """Engagement grain gate + one-next-move-per-thread (spec AI_LAYER_SPEC.md §2/§9; reconciled in
     docs/spec_reconciliation_selection_2026-07-11.md). Backburner/Open/unset are hidden unless the
     project is foregrounded (Focus Period) — and, for Backburner/unset only, unless neglected (Open
@@ -499,6 +503,7 @@ def _gate_and_collapse(tasks, projects, neglected, period, extra=None, surface_d
     fg = set((period or {}).get("foreground") or [])
     neg_names = {n.get("name") for n in (neglected or []) if isinstance(n, dict)}
     named = _match_extra(extra, projects, tasks)
+    rollover_ids = set(rollover_ids or [])   # yesterday's undone: eligible so the model can carry them
     if surface_dates is None:
         from surface_log import surfaced_dates
         surface_dates = surfaced_dates()
@@ -508,7 +513,9 @@ def _gate_and_collapse(tasks, projects, neglected, period, extra=None, surface_d
         return ps[0] if ps else ""
 
     def is_forced(t):
-        return t.get("id") in named["task_ids"]
+        # named-in-extra OR carried over from yesterday (undone): both bypass hide + collapse so the
+        # task is a real, checkable candidate the model can choose to carry, not an invisible ghost row.
+        return t.get("id") in named["task_ids"] or t.get("id") in rollover_ids
 
     # Pass 1 — the hide gate: which tasks survive to be considered at all.
     survivors = []
@@ -542,9 +549,14 @@ def _gate_and_collapse(tasks, projects, neglected, period, extra=None, surface_d
     winner_id = {proj: _pick_within_thread(cands, proj_deadline.get(proj), surface_dates)["id"]
                  for proj, cands in by_thread.items()}
 
-    # Pass 2 — collapse: keep the winner per thread; forced + no-project tasks always pass through.
-    # (Forced-first preserves prior behavior: a forced task counts as the thread's shown move, so a
-    # later non-forced move for the same thread is suppressed — the collapse still yields one move.)
+    # Pass 2 — collapse to one move per thread. A forced item (June-named OR carried over from
+    # yesterday) ALWAYS passes and represents its thread, suppressing that thread's natural winner.
+    # `forced_threads` is precomputed so the natural winner is suppressed even when it is iterated
+    # BEFORE the forced task (survivors order isn't forced-first) — otherwise a forced task PLUS the
+    # natural winner both survived: two moves for one thread. No-project (discrete) tasks never
+    # collapse. (Several tasks that all match a loose `extra` can still co-surface — that is
+    # _match_extra's breadth, not this collapse's job to trim.)
+    forced_threads = {proj_of(t) for t in survivors if proj_of(t) and is_forced(t)}
     kept, seen_thread = [], set()
     for t in survivors:
         proj = proj_of(t)
@@ -553,10 +565,10 @@ def _gate_and_collapse(tasks, projects, neglected, period, extra=None, surface_d
             continue
         if is_forced(t):
             seen_thread.add(proj)
-            kept.append(t)                                 # explicitly named — guaranteed through
+            kept.append(t)                                 # explicitly named / carried-over — always through
             continue
-        if proj in seen_thread:
-            continue
+        if proj in seen_thread or proj in forced_threads:
+            continue                                       # already shown, or a forced task represents this thread
         if t["id"] != winner_id[proj]:
             continue                                       # not the signal pick — its winner comes later
         seen_thread.add(proj)
@@ -595,6 +607,9 @@ def build_context(capacity=None, start_time=None, end_time=None, extra=None):
     sid = g.get_space_id()
     goals, projects, tasks, strategies, today_recurrings, period_ctx = dp.load_active_items(sid)
     neglected = dp.load_neglected()
+    import plan_snapshot_log
+    undone_yest = plan_snapshot_log.undone_yesterday()   # rollover candidates: yesterday's uncompleted
+    rollover_ids = {u["id"] for u in undone_yest}
     period = period_ctx["period"]
     is_off, in_window = period_ctx["is_off"], period_ctx["in_window"]
 
@@ -620,7 +635,8 @@ def build_context(capacity=None, start_time=None, end_time=None, extra=None):
     meals = dp.default_meal_anchors(today_recurrings, start_time)
     all_anchors = today_recurrings + meals
     # Task selection: foreground projects (period override) sort first; paused-project tasks
-    # are dropped. With no period this preserves the prior date-seeded hash order exactly.
+    # are dropped. With no period this is a calm, stable foreground-first order (no hash — the
+    # old date-seeded shuffle was the drift; the LLM re-sequences from here).
     ordered = select_and_order_tasks(tasks, period)
     # "Fun / hobby"-side (self-directed creative/dev) tasks are kept OUT of the daily plan by
     # default (June, 2026-07-11) so they don't crowd out Obligation + Wellbeing work; necessary
@@ -633,7 +649,7 @@ def build_context(capacity=None, start_time=None, end_time=None, extra=None):
     # held-back tasks stay in Anytype — this only changes what today's plan shows.
     from surface_log import surfaced_dates
     schedulable = _gate_and_collapse(schedulable, projects, neglected, period, extra=extra,
-                                     surface_dates=surfaced_dates())
+                                     surface_dates=surfaced_dates(), rollover_ids=rollover_ids)
 
     # Output SHAPE (Phase 6, Task 6): a fragmented / unknown-timing day (a caregiving window, or
     # a period that asks for a priority list) can't be expressed as a clock schedule — forcing one
@@ -668,6 +684,14 @@ def build_context(capacity=None, start_time=None, end_time=None, extra=None):
         context_block += ("\n\n## No active focus period\n"
                           "- There's no configuration for this stretch. If today's plan feels "
                           "off, June may want to set a focus period — offer it, gently, once.")
+    if undone_yest:
+        roll = ("\n\n## Carried over from yesterday (not marked done)\n"
+                "These were on yesterday's plan and weren't completed. Decide which GENUINELY should "
+                "carry into today — a missed call, an errand that still needs doing — and place those. "
+                "Let go the ones that were fine to skip; not everything should roll forward.\n")
+        for u in undone_yest:
+            roll += f"  - {u['name']}\n"
+        context_block += roll
     full_context = context_block + "\n" + schedule_block
     # Return schedulable (not all tasks): wellbeing work is the open block, so it isn't
     # individually accounted / surfaced / ref-tokened downstream (never-pick-her-threads).
@@ -960,6 +984,8 @@ def _retime_clock_plan(plan, tasks, all_anchors, start_time, end_time):
         return plan
     import daily_plan as dp
 
+    _honor_user_meal(plan, all_anchors)   # honor + learn a meal time June set this turn, before placement
+
     def _match_key(s):
         # Strip parentheticals the model tends to echo ("(~30min)", "(was 09:00)", "(virtual)")
         # so an anchor matches its echo despite decoration; normalize the rest.
@@ -1123,6 +1149,13 @@ def generate_plan(capacity=None, source="generate", extra=None):
         plan_snapshot_log.log_plan_snapshot(saved, source=source)
     except Exception as e:
         print(f"[warn] plan snapshot not written: {e}", file=sys.stderr)  # honest, non-breaking
+    # Rollover observability (its own tag): which of yesterday's undone items the model carried into
+    # today vs let go — so June can watch how well the LLM judges carry-over before we add manual marks.
+    try:
+        import rollover_log
+        rollover_log.log_rollover(saved)
+    except Exception as e:
+        print(f"[warn] rollover not logged: {e}", file=sys.stderr)
     # Spec §10 promise: keep the confirmed plan human-readable when the AI layer is down. Mirror
     # it into ONE Anytype object (updated in place, no per-day accumulation — June's decision).
     # BEST-EFFORT: a mirror failure (Anytype closed, API down) must never break or delay a
@@ -1181,13 +1214,29 @@ def reorder(message, kind):
     )
     saved = plan_store.save_plan(plan, source=kind)
 
+    # Snapshot the RENEGOTIATED plan too (not just fresh generations). Without this, undone_yesterday
+    # reads the morning snapshot and re-surfaces a task June explicitly dropped in a chat renegotiation
+    # — the exact "don't force back what she let go" the rollover design promises. Best-effort.
+    try:
+        import plan_snapshot_log
+        plan_snapshot_log.log_plan_snapshot(saved, source=kind)
+    except Exception as e:
+        print(f"[warn] plan snapshot not written: {e}", file=sys.stderr)
+    try:
+        import rollover_log
+        rollover_log.log_rollover(saved)
+    except Exception as e:
+        print(f"[warn] rollover not logged: {e}", file=sys.stderr)
+
     # Learning loop #1: the correction itself (the richest signal — live negotiation).
     log_correction(kind, before=before, after=saved)
     # Learning loop #2: what surfaced in the renegotiated plan.
     if tasks:
         log_surfaced_batch([{"id": t["id"], "name": t["name"], "type": "task"} for t in tasks])
-    # Learning loop #3 (meal timing): if Lunch moved, nudge the learned default.
-    _maybe_learn_meal_time(saved)
+    # Learning loop #3 (meal timing) now lives inside _retime_clock_plan via _honor_user_meal:
+    # when June explicitly moves a meal this turn (model marks it user_set), Python honors her
+    # time AND nudges the learned default toward it. Driven by her real placement — not the old
+    # closed loop that read Python's own re-placed anchor back to itself (drifted noon -> 12:45).
     # Session history: record this turn so the NEXT negotiate sees it (the bounded conversation
     # June asked for — separate stream from capture). Best-effort; never break a renegotiation.
     try:
@@ -1201,22 +1250,36 @@ def reorder(message, kind):
     return saved
 
 
-def _maybe_learn_meal_time(plan):
-    """If the new plan places Lunch at a time, nudge the learned meal default toward it.
+def _honor_user_meal(plan, all_anchors):
+    """Honor a meal time June explicitly set this turn, and learn from it — the REAL signal.
 
-    Best-effort + fails silently into the log: a meal-learning hiccup must never break a
-    renegotiation. Parses the start time out of the item's 'time' string (e.g. '12:30 PM').
+    When June moves a meal in a renegotiation ("lunch at 2"), the model places it there and marks
+    the item user_set:true (daily_list.md). Python then (a) points the meal ANCHOR at her time so
+    today's plan honors it exactly rather than the stored default, and (b) nudges the learned
+    default toward it via the 80/20 EMA. This replaces the old loop that read Lunch's time out of
+    Python's OWN re-placed anchor and nudged toward itself (drift with no real input from June).
+
+    Best-effort: a meal-learning hiccup must never break a (re)generation.
     """
+    import daily_plan as dp
     for block in plan.get("blocks", []):
-        for item in block.get("items", []):
-            if "lunch" in (item.get("task") or "").lower():
-                t = _parse_first_time(item.get("time", ""))
-                if t:
-                    try:
-                        dp.update_meal_learned_time("lunch", t.hour, t.minute)
-                    except Exception:
-                        pass
+        for it in block.get("items", []):
+            nm = (it.get("task") or it.get("name") or "")
+            if not it.get("user_set") or "lunch" not in nm.lower():
+                continue
+            t = _parse_first_time(it.get("time", ""))
+            if not t:
                 return
+            # (a) point the Lunch anchor at her time so build_schedule places it there today
+            for a in (all_anchors or []):
+                if "lunch" in (a.get("name") or "").lower() and a.get("fixed_time"):
+                    a["fixed_time"] = a["fixed_time"].replace(hour=t.hour, minute=t.minute)
+            # (b) nudge the learned default toward her real placement
+            try:
+                dp.update_meal_learned_time("lunch", t.hour, t.minute)
+            except Exception:
+                pass
+            return
 
 
 def _parse_first_time(time_str):
@@ -1243,7 +1306,7 @@ if __name__ == "__main__":
     args = ap.parse_args()
 
     if args.dry_context:
-        ctx, tasks, st, _shape = build_context(capacity=args.capacity)
+        ctx, tasks, st, _shape, _anchors, _end = build_context(capacity=args.capacity)
         print(ctx)
         print(f"\n[{len(tasks)} tasks would be logged as surfaced]")
     elif args.reorder:

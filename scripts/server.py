@@ -194,8 +194,6 @@ class Handler(BaseHTTPRequestHandler):
                 self.wfile.write(body)
             except FileNotFoundError:
                 self._send(404, {"error": "overlay HTML not found"})
-            except FileNotFoundError:
-                self._send(404, {"error": "overlay HTML not found"})
             return
 
         if self.path == "/manifest.webmanifest":
@@ -732,6 +730,11 @@ class Handler(BaseHTTPRequestHandler):
 
 def main():
     plan_store.load_actions()  # seed the button schema on first run
+    # Reconcile a stuck "running" status left by a crash/kill mid-generation: nothing else ever
+    # resets it, so the overlay's poller would wait on it forever after a restart. A "running"
+    # status at process startup is always stale (nothing was running before this process existed).
+    if plan_store.get_gen_status().get("state") == "running":
+        plan_store.set_gen_status("idle")
     # Restore the persisted backend choice (the gear panel writes it). Env var set by an outer
     # launcher still wins for this process only if no setting was saved.
     s = _load_settings()

@@ -17,7 +17,7 @@ OFFERS a shape for the day — it never commands or scolds. No "you're behind", 
 Run manually to test:  python3 scripts/morning_push.py
 Scheduled by:          ~/Library/LaunchAgents/com.june.controlled-drift.morning.plist
 """
-import sys, os, subprocess, time, datetime as dt
+import sys, os, subprocess, time, datetime as dt, argparse
 import urllib.request
 
 sys.path.insert(0, os.path.dirname(__file__))
@@ -215,14 +215,21 @@ def _first_line_summary(plan):
     return (frame[:90] + "…") if len(frame) > 90 else frame or "A shape for today is ready."
 
 
-def run():
+def run(no_push=False):
     """Generate the morning plan, cache it, and offer it via notification.
 
     Resilience is load-bearing here — this is the keystone, and June reads it on her PHONE in bed.
     A transient network failure must not turn into silence. So: retry generation; if it still
     fails, fall back to the last cached plan (clearly labelled stale); only if there's truly
-    nothing, send an honest failure notice — to the PHONE, not just the Mac."""
+    nothing, send an honest failure notice — to the PHONE, not just the Mac.
+
+    Also updates the shared generation-status file the same way the server's own routes do
+    (plan_store.set_gen_status) — this call used to be the one path that generated a plan
+    WITHOUT touching that status, so a stale "error" from a failed evening refresh could sit
+    there all night even though the morning plan came out fine. `no_push=True` (the --no-push
+    flag) skips ONLY the ntfy phone push, for manual/dev runs that shouldn't ping June's phone."""
     stale = False
+    plan_store.set_gen_status("running")
     plan = _generate_with_retry()
     if plan is None:
         # Primary (Mistral) failed every retry. Try a fresh plan on the fallback backend before
@@ -234,13 +241,19 @@ def run():
         if cached and not cached.get("empty"):
             plan, stale = cached, True
             print("[morning_push] generation failed — falling back to last cached plan", file=sys.stderr)
+            # Generation genuinely failed this run even though a plan still displays — record
+            # that honestly rather than masking it as idle (no silent failures).
+            plan_store.set_gen_status("error", error="morning generation failed; showing last cached plan")
         else:
             # Nothing to send. Surface it honestly, and make sure it reaches her PHONE.
+            plan_store.set_gen_status("error", error="morning generation failed; no cached plan available")
             _notify("Controlled Drift", "Couldn't build this morning's plan — open the overlay to retry.")
-            pushed = _push_failure_to_phone()
+            pushed = False if no_push else _push_failure_to_phone()
             print(f"[morning_push] no plan to send; failure notice to phone: "
                   f"{'sent' if pushed else 'skipped/failed'}", file=sys.stderr)
             return 1
+    else:
+        plan_store.set_gen_status("idle")
 
     summary = _first_line_summary(plan)
     # Permission-granting: "here's a possible shape", not "do this".
@@ -251,16 +264,26 @@ def run():
         except Exception:
             pass
 
-    # The keystone of the keystone: push to June's phone so she reads it in bed.
-    pushed = _push_to_phone(plan, stale=stale)
+    # The keystone of the keystone: push to June's phone so she reads it in bed. Skipped
+    # entirely under --no-push (dev/manual runs) — everything else above still ran normally.
+    pushed = False if no_push else _push_to_phone(plan, stale=stale)
 
     ts = dt.datetime.now().strftime("%A %B %d — %I:%M %p")
     state = "last cached (stale)" if stale else "generated + cached"
     print(f"[morning_push] plan {state} at {ts}")
     print(f"[morning_push] notification: {summary}")
-    print(f"[morning_push] phone push: {'sent' if pushed else 'skipped (no ntfy topic) / failed'}")
+    if no_push:
+        print("[morning_push] phone push: skipped (--no-push)")
+    else:
+        print(f"[morning_push] phone push: {'sent' if pushed else 'skipped (no ntfy topic) / failed'}")
     return 0
 
 
 if __name__ == "__main__":
-    sys.exit(run())
+    parser = argparse.ArgumentParser(description="Generate and push the morning plan.")
+    parser.add_argument("--no-push", action="store_true",
+                        help="Skip the phone push (ntfy) only — generation, caching, the Mac "
+                             "notification, and gen-status tracking all still run normally. Use "
+                             "this for manual/dev runs so testing doesn't ping June's phone.")
+    args = parser.parse_args()
+    sys.exit(run(no_push=args.no_push))

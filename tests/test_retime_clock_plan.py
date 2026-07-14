@@ -80,6 +80,29 @@ def test_fixed_anchor_placed_at_its_time_and_model_echo_dropped():
     assert "id" not in lunch_item                             # anchors keep no done-affordance (unchanged behavior)
 
 
+def test_user_set_meal_honored_and_learned():
+    # June moved lunch this turn ("lunch at 2"): the model placed it at 14:00 with user_set=True.
+    # Python must place Lunch at HER time today (not the 12:45 default) AND nudge the learned
+    # default toward 14:00 — the real signal that replaced the old self-referential loop.
+    tasks = [{"id": "a", "name": "Alpha", "duration_min": 30}]
+    lunch = {"name": "Lunch", "fixed_time": dt.datetime(2026, 7, 13, 12, 45),
+             "duration_min": 30, "_default_anchor": True}
+    plan = _clock_plan([
+        {"time": "10:00 – 10:30", "task": "Alpha", "project": None, "why": "w",
+         "interstitial": False, "id": "a"},
+        {"time": "14:00 – 14:30", "task": "Lunch", "project": None, "why": None,
+         "interstitial": False, "user_set": True},
+    ])
+    before = dp._load_meal_params()["lunch"]["default_hour"]
+    pg._retime_clock_plan(plan, tasks, all_anchors=[lunch],
+                          start_time=dt.datetime(2026, 7, 13, 10, 0),
+                          end_time=dt.datetime(2026, 7, 13, 18, 0))
+    lunches = [tm for name, tm in _times(plan) if name == "Lunch"]
+    assert lunches == ["14:00 – 14:30"]                       # placed at HER time, not the 12:45 default
+    after = dp._load_meal_params()["lunch"]["default_hour"]
+    assert round(after, 2) == round(0.8 * before + 0.2 * 14.0, 2)   # learned toward her real placement
+
+
 def test_renamed_anchor_echo_is_deduped():
     # The model renames anchors freely ("Attend SF LGBT…" for "SF LGBT…", "Lunch (~30min)" for
     # "Lunch"). Both echoes must be dropped so Python's authoritative anchor is the ONLY copy —

@@ -60,39 +60,44 @@ def test_context_no_period_is_clean():
 OLD = dt.datetime(2026, 6, 1, 9, 0)   # stale enough to be "gone quiet"
 
 
-def _neg(name, ntype="task", linked=None, last_surfaced=OLD):
+def _neg(name, ntype="task", linked=None, last_surfaced=OLD, last_completed=OLD):
+    # The active-untouched cohort flags by last COMPLETION now (last_surfaced kept for signature
+    # compatibility; format_context no longer filters on it — that guard lives in active_untouched).
     return {"name": name, "type": ntype, "last_surfaced": last_surfaced,
+            "last_completed": last_completed,
             "linked_projects": linked if linked is not None else []}
 
 
-def test_stale_task_in_active_project_reaches_the_gone_quiet_section():
+def test_stale_item_in_active_project_reaches_the_not_getting_to_section():
     projects = [_proj("Bar", eng="Steady")]
     neglected = [_neg("Foo", linked=["Bar"])]
     ctx = daily_plan.format_context([], projects, [], [], [], neglected, None)
-    assert "gone quiet" in ctx
-    assert "Foo (last seen 2026-06-01)" in ctx
+    assert "not getting to" in ctx
+    assert "Foo (last finished something 2026-06-01)" in ctx
 
 
 def test_backburner_projects_quiet_task_is_not_surfaced_as_a_problem():
     projects = [_proj("Old", eng="Backburner")]
     neglected = [_neg("Zzz", linked=["Old"])]
     ctx = daily_plan.format_context([], projects, [], [], [], neglected, None)
-    assert "gone quiet" not in ctx          # Backburner going quiet is expected, not flagged
+    assert "Zzz" not in ctx                  # a Backburner project is never in the active cohort
 
 
-def test_never_surfaced_item_is_not_gone_quiet():
+def test_never_completed_active_item_renders_plainly():
+    # A cohort item with no completion yet (the active_untouched brand-new-project guard already
+    # ran upstream) renders honestly rather than being dropped — format_context trusts the cohort.
     projects = [_proj("Bar", eng="Steady")]
-    neglected = [_neg("New", linked=["Bar"], last_surfaced=None)]
+    neglected = [_neg("New", linked=["Bar"], last_completed=None)]
     ctx = daily_plan.format_context([], projects, [], [], [], neglected, None)
-    assert "gone quiet" not in ctx          # absence is not "gone quiet"
+    assert "New (nothing finished in it yet)" in ctx
 
 
 def test_project_type_neglected_item_belongs_when_project_is_active():
     projects = [_proj("Baz", eng="Sprint")]
     neglected = [_neg("Baz", ntype="project", linked=["Baz"])]
     ctx = daily_plan.format_context([], projects, [], [], [], neglected, None)
-    assert "gone quiet" in ctx
-    assert "Baz (last seen 2026-06-01)" in ctx
+    assert "not getting to" in ctx
+    assert "Baz (last finished something 2026-06-01)" in ctx
 
 
 def test_gone_quiet_excludes_todays_recurrings():
@@ -100,7 +105,7 @@ def test_gone_quiet_excludes_todays_recurrings():
     neglected = [_neg("Take meds", linked=["Bar"])]
     recurrings = [{"name": "Take meds", "fixed_time": dt.datetime(2026, 6, 1, 9, 0)}]
     ctx = daily_plan.format_context([], projects, [], [], recurrings, neglected, None)
-    assert "gone quiet" not in ctx          # a recurring is separately listed, not re-flagged
+    assert "not getting to" not in ctx      # the only item was a recurring, separately listed
 
 
 # --- the priority-list output shape -----------------------------------------

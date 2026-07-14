@@ -84,7 +84,7 @@ def render_body(plan, now=None):
     """Render the cached plan dict into a plain-language Markdown body for the mirror Note.
 
     Shape: age line first, then the plan itself (clock blocks, or a fragmented-day priority
-    list), then the still-waiting items, then the honest footer. June-facing: plain words, no
+    list), then the honest footer. June-facing: plain words, no
     metaphors, no internal jargon. The mirror deliberately does NOT echo the plan's woven_frame
     or per-block framing prose — only times + task names — so no LLM metaphors leak in.
     """
@@ -115,14 +115,9 @@ def render_body(plan, now=None):
                 name = _item_name(item)
                 lines.append(f"- {t}  {name}" if t else f"- {name}")
 
-    still = plan.get("still_here") or []
-    if still:
-        lines.append("")
-        lines.append("Still waiting — not on today's plan:")
-        for s in still:
-            label = s.get("label") or s.get("name") or "(unnamed)"
-            note = s.get("note")
-            lines.append(f"- {label} — {note}" if note else f"- {label}")
+    # "Still waiting — not on today's plan" is intentionally not rendered into the mirror
+    # (June's decision, 2026-07-13): plan["still_here"] is still produced and read by other
+    # infrastructure, it's just no longer displayed here.
 
     lines.append("")
     lines.append("---")

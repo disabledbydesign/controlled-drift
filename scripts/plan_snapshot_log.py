@@ -31,3 +31,46 @@ def read_snapshots(path=None):
             return [json.loads(line) for line in f if line.strip()]
     except FileNotFoundError:
         return []
+
+
+# --- planned-vs-actual join (the foundation rollover / neglect / learning read) ---------
+
+def _date_str(d):
+    return d.isoformat() if hasattr(d, "isoformat") else str(d)
+
+
+def _plan_task_items(plan):
+    """Real task rows (those carrying an Anytype id) across BOTH plan shapes — a clock day's
+    blocks[] and a fragmented day's flat items[]. Id-less rows (meal/break/appointment
+    anchors) are not tasks and are skipped."""
+    rows = []
+    for b in plan.get("blocks", []):
+        rows.extend(b.get("items", []))
+    rows.extend(plan.get("items", []))
+    return [it for it in rows if it.get("id")]
+
+
+def undone_on(date, path=None):
+    """Tasks that were on `date`'s plan and did NOT get completed that day — the join of the
+    planned side (this log) and the actual side (completion_log). Uses the LATEST snapshot for
+    the day (a renegotiation replaces the morning plan). Returns [{id, name, plan_date}]."""
+    import completion_log
+    ds = _date_str(date)
+    snaps = [s for s in read_snapshots(path) if s.get("plan_date") == ds]
+    if not snaps:
+        return []
+    done = completion_log.completed_ids_on(date)
+    seen, undone = set(), []
+    for it in _plan_task_items(snaps[-1].get("plan", {})):
+        tid = it["id"]
+        if tid in done or tid in seen:
+            continue
+        seen.add(tid)
+        undone.append({"id": tid, "name": it.get("task") or it.get("name"), "plan_date": ds})
+    return undone
+
+
+def undone_yesterday(today=None, path=None):
+    """Convenience: undone_on(yesterday). `today` is overridable for tests."""
+    today = today or dt.date.today()
+    return undone_on(today - dt.timedelta(days=1), path=path)
