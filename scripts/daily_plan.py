@@ -32,6 +32,23 @@ def _prop_val(props_dict, key, kind):
     return p.get(kind) if p else None
 
 
+def _inherit_is_workstream(projects):
+    """Propagate is_workstream down the parent chain: a subproject under a workstream is
+    workstream work even if its own checkbox is unset. Mirrors the Side-inheritance walk and
+    orient_map's `_is_workstream` ancestor logic. Idempotent; safe against parent cycles."""
+    by_id = {p["id"]: p for p in projects}
+    for p in projects:
+        if p.get("is_workstream"):
+            continue
+        seen, cur = set(), p
+        while cur.get("parent_project_id") in by_id and cur["id"] not in seen:
+            seen.add(cur["id"])
+            cur = by_id[cur["parent_project_id"]]
+            if cur.get("is_workstream"):
+                p["is_workstream"] = True
+                break
+
+
 def load_active_items(sid):
     """Load Goals, Projects, Tasks (Active/Needs-Clarifying), Strategies from Anytype."""
     data = g.fetch_all_objects(sid)
@@ -96,6 +113,7 @@ def load_active_items(sid):
                               "engagement": engagement,
                               "engagement_notes": pvn("Engagement notes", "text"),
                               "side": side,
+                              "is_workstream": bool((props.get("is_workstream") or {}).get("checkbox")),
                               "parent_project_id": parent_project_id})
 
     # Side inheritance (June, 2026-07-13): a subproject's Side is read from its nearest
@@ -109,6 +127,12 @@ def load_active_items(sid):
             cur = _by_id[cur["parent_project_id"]]
         if p.get("side") is None and cur is not p:
             p["side"] = cur.get("side")
+
+    # is_workstream inheritance (2026-07-14): a subproject under a workstream IS workstream
+    # work, even if its own checkbox is unset — mirror the Side walk so the daily-plan grain
+    # classifier (grain.classify) filters the whole subtree out of block-grain, as orient_map
+    # already does via _is_workstream's ancestor walk.
+    _inherit_is_workstream(projects)
 
     for obj in data:
         t = obj.get("type")
