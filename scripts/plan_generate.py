@@ -1143,6 +1143,18 @@ def _retime_clock_plan(plan, tasks, all_anchors, start_time, end_time):
     return plan
 
 
+def _log_scheduled_blocks(plan):
+    """Record each block placed in the day as a timestamped 'scheduled' event (decision 2:
+    log rich now, mine later) — the raw material Plan 2's recency-weighted duration proposal
+    reads. One event per block per generation, keyed by project + its chunk length."""
+    if not isinstance(plan, dict):
+        return
+    for b in plan.get("blocks", []):
+        for it in (b.get("items") or []):
+            if it.get("block") and it.get("project_id") and it.get("chunk_min"):
+                block_duration.log_scheduled(it["project_id"], it["chunk_min"])
+
+
 # --- parsing the model output ----------------------------------------------
 
 def parse_plan(model_text):
@@ -1262,6 +1274,13 @@ def generate_plan(capacity=None, source="generate", extra=None):
         rollover_log.log_rollover(saved)
     except Exception as e:
         print(f"[warn] rollover not logged: {e}", file=sys.stderr)
+    # Block scheduling events: record each block placed today at its chunk length (decision 2 —
+    # "log rich now, mine later"), the raw material Plan 2's recency-weighted proposal will read.
+    # Best-effort: a logging hiccup must never break a generation.
+    try:
+        _log_scheduled_blocks(saved)
+    except Exception as e:
+        print(f"[warn] block schedule events not logged: {e}", file=sys.stderr)
     # Spec §10 promise: keep the confirmed plan human-readable when the AI layer is down. Mirror
     # it into ONE Anytype object (updated in place, no per-day accumulation — June's decision).
     # BEST-EFFORT: a mirror failure (Anytype closed, API down) must never break or delay a
@@ -1333,6 +1352,13 @@ def reorder(message, kind):
         rollover_log.log_rollover(saved)
     except Exception as e:
         print(f"[warn] rollover not logged: {e}", file=sys.stderr)
+    # Block scheduling events: record each block placed today at its chunk length (decision 2 —
+    # "log rich now, mine later"), the raw material Plan 2's recency-weighted proposal will read.
+    # Best-effort: a logging hiccup must never break a generation.
+    try:
+        _log_scheduled_blocks(saved)
+    except Exception as e:
+        print(f"[warn] block schedule events not logged: {e}", file=sys.stderr)
 
     # Learning loop #1: the correction itself (the richest signal — live negotiation).
     log_correction(kind, before=before, after=saved)

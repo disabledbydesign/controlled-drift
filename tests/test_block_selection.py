@@ -167,3 +167,20 @@ def test_task_ref_line_task_keeps_held_back_suffix():
     task = {"id": "t1", "name": "Write needs statement", "held_back": 3}
     line = pg._task_ref_line("T2", task)
     assert "· 3 more" in line and "chunk of time" not in line
+
+
+# ---------------------------------------------------------------------------
+# decision 2: every block scheduling event is recorded (log rich now, mine later)
+# ---------------------------------------------------------------------------
+
+def test_log_scheduled_blocks_records_one_event_per_block(monkeypatch):
+    logged = []
+    monkeypatch.setattr(block_duration, "log_scheduled",
+                        lambda pid, mins, **k: logged.append((pid, mins)))
+    plan = {"blocks": [{"items": [
+        {"block": True, "project_id": "lw", "chunk_min": 120},
+        {"id": "t1", "task": "a chore"},                       # non-block → no event
+        {"block": True, "project_id": "sw", "chunk_min": 240},
+    ]}]}
+    pg._log_scheduled_blocks(plan)
+    assert logged == [("lw", 120), ("sw", 240)]
