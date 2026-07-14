@@ -720,8 +720,12 @@ def build_context(capacity=None, start_time=None, end_time=None, extra=None):
     # "Work on X" block (with its project's arc) at render time. Attach the render fields here WITHOUT
     # leaving selection — the task keeps its real id (resolvable, checkoffable). Threaded by id through
     # _resolve_ids → blocks_from_scheduled, exactly like held_back. (display_grain_design REVISION.)
+    # Attach to the FULL active task list (not just the gated set): a block-work task the model
+    # names via the all-tasks name-match (Task 4) must ALSO carry render metadata, or it renders as
+    # a loose row beside its block instead of folding into it (the duplicate-row bug). _resolve_ids
+    # reads this map from all_tasks, so every resolved block-work task groups into its "Work on X".
     _by_name = {p.get("name"): p for p in projects}
-    for t in schedulable:
+    for t in tasks:
         if t.get("block"):
             continue                                   # synthetic container already carries its fields
         ps = t.get("linked_projects") or []
@@ -999,7 +1003,7 @@ def _resolve_ids(plan, ref_map, tasks, all_tasks=None):
     # Block-RENDER metadata for a REAL task whose project is block-work — keyed by the task's own
     # id (no synthetic id). The task resolves normally; these fields make the row render grouped
     # under a "Work on X" block with the project's arc.
-    block_render_by_id = {t["id"]: t for t in tasks if t.get("block_project")}
+    block_render_by_id = {t["id"]: t for t in identity if t.get("block_project")}
     mislabels = 0  # resolved items whose model text differed materially from the real name
     resolved = 0   # items that resolved to a real task id (the resolution-health signal)
 
