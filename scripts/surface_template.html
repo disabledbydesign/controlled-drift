@@ -1,0 +1,931 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Controlled Drift — review &amp; reorganize</title>
+<style>
+  :root{
+    --bg:#0f1420; --panel:#161d2b; --panel2:#1d2536; --border:#2a3346;
+    --text:#e7ecf6; --muted:#9aa7bd; --faint:#6b7890;
+    --goal:#f6b74a; --project:#6aa8ff; --subproject:#33c9c9; --task:#8bd48b; --workstream:#b48ae0;
+    --recurring:#e0a05a;
+    --accent:#f59e0b; --danger:#ff6b6b; --ok:#57d98a; --move:#c79bff;
+    --focus:#8ab4ff;
+  }
+  *{box-sizing:border-box}
+  html,body{margin:0}
+  body{
+    background:var(--bg); color:var(--text);
+    font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",system-ui,sans-serif;
+    font-size:15px; line-height:1.5; padding-bottom:120px;
+  }
+  code,.tag,.mono{font-family:ui-monospace,"SF Mono",Menlo,Consolas,monospace}
+  a{color:var(--project)}
+
+  /* Top toolbar */
+  header{
+    position:sticky; top:0; z-index:30; background:rgba(15,20,32,.92);
+    backdrop-filter:blur(8px); border-bottom:1px solid var(--border);
+    padding:12px 18px; display:flex; gap:12px; align-items:center; flex-wrap:wrap;
+  }
+  header h1{font-size:15px; font-weight:600; margin:0; letter-spacing:.2px}
+  header .spacer{flex:1}
+  .btn{
+    font:inherit; font-size:13px; color:var(--text); background:var(--panel2);
+    border:1px solid var(--border); border-radius:8px; padding:7px 12px;
+    cursor:pointer; transition:background .15s ease, border-color .15s ease;
+    display:inline-flex; align-items:center; gap:6px; min-height:34px;
+  }
+  .btn:hover{background:#26304a}
+  .btn:focus-visible{outline:2px solid var(--focus); outline-offset:2px}
+  .btn.primary{background:var(--accent); color:#20160a; border-color:var(--accent); font-weight:600}
+  .btn.primary:hover{background:#ffbe33}
+  .search{
+    font:inherit; font-size:13px; background:var(--panel2); color:var(--text);
+    border:1px solid var(--border); border-radius:8px; padding:7px 12px; min-width:200px; min-height:34px;
+  }
+  .search:focus-visible{outline:2px solid var(--focus); outline-offset:2px}
+  .count-pill{font-size:12px; color:var(--muted); background:var(--panel2); border:1px solid var(--border);
+    border-radius:20px; padding:4px 11px}
+  .count-pill b{color:var(--accent)}
+
+  main{max-width:1120px; margin:0 auto; padding:18px}
+  .legend{display:flex; gap:14px; flex-wrap:wrap; margin:4px 2px 16px; font-size:12px; color:var(--muted)}
+  .legend span{display:inline-flex; align-items:center; gap:6px}
+  .dot{width:9px; height:9px; border-radius:3px; display:inline-block}
+
+  /* Tree */
+  .node{margin:0}
+  .kids{margin-left:16px; border-left:1px solid var(--border); padding-left:6px}
+  .node > .kids{display:none}          /* collapsed by default */
+  .node.open > .kids{display:block}    /* expand on open */
+  .node.deleted > .row .title{text-decoration:line-through; color:var(--faint)}
+
+  .row{
+    display:flex; align-items:center; gap:8px; padding:5px 8px; border-radius:8px;
+    cursor:default;
+  }
+  .row:hover{background:var(--panel)}
+  .twist{
+    width:20px; height:20px; flex:0 0 20px; border:none; background:none; color:var(--muted);
+    cursor:pointer; display:inline-flex; align-items:center; justify-content:center; padding:0; border-radius:5px;
+  }
+  .twist:hover{background:var(--panel2); color:var(--text)}
+  .twist:focus-visible{outline:2px solid var(--focus); outline-offset:1px}
+  .twist svg{transition:transform .15s ease}
+  .node.open > .row .twist svg{transform:rotate(90deg)}
+  .twist.leaf{visibility:hidden}
+
+  .badge{
+    font-size:10.5px; font-weight:700; letter-spacing:.6px; padding:2px 7px; border-radius:5px;
+    flex:0 0 auto; text-transform:uppercase; border:1px solid transparent;
+  }
+  .badge.GOAL{color:var(--goal); background:rgba(246,183,74,.13); border-color:rgba(246,183,74,.35)}
+  .badge.PROJECT{color:var(--project); background:rgba(106,168,255,.13); border-color:rgba(106,168,255,.35)}
+  .badge.SUBPROJECT{color:var(--subproject); background:rgba(51,201,201,.13); border-color:rgba(51,201,201,.35)}
+  .badge.TASK{color:var(--task); background:rgba(139,212,139,.12); border-color:rgba(139,212,139,.3)}
+  .badge.GROUP{color:var(--danger); background:rgba(255,107,107,.12); border-color:rgba(255,107,107,.3)}
+  .badge.WORKSTREAM{color:var(--workstream); background:rgba(180,138,224,.13); border-color:rgba(180,138,224,.35)}
+  .badge.RECURRING{color:var(--recurring); background:rgba(224,160,90,.13); border-color:rgba(224,160,90,.35)}
+
+  .title{
+    font-size:14.5px; flex:1 1 auto; min-width:0; padding:2px 5px; border-radius:5px;
+    border:1px solid transparent; outline:none; word-break:break-word;
+  }
+  .title[contenteditable]:hover{border-color:var(--border)}
+  .title[contenteditable]:focus{border-color:var(--focus); background:var(--panel2)}
+  .node.GROUP > .row .title{color:var(--danger); font-weight:600; font-size:13px}
+
+  .status{font-size:11px; color:var(--muted); background:var(--panel2); border:1px solid var(--border);
+    border-radius:5px; padding:1px 8px; flex:0 0 auto}
+  .tag{font-size:11px; color:var(--faint); flex:0 0 auto}
+
+  .rowbtns{display:flex; gap:4px; flex:0 0 auto; opacity:0; transition:opacity .12s ease}
+  .row:hover .rowbtns, .row:focus-within .rowbtns{opacity:1}
+  .mini{
+    font:inherit; font-size:11px; color:var(--muted); background:none; border:1px solid var(--border);
+    border-radius:6px; padding:3px 8px; cursor:pointer; display:inline-flex; align-items:center; gap:4px;
+    min-height:26px;
+  }
+  .mini:hover{background:var(--panel2); color:var(--text)}
+  .mini:focus-visible{outline:2px solid var(--focus); outline-offset:1px}
+  .mini.on{border-color:var(--accent); color:var(--accent)}
+  .mini.del.on{border-color:var(--danger); color:var(--danger)}
+
+  /* Body (fields + note) */
+  .body{display:none; margin:2px 0 8px 34px; padding:10px 14px; background:var(--panel);
+    border:1px solid var(--border); border-radius:10px}
+  .node.open > .body{display:block}
+  .fields{display:grid; grid-template-columns:minmax(120px,180px) 1fr; gap:2px 14px; align-items:start}
+  .fname{font-size:12px; color:var(--muted); padding:5px 0}
+  .fval{
+    font-size:13.5px; padding:5px 7px; border-radius:6px; border:1px solid transparent; outline:none;
+    white-space:pre-wrap; word-break:break-word; min-height:1.6em;
+  }
+  .fval:empty::before{content:"—"; color:var(--faint)}
+  .fval[contenteditable]:hover{border-color:var(--border)}
+  .fval[contenteditable]:focus{border-color:var(--focus); background:var(--panel2)}
+  .fval.changed{background:rgba(245,158,11,.10); border-color:rgba(245,158,11,.4)}
+  .fval.readonly{color:var(--faint); cursor:default}
+  .rowsel{font:inherit; font-size:11px; color:var(--muted); background:var(--panel2);
+    border:1px solid var(--border); border-radius:6px; padding:2px 7px; max-width:230px; cursor:pointer; flex:0 0 auto}
+  .rowsel:hover{color:var(--text)}
+  .rowsel.hasval{color:var(--text); border-color:var(--accent)}
+  .rowsel.changed{border-color:var(--accent); background:rgba(245,158,11,.14)}
+  .rowsel:focus-visible,.fsel:focus-visible,.fdate:focus-visible,.fnum:focus-visible{outline:2px solid var(--focus); outline-offset:1px}
+  .fsel,.fdate,.fnum{font:inherit; font-size:13px; background:var(--panel2); color:var(--text);
+    border:1px solid var(--border); border-radius:6px; padding:4px 7px; margin:2px 0; max-width:100%}
+  .fsel.changed,.fdate.changed,.fnum.changed,.fbool.changed,.fmulti.changed{border:1px solid var(--accent); background:rgba(245,158,11,.10); border-radius:6px}
+  .fmulti{display:flex; flex-wrap:wrap; gap:4px 14px; padding:5px 6px; border:1px solid transparent}
+  .chk{font-size:12.5px; color:var(--muted); display:inline-flex; align-items:center; gap:5px; cursor:pointer}
+  .fbool{font-size:13px; color:var(--muted); display:inline-flex; align-items:center; gap:6px; cursor:pointer; padding:4px 6px; border:1px solid transparent; border-radius:6px}
+  .patternnotes{margin-bottom:12px}
+  .patternnotes label{display:block; font-size:12px; color:var(--move); margin-bottom:5px; font-weight:600}
+
+  /* Move picker (2026-07-13) — replaces a flat "every goal/project" dropdown (unusable past
+     a handful of items, June's own words) with a hierarchical, expand/collapse tree matching
+     the same Goal > Project > Subproject / Workstream structure as the main page, plus a
+     filter box. Click the title text to select a destination; click the twist to browse
+     without selecting. */
+  .movebar{margin-top:10px; display:none; gap:8px; flex-wrap:wrap; flex-direction:column; align-items:flex-start}
+  .movebar.show{display:flex}
+  .move-row{display:flex; gap:8px; align-items:center}
+  .movebtn{font:inherit; font-size:13px; background:var(--panel2); color:var(--text);
+    border:1px solid var(--border); border-radius:7px; padding:6px 10px; cursor:pointer;
+    min-width:200px; max-width:360px; text-align:left; overflow:hidden; text-overflow:ellipsis; white-space:nowrap}
+  .movebtn:hover{background:#26304a}
+  .movebtn:focus-visible{outline:2px solid var(--focus); outline-offset:1px}
+  .movebtn.hasval{border-color:var(--move); color:var(--move)}
+  .movepanel{display:none; margin-top:2px; border:1px solid var(--border); border-radius:8px;
+    background:var(--panel); padding:8px; width:100%; max-width:440px; max-height:300px; overflow:auto}
+  .movepanel.show{display:block}
+  .movepanel .mvfilter{width:100%; font:inherit; font-size:12.5px; background:var(--panel2); color:var(--text);
+    border:1px solid var(--border); border-radius:6px; padding:5px 8px; margin-bottom:6px}
+  .movepanel .mvfilter:focus-visible{outline:2px solid var(--focus); outline-offset:1px}
+  .mvrow{display:flex; align-items:center; gap:6px; padding:3px 4px; border-radius:5px; font-size:13px; cursor:pointer}
+  .mvrow:hover{background:var(--panel2)}
+  .mvrow .mvtitle{cursor:pointer}
+  .mvrow .mvtitle:hover{text-decoration:underline}
+  .mvrow.selected{background:rgba(199,155,255,.15)}
+  .mvrow.selected .mvtitle{color:var(--move)}
+  .mvtwist{width:14px; height:14px; flex:0 0 14px; border:none; background:none; color:var(--faint);
+    cursor:pointer; display:inline-flex; align-items:center; justify-content:center; padding:0}
+  .mvtwist.leaf{visibility:hidden; cursor:default}
+  .mvtwist svg{transition:transform .15s ease}
+  .mvnode.open > .mvrow .mvtwist svg{transform:rotate(90deg)}
+  .mvnode > .mvkids{display:none; margin-left:13px; border-left:1px solid var(--border); padding-left:6px}
+  .mvnode.open > .mvkids{display:block}
+  .mvbadge{font-size:9px; font-weight:700; letter-spacing:.4px; text-transform:uppercase; flex:0 0 auto}
+  .mvbadge.GOAL{color:var(--goal)}
+  .mvbadge.PROJECT{color:var(--project)}
+  .mvbadge.SUBPROJECT{color:var(--subproject)}
+  .mvbadge.WORKSTREAM{color:var(--workstream)}
+  .mvempty{color:var(--faint); font-size:12.5px; font-style:italic; padding:4px}
+
+  .notewrap{margin-top:10px; display:none}
+  .notewrap.show{display:block}
+  .notewrap label{display:block; font-size:12px; color:var(--move); margin-bottom:4px; font-weight:600}
+  .notebox{width:100%; font:inherit; font-size:13.5px; background:var(--panel2); color:var(--text);
+    border:1px solid var(--border); border-radius:8px; padding:8px 10px; min-height:56px; resize:vertical}
+  .notebox:focus-visible{outline:2px solid var(--focus); outline-offset:1px}
+  .notewrap.has-note label::after{content:" • saved in diff"; color:var(--ok); font-weight:400}
+
+  /* Add-child bar (2026-07-13) — create a Task/Project from the page itself, not just edit
+     what's already there. Like everything else here, a create is staged client-side and
+     goes out through the same Export diff — nothing is written to Anytype from this page. */
+  .addbar{margin-top:10px; display:none; gap:8px; align-items:center; flex-wrap:wrap}
+  .addbar.show{display:flex}
+  .addbar select, .addbar input{font:inherit; font-size:13px; background:var(--panel2); color:var(--text);
+    border:1px solid var(--border); border-radius:7px; padding:6px 10px}
+  .addbar select:focus-visible, .addbar input:focus-visible{outline:2px solid var(--focus); outline-offset:1px}
+  .addbar input{flex:1 1 160px; min-width:140px}
+  .node.new-pending > .row{background:rgba(87,217,138,.08)}
+  .node.new-pending > .row .badge::after{content:" · new"; text-transform:none; font-weight:400; opacity:.8}
+  .node.hidden-done{display:none}
+
+  /* chips shown on the row after an action */
+  .chip{font-size:11px; padding:1px 7px; border-radius:20px; flex:0 0 auto}
+  .chip.move{color:var(--move); background:rgba(199,155,255,.14)}
+  .chip.note{color:var(--move); background:rgba(199,155,255,.14)}
+  .chip.del{color:var(--danger); background:rgba(255,107,107,.14)}
+
+  /* Bottom diff dock */
+  .dock{
+    position:fixed; left:0; right:0; bottom:0; z-index:40; background:rgba(22,29,43,.97);
+    backdrop-filter:blur(8px); border-top:1px solid var(--border); max-height:44vh; display:flex; flex-direction:column;
+  }
+  .dock .dhead{display:flex; align-items:center; gap:12px; padding:9px 16px; border-bottom:1px solid var(--border); cursor:pointer}
+  .dock .dhead h2{font-size:13px; margin:0; font-weight:600}
+  .dock .dhead .spacer{flex:1}
+  .dock .dbody{overflow:auto; padding:6px 16px 14px; display:none}
+  .dock.open .dbody{display:block}
+  .dock.open .dchev{transform:rotate(180deg)}
+  .difflist{list-style:none; margin:0; padding:0; font-size:13px}
+  .difflist li{padding:5px 0; border-bottom:1px solid rgba(42,51,70,.6); display:flex; gap:8px; align-items:baseline}
+  .difflist .k{font-size:10px; font-weight:700; letter-spacing:.5px; padding:1px 6px; border-radius:4px; flex:0 0 auto}
+  .k.rename{color:var(--goal); background:rgba(246,183,74,.14)}
+  .k.field{color:var(--accent); background:rgba(245,158,11,.14)}
+  .k.move{color:var(--move); background:rgba(199,155,255,.14)}
+  .k.del{color:var(--danger); background:rgba(255,107,107,.14)}
+  .k.note{color:var(--move); background:rgba(199,155,255,.14)}
+  .k.create{color:var(--ok); background:rgba(87,217,138,.14)}
+  .difflist .empty{color:var(--faint); padding:10px 0}
+  .toast{position:fixed; bottom:52vh; left:50%; transform:translateX(-50%); background:var(--ok); color:#052012;
+    padding:9px 16px; border-radius:9px; font-size:13px; font-weight:600; opacity:0; transition:opacity .2s; z-index:60}
+  .toast.show{opacity:1}
+
+  @media (prefers-reduced-motion: reduce){ *{transition:none !important} }
+
+  /* Workstream groups — deliberately NOT styled like a project/subproject row.
+     A workstream (internal dev/research thread, e.g. "Route prioritization and task
+     breakdown") must never read as more real work sitting in the tree: no badge,
+     FULLY functional nodes (editable title, fields, Move/Note/Delete, their own tasks
+     nested underneath) — same as a real PROJECT/SUBPROJECT card, just badged WORKSTREAM
+     (see .badge.WORKSTREAM above) and grouped under a collapsible section header so they
+     read as a visually distinct layer, never interleaved with real projects/subprojects.
+     See docs/map_design.md, "Workstreams are never rendered as projects/subprojects"
+     (decided 2026-07-13; corrected 2026-07-13 — first pass wrongly went read-only/name-only,
+     which broke the whole point of this surface: June needs to WORK on this data, including
+     reorganizing tasks into their correct workstream). */
+  .wsgroup{margin:4px 0 8px; border:1px dashed var(--border); border-radius:8px; background:rgba(255,255,255,.02)}
+  .wshead{display:flex; align-items:center; gap:7px; padding:6px 10px; cursor:pointer;
+    font-size:12px; font-style:italic; color:var(--faint); user-select:none}
+  .wshead:hover{color:var(--muted)}
+  .wshead .wschev{display:inline-flex; transition:transform .15s ease}
+  .wsgroup.open .wshead .wschev{transform:rotate(90deg)}
+  .wslist{display:none; padding:2px 6px 6px 6px}
+  .wsgroup.open .wslist{display:block}
+</style>
+</head>
+<body>
+<header>
+  <h1>Controlled Drift — review &amp; reorganize</h1>
+  <span class="count-pill" id="objcount"></span>
+  <span class="spacer"></span>
+  <input class="search" id="search" type="search" placeholder="Filter by title…" aria-label="Filter items by title">
+  <label class="btn" style="cursor:pointer; gap:7px" for="hideDone"><input type="checkbox" id="hideDone" style="margin:0">Hide done</label>
+  <button class="btn" id="expandAll">Expand all</button>
+  <button class="btn" id="collapseAll">Collapse all</button>
+  <button class="btn" id="rebuildBtn" title="Pull a fresh copy from Anytype — discards unexported edits">↻ Rebuild from Anytype</button>
+  <button class="btn primary" id="exportBtn">Export changes</button>
+</header>
+
+<main>
+  <div class="legend" aria-hidden="true">
+    <span><i class="dot" style="background:var(--goal)"></i>Goal</span>
+    <span><i class="dot" style="background:var(--project)"></i>Project</span>
+    <span><i class="dot" style="background:var(--subproject)"></i>Subproject</span>
+    <span><i class="dot" style="background:var(--task)"></i>Task</span>
+    <span><i class="dot" style="background:var(--workstream)"></i>Workstream</span>
+    <span><i class="dot" style="background:var(--recurring)"></i>Recurring</span>
+    <span style="color:var(--faint)">Click a row's triangle to expand · edit any title or field inline · use Add / Move / Note / Delete</span>
+    <span style="color:var(--faint)">⚙ Workstreams (dashed box) are internal dev/research threads, not projects to choose between — fully editable, same as any row, just grouped separately</span>
+  </div>
+  <div id="tree" role="tree"></div>
+</main>
+
+<div class="dock" id="dock" aria-label="Changes to apply">
+  <div class="dhead" id="dockHead">
+    <h2>Changes to apply</h2>
+    <span class="count-pill"><b id="changeCount">0</b> pending</span>
+    <span class="spacer"></span>
+    <button class="btn" id="exportBtn2">Export</button>
+    <svg class="dchev" width="16" height="16" viewBox="0 0 24 24" fill="none" style="transition:transform .15s"><path d="M6 9l6 6 6-6" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>
+  </div>
+  <div class="dbody">
+    <div class="patternnotes">
+      <label for="patternNote">Pattern notes for Claude — cross-item observations, things not to forget (rides along in Export)</label>
+      <textarea id="patternNote" class="notebox" placeholder="e.g. all the 'cuff order' tasks are really one restart — treat them as a unit; the leatherworking + business projects overlap"></textarea>
+    </div>
+    <ul class="difflist" id="difflist"><li class="empty">No changes yet. Edit a title or field, set engagement on a row, move an item, add a note, or mark one to delete.</li></ul>
+  </div>
+</div>
+<div class="toast" id="toast"></div>
+
+<script>
+const DATA = /*__DATA__*/;
+const FIELDMETA = /*__FIELDMETA__*/;
+</script>
+<script>
+(function(){
+  "use strict";
+  const CHEV = '<svg width="16" height="16" viewBox="0 0 24 24" fill="none"><path d="M9 6l6 6-6 6" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>';
+  const orig = new Map();   // id -> {title, type, fullId, level, fields:{name:value}}
+  const state = new Map();  // id -> {newTitle, fields:{}, move, deleted, note, isNew, parentFullId, parentType}
+  function rec(id){ if(!state.has(id)) state.set(id,{fields:{}}); return state.get(id); }
+  function esc(s){ return (s==null?"":String(s)).replace(/[&<>]/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;"}[c])); }
+
+  // ---- add-from-page (2026-07-13) ------------------------------------------
+  // Which levels can have a "+ Add" button, and what type(s) each may create. A Goal has
+  // no tasks directly (§2 of the data model), only Projects; a Project/Subproject/Workstream
+  // can hold both a Task and a further Subproject.
+  const CAN_ADD_CHILD = new Set(["GOAL","PROJECT","SUBPROJECT","WORKSTREAM"]);
+  const ADD_CHILD_TYPES = {GOAL:["Project"], PROJECT:["Task","Project"],
+                            SUBPROJECT:["Task","Project"], WORKSTREAM:["Task","Project"]};
+  // Mirrors scripts/review_surface.py's PRIORITY list so a brand-new node's fields sort the
+  // same as a real object's would — keep these two lists in sync if either changes.
+  const FIELD_PRIORITY = ["Task status","Project status","Goal status","Engagement","Goal engagement",
+    "Side","Done","Due date","Scheduled","Deadline","Horizon",
+    "Interval unit","Interval count","Day of week","Time of day","Day of month",
+    "Frequency","Has target","Target",
+    "Context","Description","Affective","Reaching for","Resolution condition",
+    "Barriers","Blocked on","Needs clarifying","Excitement level","Duration min",
+    "Duration source","Access conditions","Access notes","AI autonomous",
+    "Depends on","Relevant docs","Arc position rationale","Engagement notes","Last surfaced"];
+  function fieldPrio(name){ const i=FIELD_PRIORITY.indexOf(name); return i<0 ? FIELD_PRIORITY.length : i; }
+  let newCounter=0;
+
+  let objCount=0;
+  function indexNode(n){
+    if(n.id){
+      objCount++;
+      const f={}; (n.fields||[]).forEach(x=>f[x.name]=x.value);
+      if(n.primary) f[n.primary.field]=n.primary.value;
+      orig.set(n.id,{title:n.title,type:n.type,fullId:n.fullId,level:n.level,fields:f});
+    }
+    (n.children||[]).forEach(indexNode);
+    (n.workstreams||[]).forEach(indexNode);  // workstream nodes are fully editable too (2026-07-13)
+  }
+  function normVal(control,v){
+    v=(v==null?"":String(v));
+    if(control==="multi") return v.split(",").map(s=>s.trim()).filter(Boolean).sort().join(",");
+    if(control==="date") return v.slice(0,10);
+    return v.trim();
+  }
+  function ctrlValue(el){
+    const c=el.dataset.control;
+    if(c==="select"||c==="number"||c==="date") return el.value;
+    if(c==="checkbox") return el.checked?"yes":"no";
+    if(c==="multi") return Array.from(el.querySelectorAll("input:checked")).map(i=>i.value).join(", ");
+    return el.textContent; // text / contenteditable
+  }
+  function fieldControl(typeName, fld){
+    const meta=(FIELDMETA[typeName]||{})[fld.name]||{format:"text"};
+    const fmt=meta.format, name=fld.name, val=fld.value||"";
+    let el;
+    if(fmt==="select"){
+      el=document.createElement("select"); el.className="fsel"; el.dataset.control="select";
+      el.innerHTML='<option value="">—</option>'+(meta.options||[]).map(o=>'<option'+(o===val?' selected':'')+'>'+esc(o)+'</option>').join('');
+    } else if(fmt==="multi_select"){
+      el=document.createElement("div"); el.className="fmulti"; el.dataset.control="multi";
+      const have=val.split(",").map(s=>s.trim());
+      el.innerHTML=(meta.options||[]).map(o=>'<label class="chk"><input type="checkbox" value="'+esc(o)+'"'+(have.indexOf(o)>=0?' checked':'')+'> '+esc(o)+'</label>').join('');
+    } else if(fmt==="checkbox"){
+      el=document.createElement("label"); el.className="fbool"; el.dataset.control="checkbox";
+      const cb=document.createElement("input"); cb.type="checkbox"; cb.checked=(val==="yes");
+      el.appendChild(cb); el.appendChild(document.createTextNode(" "+(val==="yes"?"yes":"no")));
+      // report role on the label; ctrlValue reads .checked via querySelector
+      el.dataset.control="checkbox";
+      Object.defineProperty(el,"checked",{get:()=>cb.checked});
+    } else if(fmt==="date"){
+      el=document.createElement("input"); el.type="date"; el.className="fdate"; el.dataset.control="date"; el.value=val.slice(0,10);
+    } else if(fmt==="number"){
+      el=document.createElement("input"); el.type="number"; el.className="fnum"; el.dataset.control="number"; el.value=val;
+    } else if(fmt==="objects"){
+      el=document.createElement("div"); el.className="fval readonly"; el.textContent=val; el.title="link field — edit by using Move, or leave a note";
+      return el; // read-only, no role
+    } else {
+      el=document.createElement("div"); el.className="fval"; el.contentEditable="true"; el.spellcheck=false; el.dataset.control="text"; el.textContent=val;
+    }
+    el.dataset.role="field"; el.dataset.field=name;
+    return el;
+  }
+  DATA.forEach(indexNode);
+
+  // ---- workstream group wrapper ----
+  // A workstream IS a fully functional node — editable title, fields, Move/Note/Delete,
+  // its own tasks nested underneath (rendered via the SAME nodeEl() as any real
+  // project/subproject; the `w` items here are full node objects from node_proj(),
+  // not name-only summaries). The only thing that makes it "visually distinct" is the
+  // WORKSTREAM badge color (see .badge.WORKSTREAM) and this collapsible wrapper, which
+  // groups all of a project's workstreams together instead of interleaving them with
+  // its real children. (Corrected 2026-07-13 — an earlier pass made these read-only
+  // name-only entries, which broke the surface's whole point: June needs to WORK on
+  // this data, including reorganizing tasks into their correct workstream.)
+  function wsGroupEl(ws){
+    const box=document.createElement("div"); box.className="wsgroup";
+    const head=document.createElement("div"); head.className="wshead";
+    const n=ws.length;
+    head.innerHTML='<span class="wschev">'+CHEV+'</span><span>⚙ Workstreams ('+n+') — dev/research threads, kept structurally separate from real projects/subprojects</span>';
+    const list=document.createElement("div"); list.className="wslist";
+    ws.forEach(w=>list.appendChild(nodeEl(w)));
+    head.addEventListener("click",()=>box.classList.toggle("open"));
+    box.appendChild(head); box.appendChild(list);
+    return box;
+  }
+
+  // ---- build DOM ----
+  const tree=document.getElementById("tree");
+  function nodeEl(n){
+    const wrap=document.createElement("div");
+    wrap.className="node "+n.level;
+    if(n.id) wrap.dataset.id=n.id;
+    wrap.setAttribute("role","treeitem");
+    const hasKids=(n.children&&n.children.length)|| (n.fields&&n.fields.length) || (n.workstreams&&n.workstreams.length);
+
+    const row=document.createElement("div"); row.className="row";
+    const tw=document.createElement("button");
+    tw.className="twist"+(hasKids?"":" leaf"); tw.innerHTML=CHEV;
+    tw.setAttribute("aria-label","Expand or collapse");
+    row.appendChild(tw);
+    const badge=document.createElement("span"); badge.className="badge "+n.level; badge.textContent=n.level;
+    row.appendChild(badge);
+    const title=document.createElement("span"); title.className="title"; title.textContent=n.title;
+    if(n.id){ title.contentEditable="true"; title.spellcheck=false; title.dataset.role="title"; }
+    row.appendChild(title);
+    if(n.primary && n.id){
+      const meta=(FIELDMETA[n.type]||{})[n.primary.field]||{};
+      const sel=document.createElement("select"); sel.className="rowsel";
+      sel.dataset.role="field"; sel.dataset.field=n.primary.field; sel.dataset.control="select";
+      sel.setAttribute("aria-label", n.primary.field);
+      sel.innerHTML='<option value="">— set '+esc(n.primary.field.toLowerCase())+' —</option>'+
+        (meta.options||[]).map(o=>'<option'+(o===n.primary.value?' selected':'')+'>'+esc(o)+'</option>').join('');
+      if(n.primary.value) sel.classList.add("hasval");
+      row.appendChild(sel);
+    }
+    // chips holder
+    const chips=document.createElement("span"); chips.className="chips"; chips.dataset.chips="1"; row.appendChild(chips);
+    if(n.id){ const tg=document.createElement("span"); tg.className="tag"; tg.textContent="#"+n.id; row.appendChild(tg); }
+
+    if(n.id){
+      const btns=document.createElement("span"); btns.className="rowbtns";
+      btns.innerHTML =
+        (CAN_ADD_CHILD.has(n.level) ? '<button class="mini" data-act="add">+ Add</button>' : '') +
+        '<button class="mini" data-act="move">Move</button>'+
+        '<button class="mini" data-act="note">Note</button>'+
+        '<button class="mini del" data-act="delete">Delete</button>';
+      row.appendChild(btns);
+    }
+    wrap.appendChild(row);
+
+    // body
+    if(n.id){
+      const body=document.createElement("div"); body.className="body";
+      if(n.fields&&n.fields.length){
+        const fg=document.createElement("div"); fg.className="fields";
+        n.fields.forEach(fld=>{
+          const fn=document.createElement("div"); fn.className="fname"; fn.textContent=fld.name; fg.appendChild(fn);
+          fg.appendChild(fieldControl(n.type, fld));
+        });
+        body.appendChild(fg);
+      }
+      // move bar — hierarchical picker (2026-07-13), see buildMoveTree/renderMoveTree below
+      const mv=document.createElement("div"); mv.className="movebar"; mv.dataset.movebar="1";
+      const mrow=document.createElement("div"); mrow.className="move-row";
+      const mbtn=document.createElement("button"); mbtn.className="mini movebtn"; mbtn.type="button";
+      mbtn.dataset.role="moveOpen"; mbtn.textContent="— move under… —";
+      const clr=document.createElement("button"); clr.className="mini"; clr.textContent="clear"; clr.dataset.role="moveClear";
+      mrow.appendChild(mbtn); mrow.appendChild(clr); mv.appendChild(mrow);
+      const panel=document.createElement("div"); panel.className="movepanel"; panel.dataset.role="movePanel";
+      const filt=document.createElement("input"); filt.className="mvfilter"; filt.dataset.role="mvFilter";
+      filt.placeholder="Filter goals/projects…"; filt.autocomplete="off";
+      const mvtree=document.createElement("div"); mvtree.dataset.role="mvTree";
+      panel.appendChild(filt); panel.appendChild(mvtree); mv.appendChild(panel);
+      body.appendChild(mv);
+      // Built lazily on first open (buildMoveTree/renderMoveTree defined below, after DATA
+      // is available) — see the click handler for [data-role=moveOpen].
+      // note
+      const nw=document.createElement("div"); nw.className="notewrap"; nw.dataset.notewrap="1";
+      nw.innerHTML='<label>Note for Claude (things that aren\'t simple fixes)</label>';
+      const nb=document.createElement("textarea"); nb.className="notebox"; nb.dataset.role="note";
+      nb.placeholder="e.g. this whole project needs rethinking — let's talk about it";
+      nw.appendChild(nb); body.appendChild(nw);
+
+      // add-child bar (2026-07-13) — staged as a pending create, same as everything else
+      if(CAN_ADD_CHILD.has(n.level)){
+        const ab=document.createElement("div"); ab.className="addbar"; ab.dataset.addbar="1";
+        const typeSel=document.createElement("select"); typeSel.dataset.role="addType";
+        typeSel.innerHTML=ADD_CHILD_TYPES[n.level].map(t=>'<option value="'+t+'">'+t+'</option>').join("");
+        const titleInp=document.createElement("input"); titleInp.type="text"; titleInp.dataset.role="addTitle";
+        titleInp.placeholder="Title…"; titleInp.autocomplete="off";
+        const goBtn=document.createElement("button"); goBtn.className="mini"; goBtn.textContent="Create"; goBtn.dataset.role="addGo";
+        const cancelBtn=document.createElement("button"); cancelBtn.className="mini"; cancelBtn.textContent="Cancel"; cancelBtn.dataset.role="addCancel";
+        ab.appendChild(typeSel); ab.appendChild(titleInp); ab.appendChild(goBtn); ab.appendChild(cancelBtn);
+        body.appendChild(ab);
+      }
+
+      wrap.appendChild(body);
+    }
+
+    if((n.children&&n.children.length) || (n.workstreams&&n.workstreams.length)){
+      const kids=document.createElement("div"); kids.className="kids"; kids.setAttribute("role","group");
+      (n.children||[]).forEach(c=>kids.appendChild(nodeEl(c)));
+      if(n.workstreams&&n.workstreams.length) kids.appendChild(wsGroupEl(n.workstreams));
+      wrap.appendChild(kids);
+    }
+    return wrap;
+  }
+  DATA.forEach(n=>tree.appendChild(nodeEl(n)));
+  document.getElementById("objcount").innerHTML="<b>"+objCount+"</b> items";
+
+  // ---- interactions ----
+  function toggle(wrap,force){
+    const open = force==null ? !wrap.classList.contains("open") : force;
+    wrap.classList.toggle("open",open);
+  }
+
+  // ---- Move picker: hierarchical tree (2026-07-13) --------------------------
+  // Replaces a flat "every goal/project in one dropdown" select — unusable once the space
+  // has more than a handful of items (June's own words). Reuses the SAME DATA tree already
+  // embedded for the main page, filtered to GOAL/PROJECT/SUBPROJECT/WORKSTREAM (a Task can't
+  // be a move destination), with the node being moved (and its own subtree, to avoid a
+  // cycle) excluded.
+  function collectSubtreeIds(n, set){
+    set.add(n.id);
+    (n.children||[]).forEach(c=>collectSubtreeIds(c,set));
+    (n.workstreams||[]).forEach(c=>collectSubtreeIds(c,set));
+    return set;
+  }
+  function buildMoveTree(nodes, excludeIds){
+    const out=[];
+    for(const n of nodes){
+      // A GROUP ("⚠ NO GOAL YET…") is a synthetic bucket, not itself a destination — but the
+      // REAL projects inside it are movable-under, so skip the group and hoist its children up.
+      if(n.level==="GROUP"){
+        out.push(...buildMoveTree([...(n.children||[]), ...(n.workstreams||[])], excludeIds));
+        continue;
+      }
+      // Tasks and Recurring items are leaves — never valid parents to move something under.
+      if(!n.id || n.level==="TASK" || n.level==="RECURRING") continue;
+      if(excludeIds.has(n.id)) continue;
+      const kids=buildMoveTree([...(n.children||[]), ...(n.workstreams||[])], excludeIds);
+      out.push({id:n.id, fullId:n.fullId, title:n.title, level:n.level, kids});
+    }
+    return out;
+  }
+  function renderMoveTree(nodes, onPick){
+    const box=document.createElement("div");
+    if(!nodes.length){ box.innerHTML='<div class="mvempty">Nothing else to move under.</div>'; return box; }
+    nodes.forEach(n=>{
+      const mv=document.createElement("div"); mv.className="mvnode";
+      const row=document.createElement("div"); row.className="mvrow";
+      const tw=document.createElement("button"); tw.type="button";
+      tw.className="mvtwist"+(n.kids.length?"":" leaf"); tw.innerHTML=CHEV;
+      tw.setAttribute("aria-label","Expand or collapse");
+      row.appendChild(tw);
+      const badge=document.createElement("span"); badge.className="mvbadge "+n.level; badge.textContent=n.level[0];
+      badge.title=n.level; row.appendChild(badge);
+      const title=document.createElement("span"); title.className="mvtitle"; title.textContent=n.title;
+      row.appendChild(title);
+      mv.appendChild(row);
+      if(n.kids.length){
+        const kidsBox=renderMoveTree(n.kids, onPick); kidsBox.className="mvkids"; mv.appendChild(kidsBox);
+      }
+      tw.addEventListener("click",ev=>{ ev.stopPropagation(); if(n.kids.length) mv.classList.toggle("open"); });
+      title.addEventListener("click",ev=>{ ev.stopPropagation(); onPick(n); });
+      box.appendChild(mv);
+    });
+    return box;
+  }
+  function setMove(wrap,id,n){
+    const r=rec(id);
+    r.move={toId:n.id, toLabel:n.level+" › "+n.title, toFull:n.fullId};
+    const btn=wrap.querySelector('[data-role=moveOpen]');
+    btn.textContent=r.move.toLabel; btn.classList.add("hasval");
+    wrap.querySelector('[data-role=movePanel]').classList.remove("show");
+    refreshChips(wrap,id); renderDiff();
+  }
+  function clearMove(wrap,id){
+    const r=rec(id); delete r.move;
+    const btn=wrap.querySelector('[data-role=moveOpen]');
+    btn.textContent="— move under… —"; btn.classList.remove("hasval");
+    refreshChips(wrap,id); renderDiff();
+  }
+  function openMovePanel(wrap,id){
+    const panel=wrap.querySelector('[data-role=movePanel]');
+    const wasOpen=panel.classList.contains("show");
+    panel.classList.toggle("show",!wasOpen);
+    if(wasOpen) return;
+    const mvtree=panel.querySelector('[data-role=mvTree]');
+    if(!mvtree.dataset.built){
+      // Exclude the node's own whole subtree (not just its id) so you can't move a
+      // project under its own descendant — a cycle the old flat dropdown didn't guard
+      // against either, but is cheap to fix correctly now that the tree is available.
+      const selfNode=findNodeInData(id);
+      const exclude=selfNode ? collectSubtreeIds(selfNode, new Set()) : new Set([id]);
+      const mtree=buildMoveTree(DATA, exclude);
+      mvtree.appendChild(renderMoveTree(mtree, n=>setMove(wrap,id,n)));
+      mvtree.dataset.built="1";
+      mvtree._fullTree=mtree;  // kept for the filter to re-render against
+    }
+    panel.querySelector('[data-role=mvFilter]').focus();
+  }
+  function findNodeInData(id){
+    function walk(nodes){
+      for(const n of nodes){
+        if(n.id===id) return n;
+        const r=walk([...(n.children||[]), ...(n.workstreams||[])]);
+        if(r) return r;
+      }
+      return null;
+    }
+    return walk(DATA);
+  }
+  function filterMoveTree(panel,id,wrap,q){
+    const mvtree=panel.querySelector('[data-role=mvTree]');
+    const full=mvtree._fullTree; if(!full) return;
+    if(!q){ mvtree.innerHTML=""; mvtree.appendChild(renderMoveTree(full, n=>setMove(wrap,id,n))); return; }
+    const lq=q.toLowerCase();
+    function prune(nodes){
+      const out=[];
+      for(const n of nodes){
+        const kids=prune(n.kids);
+        if(n.title.toLowerCase().includes(lq) || kids.length) out.push({...n, kids});
+      }
+      return out;
+    }
+    const pruned=prune(full);
+    mvtree.innerHTML="";
+    mvtree.appendChild(renderMoveTree(pruned, n=>setMove(wrap,id,n)));
+    mvtree.querySelectorAll(".mvnode").forEach(el=>el.classList.add("open"));
+  }
+
+  // ---- add-from-page: creation (2026-07-13) ----------------------------------
+  function childLevelFor(parentLevel,type){
+    if(type==="Task") return "TASK";
+    if(parentLevel==="GOAL") return "PROJECT";
+    if(parentLevel==="WORKSTREAM") return "WORKSTREAM";  // inherits, same rule as existing data
+    return "SUBPROJECT";
+  }
+  function buildNewNodeFields(type, primaryField){
+    const meta=FIELDMETA[type]||{};
+    return Object.keys(meta).filter(nm=>nm!==primaryField)
+      .sort((a,b)=>fieldPrio(a)-fieldPrio(b))
+      .map(nm=>({name:nm, value:"", format:meta[nm].format}));
+  }
+  function ensureKids(wrap){
+    let kids=wrap.querySelector(':scope > .kids');
+    if(!kids){
+      kids=document.createElement("div"); kids.className="kids"; kids.setAttribute("role","group");
+      wrap.appendChild(kids);
+      const tw=wrap.querySelector(':scope > .row > .twist'); if(tw) tw.classList.remove("leaf");
+    }
+    return kids;
+  }
+  // Scope note: a brand-new node always lands in the parent's plain .kids container, even
+  // when it's WORKSTREAM-level (inherited from a WORKSTREAM parent) — it does NOT get its
+  // own synthetic .wsgroup wrapper. That separation is enforced for existing data (the
+  // actual source of June's confusion); a just-created, not-yet-exported object gets the
+  // correct wsgroup placement automatically the next time the page rebuilds from Anytype
+  // after export+apply. Not worth replicating that machinery for a transient DOM node.
+  function createChildNode(parentWrap, parentId, type, title){
+    const t=title.trim(); if(!t) return null;
+    const parentOrig=orig.get(parentId);
+    const level=childLevelFor(parentOrig.level, type);
+    const newId="new"+(++newCounter);
+    const primaryField=(type==="Task")?"Task status":"Engagement";
+    const fields=buildNewNodeFields(type, primaryField);
+    const node={id:newId, fullId:null, type:type, level:level, title:t,
+                primary:{field:primaryField, value:""}, fields:fields, children:[]};
+    orig.set(newId, {title:"", type:type, fullId:null, level:level,
+                      fields:Object.fromEntries(fields.map(f=>[f.name,""]))});
+    const r=rec(newId);
+    r.isNew=true; r.newTitle=t;
+    r.parentFullId=parentOrig.fullId; r.parentType=parentOrig.type; r.parentLabel=parentOrig.title;
+    // When the parent is ITSELF a pending create, it has no fullId yet — carry its synthetic
+    // page-id so the apply step can wire child→parent among the newly-created objects, rather
+    // than relying on the (fragile, possibly-duplicate) parent title alone.
+    r.parentTempId = parentOrig.fullId ? null : parentId;
+    const kids=ensureKids(parentWrap);
+    const el=nodeEl(node);
+    el.classList.add("new-pending");
+    const tagEl=el.querySelector(':scope > .row > .tag'); if(tagEl) tagEl.textContent="new";
+    // Move is meaningless on a not-yet-created node (its parent is set by where it's created,
+    // and the export's create-shape doesn't carry a move) — remove it so it can't silently
+    // stage a move that then vanishes on export. Re-parent after it's real, next rebuild.
+    const mvBtn=el.querySelector(':scope > .row .rowbtns [data-act="move"]'); if(mvBtn) mvBtn.remove();
+    kids.appendChild(el);
+    toggle(parentWrap,true); toggle(el,true);
+    refreshChips(el,newId); renderDiff();
+    return el;
+  }
+
+  tree.addEventListener("click",e=>{
+    const tw=e.target.closest(".twist");
+    if(tw){ const w=tw.closest(".node"); if(!tw.classList.contains("leaf")) toggle(w); return; }
+    const mini=e.target.closest(".mini"); if(!mini) return;
+    const wrap=mini.closest(".node"); const id=wrap.dataset.id;
+    const act=mini.dataset.act;
+    if(act==="move"){ toggle(wrap,true); wrap.querySelector('[data-movebar]').classList.toggle("show"); }
+    else if(act==="note"){ toggle(wrap,true); wrap.querySelector('[data-notewrap]').classList.toggle("show"); wrap.querySelector('[data-role=note]').focus(); }
+    else if(act==="add"){
+      toggle(wrap,true); const ab=wrap.querySelector(':scope > .body > [data-addbar]');
+      ab.classList.toggle("show");
+      if(ab.classList.contains("show")) ab.querySelector('[data-role=addTitle]').focus();
+    }
+    else if(act==="delete"){
+      const r=rec(id);
+      if(r.isNew){
+        // Cancel a not-yet-created node entirely — nothing to "delete" in Anytype yet.
+        wrap.remove(); state.delete(id); orig.delete(id); renderDiff(); return;
+      }
+      r.deleted=!r.deleted; wrap.classList.toggle("deleted",r.deleted);
+      mini.classList.toggle("on",r.deleted);
+      refreshChips(wrap,id); renderDiff();
+    }
+    else if(mini.dataset.role==="moveClear"){ clearMove(wrap,id); }
+    else if(mini.dataset.role==="moveOpen"){ openMovePanel(wrap,id); }
+    else if(mini.dataset.role==="addGo"){
+      const ab=mini.closest('[data-addbar]');
+      const type=ab.querySelector('[data-role=addType]').value;
+      const titleInp=ab.querySelector('[data-role=addTitle]');
+      const el=createChildNode(wrap, id, type, titleInp.value);
+      if(el){ titleInp.value=""; ab.classList.remove("show"); }
+      else titleInp.focus();
+    }
+    else if(mini.dataset.role==="addCancel"){
+      const ab=mini.closest('[data-addbar]'); ab.classList.remove("show");
+      ab.querySelector('[data-role=addTitle]').value="";
+    }
+  });
+
+  function onEdit(e){
+    const fieldEl=e.target.closest("[data-role=field]");
+    if(fieldEl){ handleField(fieldEl); return; }
+    const t=e.target;
+    if(t.dataset.role==="title"){
+      const wrap=t.closest(".node"); const id=wrap.dataset.id; const r=rec(id);
+      const cur=t.textContent, was=orig.get(id).title;
+      if(cur!==was) r.newTitle=cur; else delete r.newTitle;
+      renderDiff();
+    } else if(t.dataset.role==="note"){
+      const wrap=t.closest(".node"); const id=wrap.dataset.id; const r=rec(id);
+      const v=t.value.trim(); if(v) r.note=v; else delete r.note;
+      t.closest("[data-notewrap]").classList.toggle("has-note",!!v);
+      refreshChips(wrap,id); renderDiff();
+    } else if(t.dataset.role==="mvFilter"){
+      const wrap=t.closest(".node"); const id=wrap.dataset.id;
+      const panel=t.closest('[data-role=movePanel]');
+      filterMoveTree(panel,id,wrap,t.value.trim());
+    }
+  }
+  function handleField(el){
+    const wrap=el.closest(".node"); const id=wrap.dataset.id; const r=rec(id);
+    const name=el.dataset.field, control=el.dataset.control;
+    if(control==="checkbox" && el.childNodes[1]) el.childNodes[1].textContent=" "+(el.checked?"yes":"no");
+    const cur=ctrlValue(el), was=orig.get(id).fields[name]||"";
+    if(normVal(control,cur)!==normVal(control,was)){ r.fields[name]=cur; el.classList.add("changed"); }
+    else { delete r.fields[name]; el.classList.remove("changed"); }
+    if(el.classList.contains("rowsel")) el.classList.toggle("hasval", !!el.value);
+    renderDiff();
+  }
+  tree.addEventListener("input", onEdit);
+  tree.addEventListener("change", onEdit);
+
+  function refreshChips(wrap,id){
+    const holder=wrap.querySelector('[data-chips]'); if(!holder) return;
+    const r=state.get(id)||{}; holder.innerHTML="";
+    if(r.move){ const c=document.createElement("span"); c.className="chip move"; c.textContent="→ "+r.move.toLabel; holder.appendChild(c); }
+    if(r.note){ const c=document.createElement("span"); c.className="chip note"; c.textContent="note"; holder.appendChild(c); }
+    if(r.deleted){ const c=document.createElement("span"); c.className="chip del"; c.textContent="delete"; holder.appendChild(c); }
+  }
+
+  // ---- diff panel ----
+  const difflist=document.getElementById("difflist");
+  function changedItems(){
+    const out=[];
+    state.forEach((r,id)=>{
+      const has = r.isNew || r.newTitle!=null || (r.fields&&Object.keys(r.fields).length) || r.move || r.deleted || r.note;
+      if(has) out.push([id,r]);
+    });
+    return out;
+  }
+  function renderDiff(){
+    if(hideDone.checked) applyHideDone();  // e.g. marking something Done while filtered
+    const items=changedItems();
+    document.getElementById("changeCount").textContent=items.length;
+    if(!items.length){ difflist.innerHTML='<li class="empty">No changes yet. Edit a title or field, move an item, add a note, or mark one to delete.</li>'; return; }
+    const rows=[];
+    items.forEach(([id,r])=>{
+      const o=orig.get(id); const name=r.newTitle||o.title;
+      if(r.isNew){
+        rows.push(li("create","CREATE", '<b>'+esc(o.type)+': '+esc(name||"(untitled)")+'</b> under '+esc(r.parentLabel||"?")));
+        if(r.fields) Object.keys(r.fields).forEach(fn=>{
+          rows.push(li("field",fn.toUpperCase(), '<b>'+esc(name)+'</b>: '+esc((r.fields[fn]||"—").slice(0,80))));
+        });
+        if(r.note) rows.push(li("note","NOTE", '<b>'+esc(name)+'</b>: '+esc(r.note.slice(0,90))));
+        return;  // a pending create is never also a delete/rename/move of an existing object
+      }
+      if(r.deleted) rows.push(li("del","DELETE", '<b>'+esc(o.title)+'</b> <span class="tag">#'+id+'</span>'));
+      if(r.newTitle!=null) rows.push(li("rename","RENAME", esc(o.title)+' → <b>'+esc(r.newTitle)+'</b> <span class="tag">#'+id+'</span>'));
+      if(r.move) rows.push(li("move","MOVE", '<b>'+esc(name)+'</b> under '+esc(r.move.toLabel)+' <span class="tag">#'+id+'</span>'));
+      if(r.fields) Object.keys(r.fields).forEach(fn=>{
+        rows.push(li("field",fn.toUpperCase(), '<b>'+esc(name)+'</b>: '+esc((r.fields[fn]||"—").slice(0,80))+' <span class="tag">#'+id+'</span>'));
+      });
+      if(r.note) rows.push(li("note","NOTE", '<b>'+esc(name)+'</b>: '+esc(r.note.slice(0,90))+' <span class="tag">#'+id+'</span>'));
+    });
+    difflist.innerHTML=rows.join("");
+  }
+  function li(k,tag,html){ return '<li><span class="k '+k+'">'+tag+'</span><span>'+html+'</span></li>'; }
+
+  // ---- toolbar ----
+  document.getElementById("expandAll").onclick=()=>document.querySelectorAll(".node, .wsgroup").forEach(w=>w.classList.add("open"));
+  document.getElementById("collapseAll").onclick=()=>document.querySelectorAll(".node, .wsgroup").forEach(w=>w.classList.remove("open"));
+  const dock=document.getElementById("dock");
+  document.getElementById("dockHead").onclick=e=>{ if(e.target.closest("#exportBtn2"))return; dock.classList.toggle("open"); };
+
+  // "Hide done" (2026-07-13) — a snapshot filter, not a live watcher: applied when the
+  // checkbox is toggled, and re-applied after any edit (see renderDiff) so marking
+  // something Done while the filter is active hides it without needing a re-toggle.
+  const hideDone=document.getElementById("hideDone");
+  function applyHideDone(){
+    const hide=hideDone.checked;
+    document.querySelectorAll(".node").forEach(w=>{
+      const sel=w.querySelector(':scope > .row > .rowsel');
+      // "Done" can live in the primary select (Task status / Engagement) OR the separate Done
+      // checkbox (the field redundancy June flagged) — hide-done must honor both, or a task
+      // marked done only via the checkbox would wrongly stay visible.
+      const doneField=w.querySelector(':scope > .body [data-field="Done"]');
+      const doneChecked=!!(doneField && doneField.checked);
+      const isDone = (sel && sel.value==="Done") || doneChecked;
+      w.classList.toggle("hidden-done", hide && isDone);
+    });
+  }
+  hideDone.addEventListener("change", applyHideDone);
+
+  const search=document.getElementById("search");
+  search.addEventListener("input",()=>{
+    const q=search.value.trim().toLowerCase();
+    document.querySelectorAll(".node").forEach(w=>{ w.dataset.hit=""; });
+    // Reset BOTH nodes and workstream-group wrappers on clear — a .wsgroup is not a .node, so
+    // leaving it out stranded empty/opened workstream boxes after a search was cleared.
+    if(!q){ document.querySelectorAll(".node, .wsgroup").forEach(w=>{w.style.display="";}); return; }
+    // hide all (nodes + wsgroup wrappers), then show matches + ancestors
+    document.querySelectorAll(".node, .wsgroup").forEach(w=>w.style.display="none");
+    document.querySelectorAll(".node").forEach(w=>{
+      const t=w.querySelector(":scope > .row > .title");
+      if(t && t.textContent.toLowerCase().includes(q)){
+        // Walk up through BOTH .node and .wsgroup ancestors — a matched workstream item
+        // sits inside a .wsgroup wrapper (not itself a .node ancestor), which also needs
+        // opening or the match stays invisible even though its own display is cleared.
+        let cur=w;
+        while(cur && (cur.classList.contains("node")||cur.classList.contains("wsgroup"))){
+          cur.style.display=""; cur.classList.add("open");
+          cur=cur.parentElement ? cur.parentElement.closest(".node, .wsgroup") : null;
+        }
+      }
+    });
+  });
+
+  // ---- export ----
+  let patternNote="";
+  document.getElementById("patternNote").addEventListener("input",e=>{ patternNote=e.target.value.trim(); });
+  function buildExport(){
+    const items=changedItems().map(([id,r])=>{
+      const o=orig.get(id);
+      if(r.isNew){
+        // Distinct shape — nothing exists in Anytype yet, so no id/fullId/renameTo/moveUnder;
+        // just what to create, its type, and where it goes.
+        const out={action:"create", type:o.type, title:r.newTitle||"",
+                    parentFullId:r.parentFullId, parentType:r.parentType, parentLabel:r.parentLabel};
+        if(r.parentTempId) out.parentTempId=r.parentTempId;  // parent is itself a pending create
+        if(r.fields&&Object.keys(r.fields).length) out.fields=r.fields;
+        if(r.note) out.noteForClaude=r.note;
+        return out;
+      }
+      const out={id:id, fullId:o.fullId, type:o.type, title:o.title};
+      if(r.newTitle!=null) out.renameTo=r.newTitle;
+      if(r.fields&&Object.keys(r.fields).length) out.fieldChanges=r.fields;
+      if(r.move) out.moveUnder={id:r.move.toId, fullId:r.move.toFull, label:r.move.toLabel};
+      if(r.deleted) out.delete=true;
+      if(r.note) out.noteForClaude=r.note;
+      return out;
+    });
+    const payload={surface:"controlled-drift", items:items};
+    if(patternNote) payload.patternNotes=patternNote;
+    return JSON.stringify(payload, null, 2);
+  }
+  function toast(msg){ const t=document.getElementById("toast"); t.textContent=msg; t.classList.add("show"); setTimeout(()=>t.classList.remove("show"),1900); }
+  function doExport(){
+    const json=buildExport();
+    const items=changedItems();
+    if(!items.length && !patternNote){ toast("No changes to export yet"); dock.classList.add("open"); return; }
+    // copy + download
+    navigator.clipboard&&navigator.clipboard.writeText(json).then(()=>toast("Copied "+items.length+" changes — paste to Claude"),()=>{});
+    const blob=new Blob([json],{type:"application/json"});
+    const a=document.createElement("a"); a.href=URL.createObjectURL(blob); a.download="controlled_drift_changes.json"; a.click();
+    URL.revokeObjectURL(a.href);
+  }
+  document.getElementById("exportBtn").onclick=doExport;
+  document.getElementById("exportBtn2").onclick=doExport;
+
+  document.getElementById("rebuildBtn").onclick=async ()=>{
+    const pending=changedItems().length + (patternNote?1:0);
+    if(pending && !confirm(pending+" unexported change(s) will be discarded by a rebuild.\nExport first, or rebuild anyway?")) return;
+    try{
+      const r=await fetch("/rebuild",{method:"POST"});
+      if(!r.ok) throw new Error("status "+r.status);
+      toast("Rebuilt from Anytype — reloading with fresh data…");
+      setTimeout(()=>location.reload(), 700);
+    }catch(err){
+      toast("Rebuild needs the local server. In Terminal:  python3 scripts/surface_serve.py");
+      dock.classList.add("open");
+    }
+  };
+
+  renderDiff();
+})();
+</script>
+</body>
+</html>

@@ -31,12 +31,21 @@ Engagement drives the circle:
   Backburner                               →  ○ later
   Done                                     →  Finished section
 
-IMPORTANT: this output is column-aligned monospace. Whoever shows it to June
-MUST show it inside a code block, or the alignment collapses into mush.
+IMPORTANT: the skeleton map (`--skeleton`) is column-aligned monospace. Whoever
+shows it to June MUST show it inside a code block, or the alignment collapses.
+
+TWO AUDIENCES, TWO RENDERERS (2026-07-13):
+  - render_map_agent() — the CLI DEFAULT. A full, labeled, per-stream dump of every
+    stored field + per-task status, for an AGENT asked to orient / assess what's open.
+    June never runs this script herself, so the default serves the agent, not her.
+  - render_map() / render_stream() — the JUNE-FACING register: terse, plain-language,
+    one line per field, monospace (the "skeleton" view). Reached via `--skeleton` on
+    the CLI, and imported directly by the drift skill for her operating flow (unchanged).
 
 Usage:
-  python3 scripts/orient_map.py "Build Controlled Drift"
-  python3 scripts/orient_map.py "Build Controlled Drift" --stream "stream name"
+  python3 scripts/orient_map.py "Build Controlled Drift"              # agent dump (default)
+  python3 scripts/orient_map.py "Build Controlled Drift" --skeleton   # June's terse map
+  python3 scripts/orient_map.py "Build Controlled Drift" --skeleton --stream "stream name"
   python3 scripts/orient_map.py "Build Controlled Drift" --missing
 """
 import sys, os, textwrap
@@ -92,6 +101,27 @@ def _tkey(o):
     t = o.get("type")
     return t.get("key") if isinstance(t, dict) else t
 
+def _any_field(o, label):
+    """Read any field by its DISPLAY NAME regardless of format (used by render_map_agent,
+    which needs every stored field, not just the handful render_map's June-facing register
+    surfaces). Robust to Anytype-auto-generated keys the rest of this file works around by
+    name (Engagement, Side, Arc position rationale, ...) — this generalizes that pattern to
+    any field rather than hand-listing keys one at a time."""
+    for p in o.get("properties", []):
+        if p.get("name") != label:
+            continue
+        if "select" in p:
+            v = p["select"]
+            return v.get("name") if isinstance(v, dict) else v
+        if "multi_select" in p:
+            return [x.get("name") if isinstance(x, dict) else x for x in (p.get("multi_select") or [])]
+        if "objects" in p:
+            return p.get("objects") or []
+        for k in ("text", "number", "date", "checkbox"):
+            if k in p:
+                return p[k]
+    return None
+
 
 # ---------------------------------------------------------------------------
 # Engagement → display label
@@ -112,6 +142,29 @@ def _is_done(stream):
 
 def _is_later(stream):
     return _sel(_props(stream), "engagement") == "Backburner"
+
+def _is_workstream_own(stream):
+    """This project's own Is-workstream checkbox (key is predictable: is_workstream)."""
+    return bool(_props(stream).get("is_workstream", {}).get("checkbox"))
+
+def _is_workstream(stream, all_projects, _by_id=None):
+    """A workstream is never rendered inline as a project/subproject (June, 2026-07-13,
+    docs/map_design.md). Own checkbox wins; otherwise inherited from the nearest ancestor
+    that has it set — same walk-up-the-Parent-project-chain mechanism as Side inheritance
+    in scripts/daily_plan.py, so a newly nested sub-workstream needs no hand-tagging."""
+    if _by_id is None:
+        _by_id = {p["id"]: p for p in all_projects}
+    seen, cur = set(), stream
+    while True:
+        if _is_workstream_own(cur):
+            return True
+        parents = _objs(_props(cur), "gsdo_parent_project")
+        if not parents or cur["id"] in seen:
+            return False
+        seen.add(cur["id"])
+        cur = _by_id.get(parents[0])
+        if cur is None:
+            return False
 
 def _stream_order(stream):
     """Soft-sequence override. Read by name — key is auto-generated.
@@ -321,9 +374,27 @@ def _steps_for(stream_id, tasks):
 # ---------------------------------------------------------------------------
 
 def _children_of(parent_id, all_projects):
-    """Return all projects whose Parent project includes parent_id."""
+    """Return all NON-workstream projects whose Parent project includes parent_id.
+
+    Workstreams are excluded here (not just filtered at the top of render_map) so every
+    consumer of this function — render_map, render_stream, _all_sub_projects — inherits
+    the same rule automatically: a workstream never appears inline in the project tree,
+    at any depth. See docs/map_design.md."""
     return [p for p in all_projects
-            if parent_id in _objs(_props(p), "gsdo_parent_project")]
+            if parent_id in _objs(_props(p), "gsdo_parent_project")
+            and not _is_workstream(p, all_projects)]
+
+
+def _workstream_descendants(parent_id, all_projects):
+    """All workstream-tagged (including inherited) projects anywhere under parent_id,
+    for the compact summary section — deliberately terse (names only, no arc/detail),
+    so it reads as a structurally different kind of list, not more streams to parse."""
+    direct = [p for p in all_projects
+              if parent_id in _objs(_props(p), "gsdo_parent_project")]
+    out = [p for p in direct if _is_workstream(p, all_projects)]
+    for child in direct:
+        out.extend(_workstream_descendants(child["id"], all_projects))
+    return out
 
 
 def _append_flat_streams(lines, active_sorted, tasks, depths):
@@ -436,8 +507,15 @@ def render_map(project_name):
     goal_ids = _objs(pprops, "gsdo_goal_link")
     goal = next((o for o in goals if o["id"] in goal_ids), None)
 
-    # Direct sub-projects (groupings or leaf streams)
-    all_direct = [o for o in projects if pid in _objs(_props(o), "gsdo_parent_project")]
+    # Workstreams — never shown inline in the tree below (docs/map_design.md, 2026-07-13).
+    # Computed up front so the "no [real] work streams" message can be worded honestly: a
+    # project can be ALL workstreams (e.g. Build Controlled Drift) and still have plenty to
+    # show — saying "no work streams yet" right above a list of 12 of them read as a bug
+    # (June, 2026-07-13), which it was.
+    workstreams = sorted(_workstream_descendants(pid, projects), key=lambda s: s["name"])
+
+    # Direct sub-projects (groupings or leaf streams) — workstreams excluded, see _children_of
+    all_direct = _children_of(pid, projects)
 
     # Detect groupings: direct children that have their own children
     grouping_ids = {s["id"] for s in all_direct if _children_of(s["id"], projects)}
@@ -465,9 +543,20 @@ def render_map(project_name):
     lines.append(f"  {proj['name']}")
     lines.append("")
 
-    if not all_direct:
-        lines.append("  No work streams yet.")
+    def _finish():
+        # Deliberately terse section: names only, no circle/arc/detail, so it reads as a
+        # structurally different kind of list rather than more streams to parse.
+        if workstreams:
+            lines.append(f"  ⚙ Workstreams ({len(workstreams)}) — dev/research threads:")
+            for w in workstreams:
+                lines.append(f"       {w['name']}")
+            lines.append("")
         return "\n".join(lines).rstrip()
+
+    if not all_direct:
+        lines.append("  No project-level work streams yet." if workstreams
+                      else "  No work streams yet.")
+        return _finish()
 
     # Compact trajectory line: done phases/streams (what's behind you)
     if done_sorted:
@@ -477,15 +566,16 @@ def render_map(project_name):
 
     if not active_sorted:
         if not done_sorted:
-            lines.append("  No work streams yet.")
-        return "\n".join(lines).rstrip()
+            lines.append("  No project-level work streams yet." if workstreams
+                          else "  No work streams yet.")
+        return _finish()
 
     if grouping_ids:
         _append_grouped_streams(lines, active_sorted, grouping_ids, projects, tasks)
     else:
         _append_flat_streams(lines, active_sorted, tasks, depths)
 
-    return "\n".join(lines).rstrip()
+    return _finish()
 
 
 def render_stream(stream_name):
@@ -506,8 +596,9 @@ def render_stream(stream_name):
         lines.extend(detail)
 
     sid_val = s["id"]
-    sub = [o for o in projects
-           if sid_val in _objs(_props(o), "gsdo_parent_project")]
+    # _children_of, not a raw parent-project scan — workstreams are excluded there so this
+    # inherits the same rule as render_map (2026-07-13).
+    sub = _children_of(sid_val, projects)
     sub_active = [x for x in sub if not _is_done(x) and not _is_later(x)]
     sub_done = [x for x in sub if _is_done(x)]
 
@@ -522,7 +613,168 @@ def render_stream(stream_name):
         for x in sub_done:
             lines.append(f"     {x['name']}")
 
+    workstreams = sorted(_workstream_descendants(sid_val, projects), key=lambda w: w["name"])
+    if workstreams:
+        lines.append("")
+        lines.append(f"   ⚙ Workstreams ({len(workstreams)}) — dev/research threads:")
+        for w in workstreams:
+            lines.append(f"       {w['name']}")
+
     return "\n".join(lines)
+
+
+# ---------------------------------------------------------------------------
+# Agent-facing renderer (the DEFAULT — June never runs this script herself,
+# 2026-07-13). render_map/render_stream above are the June-facing register:
+# terse, plain-language, one line per field, monospace-aligned for her TUI, and
+# they deliberately DISCARD most stored fields. That's useless to an agent asked
+# to "orient and figure out what's open" — it needs every field, clearly labeled,
+# with per-task status. This renderer is that: completeness over calm. Workstreams
+# are shown inline here (clearly typed) rather than hidden — the hide-workstreams
+# rule is a June-facing UI concern; an agent orienting needs the whole picture.
+# ---------------------------------------------------------------------------
+
+# Fields dumped per type in the agent view, by DISPLAY NAME (read via _any_field,
+# which tolerates Anytype's auto-generated keys). "always" fields print even when
+# empty (their absence is signal — an unset Engagement means the daily plan can't
+# gate on it); "if_set" fields print only when populated, to keep the dump scannable.
+_AGENT_FIELDS = {
+    "gsdo_goal": {
+        "always": ["Horizon", "Goal engagement", "Goal status"],
+        "if_set": ["Reaching for", "Resolution condition", "Barriers", "Context"],
+    },
+    "gsdo_project": {
+        "always": ["Engagement", "Side", "Project status"],
+        "if_set": ["Deadline", "Reaching for", "Description", "Affective", "Barriers",
+                   "Engagement notes", "Arc position rationale", "Depends on", "Context"],
+    },
+    "task": {
+        "always": ["Task status"],
+        "if_set": ["Done", "Due date", "Scheduled", "Duration min", "Affective",
+                   "Access conditions", "Blocked on", "Needs clarifying", "Context"],
+    },
+    "gsdo_recurring": {
+        "always": ["Interval unit"],
+        "if_set": ["Interval count", "Day of week", "Day of month", "Time of day",
+                   "Has target", "Target", "Duration min", "Context"],
+    },
+}
+
+
+def _agent_fmt_val(v, name_by_id=None):
+    """One-line rendering of any field value for the agent dump; resolves object ids
+    to names when a lookup is provided (so 'Depends on' reads as titles, not ids)."""
+    if v is None or v == "" or v == []:
+        return "—"
+    if isinstance(v, bool):
+        return "yes" if v else "no"
+    if isinstance(v, list):
+        parts = []
+        for x in v:
+            if isinstance(x, dict):
+                xid = x.get("id") or x.get("object") or x.get("target")
+                parts.append((name_by_id or {}).get(xid, x.get("name") or xid or "?"))
+            elif name_by_id and x in name_by_id:
+                parts.append(name_by_id[x])
+            else:
+                parts.append(str(x))
+        return ", ".join(p for p in parts if p) or "—"
+    return str(v).replace("\n", " ⏎ ")
+
+
+def _agent_fields_block(obj, tkey, indent, name_by_id):
+    """The labeled field lines for one object (goal/project/task/recurring)."""
+    spec = _AGENT_FIELDS.get(tkey, {})
+    lines = []
+    for label in spec.get("always", []):
+        lines.append(f"{indent}  {label}: {_agent_fmt_val(_any_field(obj, label), name_by_id)}")
+    for label in spec.get("if_set", []):
+        v = _any_field(obj, label)
+        if v not in (None, "", [], False):
+            lines.append(f"{indent}  {label}: {_agent_fmt_val(v, name_by_id)}")
+    return lines
+
+
+def render_map_agent(project_name):
+    """DEFAULT output. Full, labeled, per-stream field dump for an agent orienting in
+    the repo — 'what's open, what to work on, what's blocked.' Deterministic; live read."""
+    sid = g.get_space_id()
+    objs = g.fetch_all_objects(sid)
+    projects = [o for o in objs if _tkey(o) == "gsdo_project"]
+    goals = [o for o in objs if _tkey(o) == "gsdo_goal"]
+    tasks = [o for o in objs if _tkey(o) == "task"]
+    recurrings = [o for o in objs if _tkey(o) == "gsdo_recurring"]
+    name_by_id = {o["id"]: o.get("name") for o in objs}
+
+    proj = next((o for o in projects if o.get("name") == project_name), None)
+    if proj is None:
+        return f"(no project named {project_name!r} found)"
+
+    proj_by_id = {p["id"]: p for p in projects}
+
+    def _linked(children_objs, parent_id, link_key):
+        out = []
+        for o in children_objs:
+            if parent_id in _id_list(_objs(_props(o), link_key)):
+                out.append(o)
+        return out
+
+    def _task_line(t, indent):
+        status = _any_field(t, "Task status") or ("Done" if _any_field(t, "Done") else "—")
+        head = f"{indent}  · [{status}] {t.get('name','')}"
+        extra = []
+        for label in ("Blocked on", "Due date", "Duration min", "Affective", "Access conditions",
+                      "Needs clarifying"):
+            v = _any_field(t, label)
+            if v not in (None, "", [], False):
+                extra.append(f"{label}={_agent_fmt_val(v)}")
+        if extra:
+            head += "  (" + "; ".join(extra) + ")"
+        return head
+
+    out = []
+
+    def emit_project(p, indent, label):
+        pid = p["id"]
+        is_ws = _is_workstream(p, projects, proj_by_id)
+        kind = "WORKSTREAM" if is_ws else label
+        out.append(f"{indent}{kind}  {p.get('name','')}   #{pid[-6:]}")
+        out.extend(_agent_fields_block(p, "gsdo_project", indent, name_by_id))
+        # tasks
+        my_tasks = _linked(tasks, pid, "linked_projects")
+        if my_tasks:
+            out.append(f"{indent}  Tasks ({len(my_tasks)}):")
+            for t in sorted(my_tasks, key=lambda x: (x.get("name") or "")):
+                out.append(_task_line(t, indent))
+        # recurring
+        my_rec = _linked(recurrings, pid, "gsdo_project_link")
+        if my_rec:
+            out.append(f"{indent}  Recurring ({len(my_rec)}):")
+            for r in sorted(my_rec, key=lambda x: (x.get("name") or "")):
+                iv = _agent_fmt_val(_any_field(r, "Interval unit"))
+                cnt = _any_field(r, "Interval count")
+                cadence = f"every {cnt} {iv}" if cnt and iv != "—" else iv
+                out.append(f"{indent}  · ↻ {r.get('name','')}  ({cadence})")
+        # children (real subprojects + nested workstreams), recursed
+        for c in sorted(_linked(projects, pid, "gsdo_parent_project"),
+                        key=lambda x: (x.get("name") or "")):
+            out.append("")
+            emit_project(c, indent + "    ", "SUBPROJECT")
+
+    # Goal header
+    goal_ids = _objs(_props(proj), "gsdo_goal_link")
+    goal = next((o for o in goals if o["id"] in goal_ids), None)
+    out.append("=" * 70)
+    out.append(f"AGENT ORIENTATION — {project_name}")
+    out.append("Live read from Anytype; deterministic (no LLM). Every stored field shown.")
+    out.append("=" * 70)
+    out.append("")
+    if goal:
+        out.append(f"GOAL  {goal.get('name','')}   #{goal['id'][-6:]}")
+        out.extend(_agent_fields_block(goal, "gsdo_goal", "", name_by_id))
+        out.append("")
+    emit_project(proj, "", "PROJECT")
+    return "\n".join(out).rstrip()
 
 
 def _all_sub_projects(parent_id, all_projects):
@@ -579,9 +831,13 @@ def gap_streams(project_name):
 
 if __name__ == "__main__":
     import argparse
-    ap = argparse.ArgumentParser(description="Deterministic Orient map renderer")
+    ap = argparse.ArgumentParser(
+        description="Orient renderer. DEFAULT = agent-facing full field dump (June never "
+                    "runs this herself, 2026-07-13). Use --june for her terse TUI map.")
     ap.add_argument("project", nargs="?", default="Build Controlled Drift")
-    ap.add_argument("--stream", default=None, help="open one work stream by name")
+    ap.add_argument("--june", action="store_true",
+                    help="June-facing terse map (plain language, one line per field, monospace)")
+    ap.add_argument("--stream", default=None, help="open one work stream by name (June-facing)")
     ap.add_argument("--missing", action="store_true",
                     help="list streams that need the structured description pass")
     args = ap.parse_args()
@@ -596,5 +852,7 @@ if __name__ == "__main__":
             print("All active streams have structured descriptions.")
     elif args.stream:
         print(render_stream(args.stream))
-    else:
+    elif args.june:
         print(render_map(args.project))
+    else:
+        print(render_map_agent(args.project))
