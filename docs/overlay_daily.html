@@ -579,6 +579,98 @@ textarea.fe-input { resize: vertical; min-height: 64px; line-height: 1.45; }
 .task-sub.done .item-check::after { content: "✓"; position: absolute; inset: 0; font-size: 10px; line-height: 13px; text-align: center; color: var(--bg); }
 .task-sub.done .task-sub-label { text-decoration: line-through; opacity: 0.65; }
 
+/* ── work block (Steady / Open grain: "work on X" as a chunk of ongoing project work) ──
+   A block is NOT a task. Checking it means "I did a chunk today" — it returns tomorrow, it is
+   never "done forever". An arc-shape block opens to its ordered steps; a chunk-shape block is
+   just a chunk of time (no drill-down). Ported from docs/mockups/display-grain-arc-mockup.html.
+   Two colliding class names (.block-name, .block-time also style the band headers above) are
+   re-scoped under .work-block so both surfaces keep their own styling. */
+.work-block { border-bottom: 1px solid rgba(72,72,74,0.5); }
+.block-head {
+  display: flex; align-items: baseline; gap: 8px;
+  padding: 12px 14px 10px; user-select: none; -webkit-tap-highlight-color: transparent;
+}
+.work-block.expandable .block-head { cursor: pointer; }
+.block-check {
+  width: 16px; height: 16px; border: 1.5px solid var(--gold-dim);
+  border-radius: 5px; background: none; cursor: pointer; flex-shrink: 0;
+  position: relative; top: 2px; transition: border-color .12s, opacity .12s;
+}
+.block-check::after {
+  content: ""; position: absolute; inset: 3px; border-radius: 2px;
+  background: var(--gold); opacity: 0; transition: opacity .12s;
+}
+.work-block.chunked .block-check { border-color: var(--gold); }
+.work-block.chunked .block-check::after { opacity: 1; }
+.block-check.pending { opacity: 0.4; cursor: default; }   /* write in flight */
+.work-block .block-time {
+  font-size: 10px; color: var(--text-dimmer); width: 40px; flex-shrink: 0;
+  line-height: 1.3; font-variant-numeric: tabular-nums; align-self: flex-start; padding-top: 2px;
+}
+.block-title { flex: 1; }
+/* full presence — no text-transform (cancels the band-header rule), and NO chunked-dim
+   (swarm fix A: a chunk-check is not completion; the block stays at full presence). */
+.work-block .block-name {
+  font-size: 13px; font-weight: 600; color: var(--gold);
+  letter-spacing: 0.01em; text-transform: none;
+}
+.chunk-chip {
+  font-size: 10px; color: var(--gold); background: rgba(212,169,106,0.10);
+  border: 1px solid var(--gold-dim); border-radius: 5px; padding: 1px 7px;
+  margin-left: 8px; cursor: pointer; white-space: nowrap;
+  font-variant-numeric: tabular-nums; transition: background .12s;
+}
+.chunk-chip:hover { background: rgba(212,169,106,0.18); }
+/* the inline numeric editor the chip becomes on tap (swarm fix: free value, not a cycle) */
+.chunk-input {
+  font-size: 10px; color: var(--gold); background: var(--surface);
+  border: 1px solid var(--gold); border-radius: 5px; padding: 1px 5px;
+  margin-left: 8px; width: 54px; font-family: inherit;
+  font-variant-numeric: tabular-nums; outline: none;
+}
+.block-chevron {
+  font-size: 10px; color: var(--text-dimmer); margin-left: auto;
+  align-self: center; transition: transform .15s; opacity: 0.6;
+}
+.work-block.open .block-chevron { transform: rotate(90deg); }
+
+.did-note {
+  font-size: 10px; color: var(--gold-dim); padding: 2px 14px 0 54px;
+  display: none; line-height: 1.4;
+}
+.work-block.chunked .did-note { display: block; }
+
+/* the arc — real wrapping HTML, no monospace, no horizontal scroll */
+.block-arc { display: none; padding: 4px 8px 12px 48px; }
+.work-block.open .block-arc { display: block; }
+.arc-step {
+  display: flex; align-items: baseline; gap: 9px; padding: 3px 6px;
+  font-size: 12.5px; line-height: 1.4; border-radius: 6px;
+}
+.arc-mark { width: 12px; flex-shrink: 0; text-align: center; font-size: 11px; }
+.arc-step.done .arc-mark { color: var(--text-dimmer); }
+.arc-step.done .arc-text { color: var(--text-dimmer); text-decoration: line-through; }
+/* current position — cyber-femme rose: soft gradient wash, a glowing hairline, a faint
+   text-glow. No arrow, no chip; the rose itself says "you're here." Held lightly. */
+.arc-step.here {
+  background: linear-gradient(90deg, rgba(199,143,160,0.14), rgba(199,143,160,0.015) 70%);
+  box-shadow: inset 2px 0 0 var(--rose);
+}
+.arc-step.here .arc-mark { color: var(--rose); font-size: 7px; align-self: center; filter: drop-shadow(0 0 4px rgba(199,143,160,0.7)); }
+.arc-step.here .arc-text {
+  color: var(--rose); font-weight: 500; letter-spacing: 0.015em;
+  text-shadow: 0 0 11px rgba(199,143,160,0.45);
+}
+.arc-step.ahead .arc-mark { color: var(--text-dimmer); }
+.arc-step.ahead .arc-text { color: var(--text-dim); }
+.arc-thin {
+  font-size: 11px; color: var(--text-dimmer); padding: 6px 0 0 27px;
+  font-style: italic; line-height: 1.4;
+}
+@media (prefers-reduced-motion: reduce) {
+  .block-chevron, .block-check, .block-check::after, .chunk-chip { transition: none; }
+}
+
 /* ── TODAY: still here ── */
 .still-section {
   padding: 9px 14px 10px;
@@ -1401,6 +1493,93 @@ async function toggleItem(id, btn) {
   }
 }
 
+// A block-check is "I did a chunk today", not completion. POST by project_id — the backend
+// routes a block. Toggles .chunked (which reveals the "✓ today" trace); NEVER .done, and the
+// block keeps FULL presence (swarm fix A: a chunk is not a finished task, so no dim). Undoes via
+// /api/uncomplete when the chunk is already logged today.
+async function toggleBlock(projectId, btn) {
+  if (btn.classList.contains('pending')) return;
+  const block = btn.closest('.work-block');
+  const isChunked = !!(block && block.classList.contains('chunked'));
+  const endpoint = isChunked ? '/api/uncomplete' : '/api/complete';
+  btn.classList.add('pending');
+  try {
+    const res = await fetch(endpoint, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ id: projectId }),
+    });
+    const data = await res.json();
+    if (!res.ok) {
+      showError(data.error || (isChunked ? "couldn't undo that" : "couldn't log that chunk"));
+      return;
+    }
+    if (block) block.classList.toggle('chunked', !isChunked);   // confirmed persisted server-side
+  } catch (_) {
+    showError("couldn't reach the server — is it running?");
+  } finally {
+    btn.classList.remove('pending');
+  }
+}
+
+// Tap the chunk chip → an inline numeric input (free minutes value — swarm fix: June's own
+// number, NOT a fixed cycle). Commit (Enter or blur) POSTs the new duration and re-labels the
+// chip; Escape restores it untouched. stopPropagation throughout so editing never toggles the
+// arc open. The chip only re-labels after the write is confirmed (a good answer is not a save).
+function openChunkInput(ev, chip, projectId) {
+  ev.stopPropagation();
+  if (chip.dataset.editing === '1') return;
+  chip.dataset.editing = '1';
+  const input = document.createElement('input');
+  input.type = 'number';
+  input.min = '1';
+  input.step = '1';
+  input.className = 'chunk-input';
+  input.value = chunkMinFromLabel(chip.textContent) || '';
+  input.placeholder = 'min';
+  input.setAttribute('aria-label', 'chunk length in minutes');
+  chip.replaceWith(input);
+  input.focus();
+  input.select();
+  let settled = false;
+  const restore = () => {
+    if (settled) return; settled = true;
+    input.replaceWith(chip);
+    chip.dataset.editing = '';
+  };
+  const commit = async () => {
+    if (settled) return;
+    const minutes = parseInt(input.value, 10);
+    if (!minutes || minutes <= 0) { restore(); return; }   // no value → leave the old label
+    settled = true;
+    try {
+      const res = await fetch('/api/block/duration', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ project_id: projectId, minutes }),
+      });
+      if (!res.ok) {
+        const data = await res.json().catch(() => ({}));
+        showError(data.error || "couldn't set the chunk length");
+      } else {
+        chip.textContent = fmtChunk(minutes);   // confirmed persisted server-side
+      }
+    } catch (_) {
+      showError("couldn't reach the server — is it running?");
+    } finally {
+      input.replaceWith(chip);
+      chip.dataset.editing = '';
+    }
+  };
+  input.addEventListener('keydown', (e) => {
+    e.stopPropagation();
+    if (e.key === 'Enter') { e.preventDefault(); commit(); }
+    else if (e.key === 'Escape') { e.preventDefault(); restore(); }
+  });
+  input.addEventListener('click', (e) => e.stopPropagation());
+  input.addEventListener('blur', commit);
+}
+
 function showError(msg) {
   let banner = document.getElementById('busy-banner');
   if (!banner) {
@@ -1802,6 +1981,9 @@ async function loadMap() {
 function groupByProject(items) {
   const groups = [];
   for (const item of items) {
+    // A block is its whole thread — never fold it in with a sibling task, even one sharing its
+    // project name. It renders atomically (renderFlatItem branches to renderBlock).
+    if (item.block) { groups.push({ atomic: true, item }); continue; }
     if (!item.project) { groups.push({ atomic: true, item }); continue; }
     const prev = groups.length ? groups[groups.length - 1] : null;
     if (prev && !prev.atomic && prev.project === item.project) {
@@ -1883,7 +2065,70 @@ function heldBackHtml(item) {
     names.map(nm => `<div class="heldback-line">${esc(nm)}</div>`).join('')}</div>`;
 }
 
+// ── work-block grain ("Work on X") ──────────────────────────────────────────
+// A block is a chunk of ongoing project work, NOT a task. Checking it means "I did a chunk
+// today" (it returns tomorrow), never "done forever". Two shapes from the data: an arc-shape
+// block WITH steps opens to its ordered arc; a chunk-shape block — or an arc with no steps — is
+// a bare chunk of time (no chevron, not expandable). No map link (retired v1 dead-end); the
+// project_id rides in the data for a later navigator, we just don't surface a door to it.
+function renderBlock(item, bi) {
+  const arc = Array.isArray(item.arc) ? item.arc : [];
+  const expandable = item.shape === 'arc' && arc.length >= 1;
+  const chunked = !!item.did_chunk_today;
+  const pid = esc(item.project_id || '');
+  const cls = ['work-block', expandable ? 'expandable' : '', chunked ? 'chunked' : '']
+    .filter(Boolean).join(' ');
+  // Tapping the head opens/closes the arc — but a tap on the check or the chunk chip/input must
+  // not toggle it (same click-guard shape as the mockup). Non-expandable heads get no handler.
+  const headClick = expandable
+    ? `onclick="if(!event.target.closest('.block-check,.chunk-chip,.chunk-input'))this.closest('.work-block').classList.toggle('open')"`
+    : '';
+  const chevron = expandable ? '<span class="block-chevron">▸</span>' : '';
+  const arcHtml = expandable
+    ? `<div class="block-arc">${arc.map(renderArcStep).join('')}</div>` : '';
+  return `
+    <div class="${cls}" data-project-id="${pid}">
+      <div class="block-head" ${headClick}>
+        <button class="block-check" title="did a chunk today" onclick="toggleBlock('${pid}', this)"></button>
+        <span class="block-time">${esc(fmtTime(item.time))}</span>
+        <span class="block-title">
+          <span class="block-name">${esc(item.task)}</span><span class="chunk-chip" title="set the chunk length" onclick="openChunkInput(event, this, '${pid}')">${esc(fmtChunk(item.chunk_min))}</span>
+        </span>
+        ${chevron}
+      </div>
+      <div class="did-note">✓ did a chunk today — still open, comes back tomorrow</div>
+      ${arcHtml}
+    </div>`;
+}
+
+// One arc step. done → ✓ (struck through), here → ● (rose glow), ahead → ☐ (dim). The rose IS
+// the position — no extra "do this next" assertion beyond the mockup's visual (held lightly).
+function renderArcStep(step) {
+  const state = step && step.state === 'done' ? 'done'
+              : step && step.state === 'here' ? 'here' : 'ahead';
+  const mark = state === 'done' ? '✓' : state === 'here' ? '●' : '☐';
+  return `<div class="arc-step ${state}"><span class="arc-mark">${mark}</span><span class="arc-text">${esc(step ? step.text : '')}</span></div>`;
+}
+
+// Friendly chunk-length label: minutes under an hour (e.g. 45m), else hours (2h / 1.5h).
+function fmtChunk(min) {
+  const m = Number(min);
+  if (!isFinite(m) || m <= 0) return '—';
+  if (m < 60) return `${Math.round(m)}m`;
+  const h = m / 60;
+  return `${Number.isInteger(h) ? h : Number(h.toFixed(1))}h`;
+}
+
+// Inverse of fmtChunk, to prefill the editor with the current value in minutes.
+function chunkMinFromLabel(label) {
+  const s = String(label).trim();
+  if (s.endsWith('m')) return parseInt(s, 10) || 0;
+  if (s.endsWith('h')) return Math.round((parseFloat(s) || 0) * 60);
+  return parseInt(s, 10) || 0;
+}
+
 function renderFlatItem(item, showProject, bi) {
+  if (item.block) return renderBlock(item, bi);   // a block renders as its own grain, atomically
   const slim = !!item.interstitial;
   const cls = ['plan-item', item.done ? 'done' : '', slim ? 'interstitial' : ''].filter(Boolean).join(' ');
   // Interstitial items: no expand, no why, project label suppressed. The click-guard now also
@@ -1932,11 +2177,13 @@ function renderGroup(g, bi) {
   // "What it is" / "Next step" — never "focus", which belongs to the Focus Period.)
   const summary = _projectSummaries[g.project];
   let body;
-  if (summary && (summary.what_it_is || summary.next_step)) {
+  // "Next step:" is retired (swarm fix): the arc's ● "here" is the next step now, so a separate
+  // stated next-step is a stale divergence. Only "What it is:" remains — gate on it alone so a
+  // summary carrying only a (now-unrendered) next_step doesn't leave an empty block.
+  if (summary && summary.what_it_is) {
     body = `
       <div class="project-summary">
-        ${summary.what_it_is ? `<div class="summary-line"><span class="summary-key">What it is:</span> ${esc(summary.what_it_is)}</div>` : ''}
-        ${summary.next_step ? `<div class="summary-line"><span class="summary-key">Next step:</span> ${esc(summary.next_step)}</div>` : ''}
+        <div class="summary-line"><span class="summary-key">What it is:</span> ${esc(summary.what_it_is)}</div>
       </div>
       <button class="summary-tasks-toggle"
               onclick="event.stopPropagation(); this.closest('.project-row').classList.toggle('tasks-open')">
@@ -2050,6 +2297,7 @@ function renderPlan(plan) {
 
 // A single priority-list item (Task 6/6D): no clock time, same done-affordance as clock items.
 function renderPriorityItem(it) {
+  if (it.block) return renderBlock(it, null);   // blocks render on fragmented days too
   const done = it.done ? ' done' : '';
   return `
     <div class="plan-item priority-item${done}" onclick="if(!event.target.closest('.item-check,.move-chip'))this.classList.toggle('open')">
