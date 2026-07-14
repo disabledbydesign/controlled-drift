@@ -43,6 +43,8 @@ import focus_period_author
 import focus_store
 import daily_plan
 import signal_log
+import chunk_log
+import block_duration
 import gsdo_anytype as g
 import cd_paths
 
@@ -427,6 +429,15 @@ class Handler(BaseHTTPRequestHandler):
                 self._send(200, {"completed": {"id": task_id, "done": True, "recurring": True},
                                  "plan": plan or {"empty": True}})
                 return
+            # A block check: "I worked on it today" — log locally + flip the cache, NEVER an
+            # Anytype done-write (a block must not finish the project; it returns tomorrow). The
+            # overlay sends the block's project_id in `id`. (display_grain_design.md decision 3.)
+            if plan_store.is_block_item(task_id):
+                chunk_log.log_chunk(task_id)
+                plan = plan_store.mark_block_chunked(task_id, True)
+                self._send(200, {"completed": {"id": task_id, "did_chunk_today": True, "block": True},
+                                 "plan": plan or {"empty": True}})
+                return
             # A real task: mark done in Anytype (with read-back), then flip the cache so the surface
             # shows it checked without a regeneration. A failed close surfaces honestly.
             try:
@@ -506,6 +517,13 @@ class Handler(BaseHTTPRequestHandler):
                 self._send(200, {"uncompleted": {"id": task_id, "done": False, "recurring": True},
                                  "plan": plan or {"empty": True}})
                 return
+            # A block un-check (mis-tap): un-log today's chunk + un-flip the cache. Cache-only.
+            if plan_store.is_block_item(task_id):
+                chunk_log.unlog_chunk(task_id)
+                plan = plan_store.mark_block_chunked(task_id, False)
+                self._send(200, {"uncompleted": {"id": task_id, "did_chunk_today": False, "block": True},
+                                 "plan": plan or {"empty": True}})
+                return
             # A real task: status back to Ready in Anytype (read-back), then un-check the cache.
             try:
                 confirmed = task_actions.uncomplete_task(task_id)
@@ -514,6 +532,32 @@ class Handler(BaseHTTPRequestHandler):
                 return
             plan = plan_store.mark_item_undone(task_id)
             self._send(200, {"uncompleted": confirmed, "plan": plan or {"empty": True}})
+            return
+
+        if self.path == "/api/block/duration":
+            # June set a block's chunk length. Durable write: the Anytype Project field + a
+            # timestamped event (raw material for the later recency-weighted proposal). NOT a
+            # completion — this is a preference. Cache mirror follows so the chip updates now.
+            body = self._read_json_body()
+            project_id = (body.get("project_id") or "").strip()
+            minutes = body.get("minutes")
+            if isinstance(minutes, bool):     # JSON true is an int subclass — reject it
+                minutes = None
+            try:
+                minutes = int(minutes)
+            except (TypeError, ValueError):
+                minutes = None
+            if not project_id or minutes is None or minutes <= 0:
+                self._send(400, {"error": "block/duration needs project_id and positive integer minutes"})
+                return
+            try:
+                block_duration.set_chunk_min(project_id, minutes)
+            except Exception as e:
+                self._send(500, {"error": str(e)})
+                return
+            plan = plan_store.set_block_chunk(project_id, minutes)
+            self._send(200, {"ok": True, "project_id": project_id, "chunk_min": minutes,
+                             "plan": plan or {"empty": True}})
             return
 
         if self.path == "/api/settings":

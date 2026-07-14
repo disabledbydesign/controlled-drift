@@ -193,6 +193,63 @@ def mark_item_undone(task_id):
     return plan
 
 
+def _persist_plan(plan):
+    """Atomically rewrite the cached plan (the overlay never reads a half-written file)."""
+    path = _plan_path()
+    tmp = path + ".tmp"
+    with open(tmp, "w") as f:
+        json.dump(plan, f, indent=2)
+    os.replace(tmp, path)
+
+
+def is_block_item(project_id):
+    """True if the cached plan carries a BLOCK row for this project_id (blocks_from_scheduled
+    tags block rows with block=True + project_id). The completion endpoint routes a block check
+    to a local 'worked on it today' (chunk_log + cache flip) — NEVER an Anytype done-write; a
+    block must never finish the underlying project (display_grain_design.md decision 3)."""
+    plan = load_plan()
+    if plan is None:
+        return False
+    for item in _iter_items(plan):
+        if item.get("block") and item.get("project_id") == project_id:
+            return True
+    return False
+
+
+def mark_block_chunked(project_id, chunked=True):
+    """Flip did_chunk_today on every cached block row for this project, so reopening the overlay
+    shows the chunk-check state without a regeneration. The DURABLE record is chunk_log; this is
+    only the cache mirror (like mark_item_done for a task). Returns the updated plan or None."""
+    plan = load_plan()
+    if plan is None:
+        return None
+    changed = False
+    for item in _iter_items(plan):
+        if item.get("block") and item.get("project_id") == project_id:
+            item["did_chunk_today"] = chunked
+            changed = True
+    if changed:
+        _persist_plan(plan)
+    return plan
+
+
+def set_block_chunk(project_id, minutes):
+    """Update the cached block row's chunk length so the overlay reflects June's new value
+    immediately. The DURABLE write (Anytype Project field + event log) is block_duration; the
+    re-timed slot follows on the next generation. Returns the updated plan or None."""
+    plan = load_plan()
+    if plan is None:
+        return None
+    changed = False
+    for item in _iter_items(plan):
+        if item.get("block") and item.get("project_id") == project_id:
+            item["chunk_min"] = minutes
+            changed = True
+    if changed:
+        _persist_plan(plan)
+    return plan
+
+
 # --- tap-to-place move (deterministic — no LLM, no regeneration) -------------
 # June moves a task by TAPPING WHERE IT GOES: the overlay shows tap-targets at every later
 # spot in the visible plan, and the tapped spot arrives here as (target_block, position).
