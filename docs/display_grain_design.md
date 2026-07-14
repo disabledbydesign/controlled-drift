@@ -2,7 +2,7 @@
 
 *Single source of truth for **what unit the daily plan surfaces per project**, and for the **"work on X" block** that unit becomes for ongoing work. Read this before changing `_gate_and_collapse` in `scripts/plan_generate.py`, `partition_by_side` in `scripts/daily_plan.py`, or how the daily overlay renders a project. Update this file when June settles a new decision — do not carry these decisions only in session memory. Companion to `map_design.md` (which owns the map/arc rendering); this owns the daily-plan grain + the block. Originating note: June's own, `docs/controlled_drift_changes.json` item `id: 5h5p3u`. Session where this was worked: 2026-07-13/14.*
 
-> **⟳ Build status (2026-07-14):** the implementation plan is written, **4-critic-swarm reviewed, and revised** — `docs/superpowers/plans/2026-07-13-daily-plan-blocks.md` (swarm log: same dir, `LEARNING_LOG.md`). The swarm's load-bearing catch: the first draft modeled a block as an *identity-less unit* threaded through an id-keyed pipeline (crashed, dropped durations to 30 min, couldn't emit bare-chunk containers, and one variant bypassed the LLM's focus/strategy composition). **Resolved:** a block is a task-shaped item with a **synthetic id** (`block:<project_id>`) that rides the existing LLM-composition + ref-token/id machinery like a task — the model orders every block by focus/strategy; nothing is Python-placed behind it. Design decisions 1–8 below were unchanged by the swarm; only the *implementation frame* was corrected. Not yet built.
+> **⟳ Build status (2026-07-14, TWICE-revised — read the REVISION section next):** the block build shipped (13 commits, cross-family-reviewed) using a **synthetic-id block** (`block:<project_id>`) emitted **into the task-selection pipeline** as a task-shaped unit. **Live regeneration of June's real plan then exposed that this frame was wrong** — the block was wired into *selection*, where it displaced real tasks and broke check-off/resolution (see `## REVISION`). The corrected frame: **the block is a *rendering* layer over real, still-selected tasks — not a selection unit.** The `## REVISION 2026-07-14` section below supersedes the synthetic-id frame; decisions 1–4 (two axes, duration, did-a-chunk, June-picks-thread) still hold, decisions 5–8 are refined there. Plan for the rework: `docs/superpowers/plans/2026-07-14-block-render-layer.md`.
 
 ---
 
@@ -11,6 +11,32 @@
 A structure that worked well for June: **projects, with the next concrete task highlighted, and the whole arc scannable — where you are and where you're going.** That is a *display* principle. Somewhere it became a *backend selection* principle: `_gate_and_collapse` doesn't *highlight* the next task, it **selects only that one task and discards the rest**, leaving a bare "· N more" count where the scannable arc used to be. Same words ("show the next task"), opposite effect — highlighting-within-context became selecting-and-hiding-context. The grain problem sits on top of this: the plan also emits a single grain (one task) for every project, when June's data needs two different grains.
 
 The arc data is not lost — the collapse already stashes the hidden tasks as `held_back` / `held_back_names`. It's discarded from the *view*, not the pipeline. So restoring the arc is re-surfacing what's already computed.
+
+---
+
+## REVISION 2026-07-14 (post-build, June-approved) — the block is RENDERING, not SELECTION
+
+**What the first build got wrong, and how it was found.** The shipped build inserted `_blockify` *inside task selection* (`build_context`, after the gate): it **replaced** a project's real next-task with a synthetic block unit (`block:<project_id>`) in the list the LLM orders and `_resolve_ids` resolves. Regenerating June's real plan exposed the failure concretely:
+
+- The plan's context (`format_context`) already lists the **full hierarchy** — every project → its tasks. The LLM composes from that. But blockify had removed those tasks from the *resolvable* order-list (only the block had a ref token). So when the model named a real task (e.g. "Verify the disability payment process"), `_resolve_ids` couldn't find its id → the row rendered as an **uncheckoffable ghost**. The task *exists in Anytype*; the block-in-selection severed it from resolution.
+- The block's **arc carried no task ids** (`{text, state}` only), so even a rendered block's arc steps weren't checkoffable.
+- Two representations of the same project (a synthetic block in the order-list; the real tasks in the context hierarchy) **disagreed** — a parallel structure bolted on, not fitted into the system that already worked.
+
+**The corrected frame (June, 2026-07-14):**
+
+### A. The block is a rendering layer, not a selection layer.
+**Task selection stays exactly as it worked before the block build** — the gate + collapse produce **real tasks with real ids, resolvable and checkoffable.** `_blockify` must NOT emit synthetic units into the selection/resolution pipeline. Instead, a non-Daily-life project's selected task(s) are **displayed** grouped under a "Work on X" block header at render time. The tasks stay real underneath.
+
+### B. Arc steps carry real task ids → individually checkoffable (with undo).
+`grain.project_arc` returns `{text, state, id}` — each step **is** a real task. The overlay renders a checkbox per arc step wired to the existing `toggleItem` complete/uncomplete path (check-off **and undo**), exactly like any task row. (The missing `id` field was the whole reason arc steps weren't checkoffable — mechanical, not deep.) The block *header* still carries the project-level "did a chunk today" check (decision 3) + the duration (decision 2); the arc steps carry per-task done/undo.
+
+### C. The LLM gets the full hierarchy, split into two labeled categories.
+`format_context` presents the structure the model already has, but **organized so "block-organized work" (non-Daily-life projects → their tasks) is a distinct category from "daily tasks" (chores).** The model sees the whole picture *and* which category each item is. **Mechanical consequence that kills the ghosts:** every task in that hierarchy must be **resolvable** — `_resolve_ids`' name-match runs against *all active tasks*, not just the gated order-list — so anything the model names lands on a real id.
+
+### D. Container / nonlinear projects = a bare did-a-chunk block; drill-down deferred to the Map tab.
+A project with **no discrete tasks** (e.g. "scholarly writing" — a stack of papers, nothing to check off) renders as a **bare "did a chunk today" block** (no arc). Unfolding it to its subprojects/workstreams (a collapse/expand view) is the **Map-tab redesign, a later session** — it needs more work *and* a data-cleanup pass. This reaffirms decision 9 and decision 4: for now the container block holds the chunk; June picks the thread.
+
+**Net effect on decisions 5–8:** the marker set (5), collapsible real-HTML arc (6), one-arc-rendering (7), and arc-vs-bare-chunk-by-having-direct-tasks (8) all still hold — they just apply to an arc **whose steps are the real tasks**, rendered as a grouping over selection rather than a synthetic unit inside it.
 
 ---
 
