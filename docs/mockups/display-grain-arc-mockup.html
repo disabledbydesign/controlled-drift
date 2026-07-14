@@ -1,0 +1,285 @@
+<title>Display-grain arc — mockup</title>
+<style>
+  :root {
+    --bg: #1c1c1e;
+    --surface: #2c2c2e;
+    --border: #48484a;
+    --text: #f2f2f7;
+    --text-dim: #98989f;
+    --text-dimmer: #5a5a5e;
+    --rose: #c78fa0;
+    --rose-bg: #251a1e;
+    --rose-border: #4a2e38;
+    --gold: #d4a96a;
+    --gold-dim: #6a5230;
+    --page: #0d0d0f;
+    --page-panel: #161618;
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body {
+    background: var(--page);
+    color: var(--text);
+    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', system-ui, sans-serif;
+    -webkit-font-smoothing: antialiased;
+    line-height: 1.5;
+    padding: 32px 16px 64px;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 28px;
+  }
+
+  /* ── caption above the phone ── */
+  .caption { max-width: 460px; text-align: center; }
+  .caption .eyebrow {
+    font-size: 11px; letter-spacing: 0.14em; text-transform: uppercase;
+    color: var(--gold); margin-bottom: 8px;
+  }
+  .caption h1 {
+    font-size: 19px; font-weight: 600; letter-spacing: -0.01em;
+    text-wrap: balance; margin-bottom: 8px;
+  }
+  .caption p { font-size: 13px; color: var(--text-dim); text-wrap: pretty; }
+
+  /* ── the phone card (faithful to overlay_daily.html) ── */
+  .overlay {
+    background: var(--bg); border: 1px solid var(--border); border-radius: 14px;
+    width: 360px; overflow: hidden; box-shadow: 0 8px 32px rgba(0,0,0,0.5);
+  }
+  .overlay-header {
+    display: flex; align-items: center; justify-content: space-between;
+    padding: 10px 14px 0;
+  }
+  .header-title { font-size: 11px; color: var(--text-dimmer); text-transform: uppercase; letter-spacing: 0.1em; }
+  .header-time { font-size: 11px; color: var(--text-dimmer); font-variant-numeric: tabular-nums; }
+
+  .tabs { display: flex; padding: 8px 14px 0; border-bottom: 1px solid var(--border); }
+  .tab {
+    font-size: 12px; color: var(--text-dimmer); padding: 5px 12px 7px;
+    border-bottom: 2px solid transparent; margin-bottom: -1px;
+  }
+  .tab.active { color: var(--gold); border-bottom-color: var(--gold); }
+
+  .day { padding: 4px 0 2px; }
+  .band-label {
+    font-size: 10px; font-weight: 600; color: var(--text-dimmer);
+    text-transform: uppercase; letter-spacing: 0.09em; padding: 13px 14px 6px;
+  }
+
+  /* ── plain task-grain row (Daily life) ── */
+  .plan-item { padding: 8px 14px; border-bottom: 1px solid rgba(72,72,74,0.35); }
+  .item-top { display: flex; align-items: baseline; gap: 7px; }
+  .item-check {
+    width: 15px; height: 15px; border: 1.5px solid var(--text-dimmer);
+    border-radius: 50%; background: none; cursor: pointer; flex-shrink: 0;
+    position: relative; top: 2px; transition: border-color .12s, background .12s;
+  }
+  .item-check::after {
+    content: ""; position: absolute; inset: 3px; border-radius: 50%;
+    background: var(--text-dim); opacity: 0; transition: opacity .12s;
+  }
+  .plan-item.done .item-check::after,
+  .work-block.chunked .block-check::after { opacity: 1; }
+  .item-time {
+    font-size: 10px; color: var(--text-dimmer); width: 40px; flex-shrink: 0;
+    line-height: 1.3; font-variant-numeric: tabular-nums;
+  }
+  .item-label { font-size: 13px; color: var(--text); line-height: 1.35; }
+  .item-project { color: var(--text-dim); font-size: 12px; }
+  .item-sep { color: var(--text-dimmer); }
+  .plan-item.done .item-task { text-decoration: line-through; opacity: 0.45; }
+  .plan-item.rest { padding: 6px 14px; }
+  .plan-item.rest .item-task { font-size: 12px; color: var(--text-dim); font-weight: 500; }
+
+  /* ── work block (Steady / Open grain: "work on X" as a chunk of time) ── */
+  .work-block { border-bottom: 1px solid rgba(72,72,74,0.5); }
+  .block-head {
+    display: flex; align-items: baseline; gap: 8px;
+    padding: 12px 14px 10px; user-select: none; -webkit-tap-highlight-color: transparent;
+  }
+  .work-block.expandable .block-head { cursor: pointer; }
+  .block-check {
+    width: 16px; height: 16px; border: 1.5px solid var(--gold-dim);
+    border-radius: 5px; background: none; cursor: pointer; flex-shrink: 0;
+    position: relative; top: 2px; transition: border-color .12s;
+  }
+  .block-check::after {
+    content: ""; position: absolute; inset: 3px; border-radius: 2px;
+    background: var(--gold); opacity: 0; transition: opacity .12s;
+  }
+  .work-block.chunked .block-check { border-color: var(--gold); }
+  .block-time {
+    font-size: 10px; color: var(--text-dimmer); width: 40px; flex-shrink: 0;
+    line-height: 1.3; font-variant-numeric: tabular-nums; align-self: flex-start; padding-top: 2px;
+  }
+  .block-title { flex: 1; }
+  .block-name { font-size: 13px; font-weight: 600; color: var(--gold); letter-spacing: 0.01em; }
+  .work-block.chunked .block-name { color: var(--gold-dim); }
+  .chunk-chip {
+    font-size: 10px; color: var(--gold); background: rgba(212,169,106,0.10);
+    border: 1px solid var(--gold-dim); border-radius: 5px; padding: 1px 7px;
+    margin-left: 8px; cursor: pointer; white-space: nowrap;
+    font-variant-numeric: tabular-nums; transition: background .12s;
+  }
+  .chunk-chip:hover { background: rgba(212,169,106,0.18); }
+  .block-chevron {
+    font-size: 10px; color: var(--text-dimmer); margin-left: auto;
+    align-self: center; transition: transform .15s; opacity: 0.6;
+  }
+  .work-block.open .block-chevron { transform: rotate(90deg); }
+
+  .did-note {
+    font-size: 10px; color: var(--gold-dim); padding: 2px 14px 0 54px;
+    display: none; line-height: 1.4;
+  }
+  .work-block.chunked .did-note { display: block; }
+
+  /* the arc — real wrapping HTML, no monospace, no horizontal scroll */
+  .block-arc { display: none; padding: 4px 8px 12px 48px; }
+  .work-block.open .block-arc { display: block; }
+  .arc-step {
+    display: flex; align-items: baseline; gap: 9px; padding: 3px 6px;
+    font-size: 12.5px; line-height: 1.4; border-radius: 6px;
+  }
+  .arc-mark { width: 12px; flex-shrink: 0; text-align: center; font-size: 11px; }
+  .arc-step.done .arc-mark { color: var(--text-dimmer); }
+  .arc-step.done .arc-text { color: var(--text-dimmer); text-decoration: line-through; }
+  /* current position — cyber-femme rose: soft gradient wash, a glowing hairline, and a
+     faint text-glow. No arrow, no chip; the rose itself says "you're here." Kept subtle. */
+  .arc-step.here {
+    background: linear-gradient(90deg, rgba(199,143,160,0.14), rgba(199,143,160,0.015) 70%);
+    box-shadow: inset 2px 0 0 var(--rose);
+  }
+  .arc-step.here .arc-mark { color: var(--rose); font-size: 7px; align-self: center; filter: drop-shadow(0 0 4px rgba(199,143,160,0.7)); }
+  .arc-step.here .arc-text {
+    color: var(--rose); font-weight: 500; letter-spacing: 0.015em;
+    text-shadow: 0 0 11px rgba(199,143,160,0.45);
+  }
+  .arc-step.ahead .arc-mark { color: var(--text-dimmer); }
+  .arc-step.ahead .arc-text { color: var(--text-dim); }
+  .arc-thin {
+    font-size: 11px; color: var(--text-dimmer); padding: 6px 0 0 27px;
+    font-style: italic; line-height: 1.4;
+  }
+
+  /* ── legend below ── */
+  .legend { max-width: 460px; width: 100%; display: flex; flex-direction: column; gap: 14px; }
+  .legend-card {
+    background: var(--page-panel); border: 1px solid #232326; border-radius: 10px; padding: 14px 16px;
+  }
+  .legend-card h3 {
+    font-size: 12px; font-weight: 600; color: var(--text);
+    margin-bottom: 5px; display: flex; align-items: center; gap: 8px;
+  }
+  .legend-card h3 .dot { width: 8px; height: 8px; border-radius: 50%; flex-shrink: 0; }
+  .legend-card p { font-size: 12.5px; color: var(--text-dim); text-wrap: pretty; }
+  .legend-card p b { color: var(--text); font-weight: 600; }
+  .legend-hint {
+    font-size: 12px; color: var(--text-dimmer); text-align: center;
+    max-width: 460px; font-style: italic;
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    .block-chevron, .item-check, .block-check, .item-check::after, .chunk-chip { transition: none; }
+  }
+</style>
+
+<div class="caption">
+  <div class="eyebrow">Controlled Drift · design mockup</div>
+  <h1>Two kinds of block — one opens to its steps, one is just a chunk</h1>
+  <p>Not the real app — a preview in its skin. Tap the leatherworking block to open its arc. The writing block is just a chunk — no drill-down here. Tap a chunk-length chip to adjust it; tap a check to see a chore and a block complete differently.</p>
+</div>
+
+<div class="overlay" role="img" aria-label="Mockup of the daily plan: a chore, a block that opens to a task arc, and a block that is just a chunk of time">
+  <div class="overlay-header">
+    <span class="header-title">Today</span>
+    <span class="header-time">Mon · 9:41</span>
+  </div>
+  <div class="tabs">
+    <span class="tab active">Today</span>
+    <span class="tab">Map</span>
+    <span class="tab">Log</span>
+  </div>
+
+  <div class="day">
+
+    <div class="band-label">Morning</div>
+
+    <!-- TASK GRAIN: a Daily-life chore — the specific action, atomic done -->
+    <div class="plan-item">
+      <div class="item-top">
+        <button class="item-check" aria-label="mark done" onclick="this.closest('.plan-item').classList.toggle('done')"></button>
+        <span class="item-time">9:00</span>
+        <span class="item-label"><span class="item-project">Household</span><span class="item-sep"> · </span><span class="item-task">Clean the kitchen</span></span>
+      </div>
+    </div>
+
+    <!-- BLOCK GRAIN, LINEAR: leatherworking — has its own tasks, opens to the arc -->
+    <div class="work-block expandable open" id="leather">
+      <div class="block-head" onclick="if(!event.target.closest('.block-check,.chunk-chip'))this.closest('.work-block').classList.toggle('open')">
+        <button class="block-check" aria-label="did a chunk today" onclick="this.closest('.work-block').classList.toggle('chunked')"></button>
+        <span class="block-time">10:00</span>
+        <span class="block-title">
+          <span class="block-name">Work on leatherworking</span><span class="chunk-chip" onclick="cycleChunk(this,['1.5h','2h','3h'])">2h</span>
+        </span>
+        <span class="block-chevron">▸</span>
+      </div>
+      <div class="did-note">✓ did a chunk today — still open, comes back tomorrow</div>
+      <div class="block-arc">
+        <div class="arc-step done"><span class="arc-mark">✓</span><span class="arc-text">Cut the panels</span></div>
+        <div class="arc-step done"><span class="arc-mark">✓</span><span class="arc-text">Punched the stitching holes</span></div>
+        <div class="arc-step here"><span class="arc-mark">●</span><span class="arc-text">Saddle-stitch the seam</span></div>
+        <div class="arc-step ahead"><span class="arc-mark">☐</span><span class="arc-text">Burnish the edges</span></div>
+      </div>
+    </div>
+
+    <div class="band-label">Afternoon</div>
+
+    <!-- BLOCK GRAIN, NONLINEAR: scholarly writing — a bundle of papers; just a chunk, no drill-down -->
+    <div class="work-block" id="writing">
+      <div class="block-head">
+        <button class="block-check" aria-label="did a chunk today" onclick="this.closest('.work-block').classList.toggle('chunked')"></button>
+        <span class="block-time">2:00</span>
+        <span class="block-title">
+          <span class="block-name">Work on scholarly writing</span><span class="chunk-chip" onclick="cycleChunk(this,['3h','4h','5h'])">4h</span>
+        </span>
+      </div>
+      <div class="did-note">✓ did a chunk today — still open, comes back tomorrow</div>
+    </div>
+
+    <!-- REST: stays regardless of side -->
+    <div class="plan-item rest">
+      <div class="item-top">
+        <button class="item-check" aria-label="mark done" onclick="this.closest('.plan-item').classList.toggle('done')"></button>
+        <span class="item-time">6:30</span>
+        <span class="item-label"><span class="item-task">Walk</span></span>
+      </div>
+    </div>
+
+  </div>
+</div>
+
+<div class="legend">
+  <div class="legend-card">
+    <h3><span class="dot" style="background:var(--text-dim)"></span>Task grain — the daily-life chore</h3>
+    <p><b>“Clean the kitchen”</b> shows as the one specific action, with an ordinary done-check. A chore is the whole thing — no arc to scan. Check it and it's done.</p>
+  </div>
+  <div class="legend-card">
+    <h3><span class="dot" style="background:var(--gold)"></span>Block that opens to a task arc — <i>leatherworking</i></h3>
+    <p>Work that has real ordered steps opens to its <b>arc</b>: <b>✓</b> behind, the <span style="color:var(--rose)">glowing rose step</span> is where you are, <b>☐</b> ahead. No “2 done, 4 to go” — the rose <i>is</i> the position. Checking means <b>“did a chunk today”</b>; it stays open and returns tomorrow.</p>
+  </div>
+  <div class="legend-card">
+    <h3><span class="dot" style="background:var(--gold-dim)"></span>Block that's just a chunk — <i>scholarly writing, dev</i></h3>
+    <p>Nonlinear creative work (a stack of papers, dev threads) is <b>just a chunk of time</b> — no drill-down on the phone. You pick the thread; the deep structure lives in the <b>project workspace</b> (the agent-facing surface), not here. If a project has no clean task list yet, it simply stays a chunk — nothing breaks.</p>
+  </div>
+  <p class="legend-hint">Which one a block is comes from the data — has its own tasks → opens; is a bundle of subprojects → stays a chunk. No hand-sorting. And the chunk length (2h / 4h) is yours; the system remembers what you keep setting.</p>
+</div>
+
+<script>
+  function cycleChunk(el, values) {
+    event.stopPropagation();
+    const i = values.indexOf(el.textContent.trim());
+    el.textContent = values[(i + 1) % values.length];
+    el.animate([{opacity:0.4},{opacity:1}], {duration:160});
+  }
+</script>

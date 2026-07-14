@@ -1,6 +1,8 @@
 # Open build: display-grain rule for the daily plan
 
-**Status:** designed-in-spec, NOT built. June wants to build this with a fresh agent from a clean slate. This doc is the factual description + pointers — not a plan. Write the plan with June.
+**Status:** designed-in-spec, NOT built. This doc is the factual description + pointers — not a plan.
+
+**⟳ The plan is now written (2026-07-13):** `docs/display_grain_design.md` is the authoritative design + build plan grown from this handoff — read it first; it answers all four open questions below and records the June-approved decisions. **This build is the daily-plan grain only.** The deep-nested-project *navigation* (drill into subprojects/workstreams) was split out to a **separate v1.5 build — the Map-tab redesign** (`display_grain_design.md` §9, `map_design.md`), which June is planning in parallel. The two meet at one seam: the daily plan renders a deep project as a bare chunk with an "open in map ›" tap; the Map-tab build fills that tap. Do not build the navigator here.
 
 ## The concept (read these first)
 - **`AI_LAYER_SPEC.md` §2** — the selection-model note at the top of the data-model section (the `Side` field now has four values, added 2026-07-13). The display-grain rule is written there as intended behavior.
