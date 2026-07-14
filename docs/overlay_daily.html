@@ -587,14 +587,14 @@ textarea.fe-input { resize: vertical; min-height: 64px; line-height: 1.45; }
    re-scoped under .work-block so both surfaces keep their own styling. */
 .work-block { border-bottom: 1px solid rgba(72,72,74,0.5); }
 .block-head {
-  display: flex; align-items: baseline; gap: 8px;
-  padding: 12px 14px 10px; user-select: none; -webkit-tap-highlight-color: transparent;
+  display: flex; align-items: baseline; gap: 7px;
+  padding: 12px 2px 10px; user-select: none; -webkit-tap-highlight-color: transparent;
 }
 .work-block.expandable .block-head { cursor: pointer; }
 .block-check {
-  width: 16px; height: 16px; border: 1.5px solid var(--gold-dim);
+  width: 15px; height: 15px; border: 1.5px solid var(--gold-dim);
   border-radius: 5px; background: none; cursor: pointer; flex-shrink: 0;
-  position: relative; top: 2px; transition: border-color .12s, opacity .12s;
+  position: relative; top: 1px; transition: border-color .12s, opacity .12s;
 }
 .block-check::after {
   content: ""; position: absolute; inset: 3px; border-radius: 2px;
@@ -604,8 +604,8 @@ textarea.fe-input { resize: vertical; min-height: 64px; line-height: 1.45; }
 .work-block.chunked .block-check::after { opacity: 1; }
 .block-check.pending { opacity: 0.4; cursor: default; }   /* write in flight */
 .work-block .block-time {
-  font-size: 10px; color: var(--text-dimmer); width: 40px; flex-shrink: 0;
-  line-height: 1.3; font-variant-numeric: tabular-nums; align-self: flex-start; padding-top: 2px;
+  font-size: 10px; color: var(--text-dimmer); width: 56px; flex-shrink: 0;
+  line-height: 1.3; font-variant-numeric: tabular-nums; align-self: flex-start; padding-top: 1px;
 }
 .block-title { flex: 1; }
 /* full presence — no text-transform (cancels the band-header rule), and NO chunked-dim
@@ -659,8 +659,6 @@ textarea.fe-input { resize: vertical; min-height: 64px; line-height: 1.45; }
   content: "✓"; inset: 0; opacity: 1; background: none; border-radius: 0;
   font-size: 10px; line-height: 13px; text-align: center; color: var(--bg);
 }
-.arc-mark { width: 12px; flex-shrink: 0; text-align: center; font-size: 11px; }
-.arc-step.done .arc-mark { color: var(--text-dimmer); }
 .arc-step.done .arc-text { color: var(--text-dimmer); text-decoration: line-through; }
 /* current position — cyber-femme rose: soft gradient wash, a glowing hairline, a faint
    text-glow. No arrow, no chip; the rose itself says "you're here." Held lightly. */
@@ -668,12 +666,10 @@ textarea.fe-input { resize: vertical; min-height: 64px; line-height: 1.45; }
   background: linear-gradient(90deg, rgba(199,143,160,0.14), rgba(199,143,160,0.015) 70%);
   box-shadow: inset 2px 0 0 var(--rose);
 }
-.arc-step.here .arc-mark { color: var(--rose); font-size: 7px; align-self: center; filter: drop-shadow(0 0 4px rgba(199,143,160,0.7)); }
 .arc-step.here .arc-text {
   color: var(--rose); font-weight: 500; letter-spacing: 0.015em;
   text-shadow: 0 0 11px rgba(199,143,160,0.45);
 }
-.arc-step.ahead .arc-mark { color: var(--text-dimmer); }
 .arc-step.ahead .arc-text { color: var(--text-dim); }
 .arc-thin {
   font-size: 11px; color: var(--text-dimmer); padding: 6px 0 0 27px;
@@ -1022,6 +1018,13 @@ textarea.add-field:focus { border-color: var(--gold); }
 .edit-move:hover { border-color: var(--gold); color: var(--gold); }
 .edit-dur-label { font-size: 11px; color: var(--text-dimmer); }
 .edit-dur { margin-left: 0; }
+/* "not today" — takes the item off today's list. A quiet pill, rose on hover (a soft remove-from-
+   view, not an alarm). margin-left:auto pushes it to the panel's trailing edge, away from move/dur. */
+.edit-not-today { flex-shrink: 0; margin-left: auto; font-family: inherit; font-size: 11px;
+  padding: 2px 11px; border-radius: 13px; cursor: pointer; background: var(--surface);
+  border: 1px solid var(--border); color: var(--text-dim); transition: all .12s; }
+.edit-not-today:hover { border-color: var(--rose); color: var(--rose); }
+.edit-not-today:disabled { opacity: 0.5; cursor: default; }
 .verify-box { margin: 8px 14px 16px; background: var(--rose-bg); border: 1px solid var(--rose-border); border-radius: 10px; padding: 12px 13px; }
 .verify-q { font-size: 12.5px; color: var(--text); line-height: 1.45; margin-bottom: 11px; }
 .verify-q b { color: var(--gold); font-weight: 600; }
@@ -2109,18 +2112,55 @@ function editChipHtml(id, bi) {
   return `<button class="move-chip edit-chip" title="edit timing" onclick="toggleEditPanel(event, this)">edit</button>`;
 }
 
-function editPanelHtml(id, bi, durationMin) {
+// The one edit framework, shared by task rows and work blocks. For a block (opts.isBlock) the
+// `id` is the PROJECT id and the editable length is the chunk length, not a single task's
+// duration — and there's no "move later" (a block isn't a single movable task). Everything else
+// (the pill, the panel, the inline number editor) is identical, so blocks and tasks stay one thing.
+function editPanelHtml(id, bi, durationMin, opts) {
   if (!id || _placing) return '';   // placement mode collapses the panel
-  const canMove = _hasLaterSpot(id, bi);
+  const isBlock = !!(opts && opts.isBlock);
+  const canMove = !isBlock && _hasLaterSpot(id, bi);
   const blockArg = (bi === null || bi === undefined) ? 'null' : bi;
-  const durLabel = durationMin ? fmtChunk(durationMin) : 'set duration';
+  const durLabel = durationMin ? fmtChunk(durationMin) : (isBlock ? 'set chunk length' : 'set duration');
+  const durLabelText = isBlock ? 'chunk length:' : 'duration:';
   const moveBtn = canMove
     ? `<button class="edit-move" onclick="event.stopPropagation(); startPlacing('${esc(id)}', ${blockArg})">move later ›</button>`
     : '';
+  // "not today" — take this off today's list (cache-only; see notToday()). Task rows AND work
+  // blocks both get it: for a block, `id` is the project id and kind='block' drops every row of it.
+  const ntKind = isBlock ? 'block' : 'task';
+  const notToday = `<button class="edit-not-today" title="take this off today's list" onclick="notToday(event, '${esc(id)}', '${ntKind}', this)">not today</button>`;
   return `<div class="edit-panel">
     ${moveBtn}
-    <span class="edit-dur-label">duration:</span><span class="chunk-chip dur-chip edit-dur" title="set how long this takes" onclick="openChunkInput(event, this, '${esc(id)}')">${durLabel}</span>
+    <span class="edit-dur-label">${durLabelText}</span><span class="chunk-chip dur-chip edit-dur" title="${isBlock ? 'set how long a chunk is' : 'set how long this takes'}" onclick="openChunkInput(event, this, '${esc(id)}')">${durLabel}</span>
+    ${notToday}
   </div>`;
+}
+
+// "Not today": POST -> re-render from the returned plan (the row is gone). Cache-only server-side:
+// no Anytype write, no status change — the item returns tomorrow with the status it had, and stays
+// off a same-day regenerate for the 8h recency window. `kind` is 'task' (id = task) or 'block'
+// (id = project → drops the whole block). Never silent on failure, surfaced via showError.
+async function notToday(ev, id, kind, btn) {
+  if (ev) ev.stopPropagation();
+  if (btn) btn.disabled = true;
+  try {
+    const res = await fetch('/api/task/not-today', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ id, kind: kind || 'task' }),
+    });
+    const data = await res.json().catch(() => ({}));
+    if (!res.ok || data.ok === false) {
+      showError(data.error || "couldn't take that off today's list");
+      if (btn) btn.disabled = false;
+      return;
+    }
+    if (data.plan) renderPlan(data.plan);   // the row is gone; _lastPlan updated inside renderPlan
+    if (data.warning) showError(data.warning);   // removed, but the side-note didn't log
+  } catch (_) {
+    showError("couldn't reach the server — is it running?");
+    if (btn) btn.disabled = false;
+  }
 }
 
 function toggleEditPanel(ev, btn) {
@@ -2164,7 +2204,7 @@ function renderBlock(item, bi) {
   // Tapping the head opens/closes the arc — but a tap on the check or the chunk chip/input must
   // not toggle it (same click-guard shape as the mockup). Non-expandable heads get no handler.
   const headClick = expandable
-    ? `onclick="if(!event.target.closest('.block-check,.chunk-chip,.chunk-input'))this.closest('.work-block').classList.toggle('open')"`
+    ? `onclick="if(!event.target.closest('.block-check,.edit-chip,.chunk-chip,.chunk-input'))this.closest('.work-block').classList.toggle('open')"`
     : '';
   const chevron = expandable ? '<span class="block-chevron">▸</span>' : '';
   const arcHtml = expandable
@@ -2175,10 +2215,12 @@ function renderBlock(item, bi) {
         <button class="block-check" title="did a chunk today" onclick="toggleBlock('${pid}', this)"></button>
         <span class="block-time">${esc(fmtTime(item.time))}</span>
         <span class="block-title">
-          <span class="block-name">${esc(item.task)}</span><span class="chunk-chip" title="set the chunk length" onclick="openChunkInput(event, this, '${pid}')">${esc(fmtChunk(item.chunk_min))}</span>
+          <span class="block-name">${esc(item.task)}</span>
         </span>
+        ${editChipHtml(pid, bi)}
         ${chevron}
       </div>
+      ${editPanelHtml(pid, bi, item.chunk_min, {isBlock: true})}
       <div class="did-note">✓ did a chunk today — still open, comes back tomorrow</div>
       ${arcHtml}
     </div>`;
@@ -2186,20 +2228,20 @@ function renderBlock(item, bi) {
 
 // One arc step is a REAL task: it carries a checkbox wired to toggleItem(step.id) — checking it
 // marks that task done in Anytype, unchecking undoes it, exactly like any task row. The state
-// class still drives the row's look: done → struck-through + filled check; here → the rose "here"
-// glow (● — the one mark kept, since it carries a position the checkbox can't); ahead → dim. The
-// rose IS the position, held lightly. (Deliberate: the ✓/☐ glyphs the mockup drew alongside the
-// checkbox are dropped — a filled check next to a ✓, or an empty check next to a ☐, is a doubled
-// box that's hard to parse; the checkbox is the single state signal now.)
+// class drives the row's look: done → struck-through + filled check; here → the rose "here" glow
+// (the whole row washes rose with a glowing left hairline); ahead → dim. The rose IS the position,
+// held lightly. (June, 2026-07-14: the ● "here" dot was dropped — the rose highlight already
+// carries the position, and losing the dot gives the step text more room. Likewise the ✓/☐ glyphs
+// the mockup drew alongside the checkbox: a doubled box is hard to parse; the checkbox is the
+// single, sufficient state signal.)
 function renderArcStep(step) {
   const state = step && step.state === 'done' ? 'done'
               : step && step.state === 'here' ? 'here' : 'ahead';
-  const mark = state === 'here' ? '●' : '';
   const id = step && step.id ? esc(step.id) : '';
   const check = id
     ? `<button class="item-check" title="${state === 'done' ? 'undo' : 'mark done'}" onclick="toggleItem('${id}', this)"></button>`
     : '<span class="check-gap"></span>';
-  return `<div class="arc-step ${state}" onclick="event.stopPropagation()">${check}<span class="arc-mark">${mark}</span><span class="arc-text">${esc(step ? step.text : '')}</span></div>`;
+  return `<div class="arc-step ${state}" onclick="event.stopPropagation()">${check}<span class="arc-text">${esc(step ? step.text : '')}</span></div>`;
 }
 
 // A "Work on X" block rendered OVER a block-work project's real task rows (Task A, 2026-07-14).
@@ -2216,12 +2258,13 @@ function renderBlockGroup(g, bi) {
   const pid = esc(first.project_id || '');
   const cls = ['work-block', expandable ? 'expandable' : '', chunked ? 'chunked' : '']
     .filter(Boolean).join(' ');
-  // Head tap opens/closes the arc — but taps on the check or the chunk chip/input must not toggle
-  // it (same click-guard as renderBlock). A block header has no "edit" control: it never had a
-  // move-chip (a block isn't a single movable task), and its one time affordance — the visible
-  // chunk-length chip — is already a single tap-to-edit, so there's nothing to fold behind "edit".
+  // Head tap opens/closes the arc — but taps on the check or the edit affordances must not toggle
+  // it (same click-guard as renderBlock). The block carries the SAME "edit" control as a task row
+  // (June, 2026-07-14): one pill that folds the chunk-length editor behind it, so blocks and tasks
+  // share one edit framework. (The earlier "no edit control, chunk chip sits bare in the header"
+  // shape didn't hold — it left blocks off the framework instead of on it.)
   const headClick = expandable
-    ? `onclick="if(!event.target.closest('.block-check,.chunk-chip,.chunk-input'))this.closest('.work-block').classList.toggle('open')"`
+    ? `onclick="if(!event.target.closest('.block-check,.edit-chip,.chunk-chip,.chunk-input'))this.closest('.work-block').classList.toggle('open')"`
     : '';
   const chevron = expandable ? '<span class="block-chevron">▸</span>' : '';
   const arcHtml = expandable
@@ -2232,10 +2275,12 @@ function renderBlockGroup(g, bi) {
         <button class="block-check" title="did a chunk today" onclick="toggleBlock('${pid}', this)"></button>
         <span class="block-time">${esc(fmtTime(first.time))}</span>
         <span class="block-title">
-          <span class="block-name">Work on ${esc(g.project)}</span><span class="chunk-chip" title="set the chunk length" onclick="openChunkInput(event, this, '${pid}')">${esc(fmtChunk(first.chunk_min))}</span>
+          <span class="block-name">Work on ${esc(g.project)}</span>
         </span>
+        ${editChipHtml(pid, bi)}
         ${chevron}
       </div>
+      ${editPanelHtml(pid, bi, first.chunk_min, {isBlock: true})}
       <div class="did-note">✓ did a chunk today — still open, comes back tomorrow</div>
       ${arcHtml}
     </div>`;

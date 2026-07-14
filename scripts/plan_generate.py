@@ -288,6 +288,15 @@ or household chores). One optional field — `user_set`: set `"user_set": true` 
 "push lunch later"). It tells the system to honor her time today and learn from it. Leave it off
 on a normal day):
 
+**REST IS NAMED PLAINLY — READ THIS BEFORE NAMING ANY ITEM.** When rest, self-care, a walk, or a
+break belongs in the day — because her focus period or capacity calls for it — include it and give
+it real room. But name it plainly and warmly, as a normal, valued part of the day: `"Rest"`,
+`"Rest and recover"`, `"Rest or light activity"`, `"Take a short walk"`. **NEVER** append a
+command or pressure clause to it. Do not write `"Rest — not optional"`, `"Rest (non-negotiable)"`,
+`"protected rest"`, `"you must rest"`, or any variant. The exact string "not optional" must not
+appear anywhere in the output. June decides what her body needs; the plan offers rest, it never
+orders her to take it. (This overrides any stock phrasing you would default to for a recovery day.)
+
 **THREE RULES FOR EVERY ITEM:**
 
 1. `task` is what June reads on her phone — rewrite internal labels into plain action language
@@ -658,6 +667,49 @@ def _blockify(kept, projects, period, neglected):
     return out
 
 
+def _recent_deferral_ids(hours=None):
+    """(task_ids, project_ids) June took off today ("not today") within the recency window — read
+    from session_store's `deferral` stream, which rides the same 8h window (DEFAULT_WINDOW_HOURS)
+    that bounds the LLM's conversation context. A task deferral carries the task id; a block
+    deferral carries the project id. Returns two sets (empty when none). Best-effort: a read hiccup
+    must never break a generation — the plan just won't honor the deferral this cycle."""
+    import session_store
+    hrs = session_store.DEFAULT_WINDOW_HOURS if hours is None else hours
+    task_ids, project_ids = set(), set()
+    try:
+        # A generous token budget so no deferral is trimmed away — these entries are tiny, and for
+        # exclusion we need every one in the window, not a token-bounded slice of the conversation.
+        for e in session_store.recent_entries("deferral", hours=hrs, token_budget=10 ** 7):
+            oid = e.get("id")
+            if not oid:
+                continue
+            (project_ids if e.get("kind") == "block" else task_ids).add(oid)
+    except Exception as ex:
+        print(f"[warn] could not read recent deferrals: {ex}", file=sys.stderr)
+    return task_ids, project_ids
+
+
+def _drop_deferred_from_plan(plan):
+    """Deterministically remove anything June recently took off today ("not today") from a freshly
+    generated plan — the GUARANTEE behind the schedulable pre-filter. The pre-filter thins the
+    suggestion, but the LLM can still name a deferred task from the broader project hierarchy in its
+    context, and _resolve_ids will happily resolve it to a real id. So we drop it again here, by
+    resolved task id (task deferral) or project_id (block deferral — the plan items carry it by now).
+    Runs AFTER _resolve_ids (ids assigned) and BEFORE _retime (the clock re-flows over the gap)."""
+    d_task_ids, d_project_ids = _recent_deferral_ids()
+    if not (d_task_ids or d_project_ids):
+        return plan
+
+    def _keep(it):
+        return not (it.get("id") in d_task_ids or it.get("project_id") in d_project_ids)
+
+    for block in plan.get("blocks", []):
+        block["items"] = [it for it in block.get("items", []) if _keep(it)]
+    if isinstance(plan.get("items"), list):
+        plan["items"] = [it for it in plan["items"] if _keep(it)]
+    return plan
+
+
 def build_context(capacity=None, start_time=None, end_time=None, extra=None):
     """Load active items + compute the clock schedule, returning the full prompt context.
 
@@ -735,6 +787,33 @@ def build_context(capacity=None, start_time=None, end_time=None, extra=None):
             t["project_id"] = proj["id"]
             t["arc"] = proj.get("arc")
             t["chunk_min"] = block_duration.get_chunk_min(proj)
+
+    # "Not today" — honor June's recent deferrals (2026-07-14). A task or work-block she took off
+    # today's list stays out of a same-day regenerate for the recency window (session_store's 8h —
+    # the same bound that feeds the LLM its conversation context), then expires so the next day is
+    # fresh. Deterministic, not a soft prompt hint: she said not today, so it sticks (we saw the
+    # model ignore soft instructions). Excluded here from `schedulable` alone — the full active list
+    # (returned 7th, for id resolution) is untouched, and since _ensure_all_tasks_accounted runs on
+    # `schedulable`, a deferred item isn't silently pushed into still_here either. It's simply held,
+    # and still_here + the next morning bring it back with its status unchanged. Task deferrals drop
+    # by id; block deferrals drop every row of that project.
+    d_task_ids, d_project_ids = _recent_deferral_ids()
+    if d_task_ids or d_project_ids:
+        # Match block deferrals two ways, because a block-work TASK carries its project as a NAME
+        # (`linked_projects`), not an id, at this stage — while a synthetic container block carries
+        # `project_id`. Resolve the deferred project ids to names and check both.
+        d_project_names = {p.get("name") for p in projects if p.get("id") in d_project_ids} - {None}
+
+        def _deferred(t):
+            if t.get("id") in d_task_ids:
+                return True
+            if t.get("project_id") in d_project_ids:        # synthetic container block
+                return True
+            if d_project_names and set(t.get("linked_projects") or []) & d_project_names:
+                return True                                  # a block-work task of a deferred project
+            return False
+
+        schedulable = [t for t in schedulable if not _deferred(t)]
 
     # Output SHAPE (Phase 6, Task 6): a fragmented / unknown-timing day (a caregiving window, or
     # a period that asks for a priority list) can't be expressed as a clock schedule — forcing one
@@ -1238,6 +1317,7 @@ def generate_plan(capacity=None, source="generate", extra=None):
             model_text = generate(prompt)
             plan = parse_plan(model_text)
             mislabels, resolved = _resolve_ids(plan, ref_map, tasks, all_tasks=all_active_tasks)
+            _drop_deferred_from_plan(plan)   # "not today" guarantee — drop anything re-added from context
             _ensure_all_tasks_accounted(plan, tasks)
         except Exception as e:
             generation_log.log_generation(
@@ -1342,6 +1422,7 @@ def reorder(message, kind):
         model_text = generate(prompt)
         plan = parse_plan(model_text)
         mislabels, _resolved = _resolve_ids(plan, ref_map, tasks, all_tasks=all_active_tasks)
+        _drop_deferred_from_plan(plan)   # "not today" guarantee — drop anything re-added from context
         _ensure_all_tasks_accounted(plan, tasks)
         # Python re-times June's newly composed order (AI_LAYER_SPEC:69), same as generate_plan.
         _retime_clock_plan(plan, tasks, all_anchors, start_time, end_time)

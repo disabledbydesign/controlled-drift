@@ -275,3 +275,100 @@ def test_priority_move_raises_on_missing_id_clock_shape_or_no_cache(tmp_path, mo
     plan_store.save_plan(_clock_plan(), source="generate")
     with pytest.raises(LookupError):
         plan_store.move_priority_item_later("T1", 1)   # clock plan has no priority list
+
+
+# --- "not today" removal (cache-only view drop, no Anytype write) -------------
+
+def test_remove_item_clock_shape_drops_row_keeps_others(tmp_path, monkeypatch):
+    _redirect(tmp_path, monkeypatch)
+    plan_store.save_plan(_clock_plan(), source="generate")
+    plan, removed = plan_store.remove_item("T2")
+    assert [i["id"] for i in removed] == ["T2"]
+    ids = [i["id"] for b in plan["blocks"] for i in b["items"]]
+    assert ids == ["T1", "T3", "T4"]           # T2 gone, the rest untouched
+    # persisted, not just in-memory
+    reloaded = plan_store.load_plan()
+    assert "T2" not in [i["id"] for b in reloaded["blocks"] for i in b["items"]]
+
+
+def test_remove_item_leaves_neighbor_times_untouched(tmp_path, monkeypatch):
+    # "not today" is a hide, not a re-solve — remaining rows keep their clock times (a gap is fine).
+    _redirect(tmp_path, monkeypatch)
+    plan_store.save_plan(_clock_plan(), source="generate")
+    plan, _ = plan_store.remove_item("T2")
+    times = {i["id"]: i["time"] for b in plan["blocks"] for i in b["items"]}
+    assert times["T1"] == "09:00 – 10:30" and times["T3"] == "11:15 – 12:00"
+
+
+def test_remove_item_priority_shape(tmp_path, monkeypatch):
+    _redirect(tmp_path, monkeypatch)
+    plan_store.save_plan(_priority_plan(), source="generate")
+    plan, removed = plan_store.remove_item("P2")
+    assert [i["id"] for i in removed] == ["P2"]
+    assert [i["id"] for i in plan["items"]] == ["P1", "P3"]
+
+
+def test_remove_item_missing_id_is_noop(tmp_path, monkeypatch):
+    _redirect(tmp_path, monkeypatch)
+    plan_store.save_plan(_clock_plan(), source="generate")
+    plan, removed = plan_store.remove_item("NOPE")
+    assert removed == []
+    assert [i["id"] for b in plan["blocks"] for i in b["items"]] == ["T1", "T2", "T3", "T4"]
+
+
+def test_remove_item_no_cache_returns_none(tmp_path, monkeypatch):
+    _redirect(tmp_path, monkeypatch)
+    plan, removed = plan_store.remove_item("T1")
+    assert plan is None and removed == []
+
+
+def test_remove_item_preserves_generated_at(tmp_path, monkeypatch):
+    # A removal is not a regeneration — the build timestamp must not be re-stamped.
+    _redirect(tmp_path, monkeypatch)
+    plan_store.save_plan(_clock_plan(), source="generate")
+    stamped = plan_store.load_plan()["generated_at"]   # save_plan sets this; capture it
+    plan, _ = plan_store.remove_item("T1")
+    assert plan["generated_at"] == stamped
+
+
+# --- "not today" on a work block (remove every row of a project) --------------
+
+def _block_plan():
+    return {
+        "woven_frame": "wf",
+        "blocks": [
+            {"label": "Afternoon", "time": "13:00 – 17:00", "items": [
+                {"time": "13:00 – 13:30", "task": "step one", "id": "B1",
+                 "project": "IOP", "project_id": "PROJ", "block_project": True},
+                {"time": "13:30 – 14:00", "task": "step two", "id": "B2",
+                 "project": "IOP", "project_id": "PROJ", "block_project": True},
+                {"time": "14:00 – 14:30", "task": "unrelated", "id": "T4", "project": "Other"},
+            ]},
+        ],
+        "still_here": [],
+    }
+
+
+def test_remove_block_drops_all_rows_of_project(tmp_path, monkeypatch):
+    _redirect(tmp_path, monkeypatch)
+    plan_store.save_plan(_block_plan(), source="generate")
+    plan, removed = plan_store.remove_block("PROJ")
+    assert sorted(r["id"] for r in removed) == ["B1", "B2"]
+    assert [i["id"] for i in plan["blocks"][0]["items"]] == ["T4"]   # only the block's rows go
+
+
+def test_remove_block_missing_project_is_noop(tmp_path, monkeypatch):
+    _redirect(tmp_path, monkeypatch)
+    plan_store.save_plan(_block_plan(), source="generate")
+    plan, removed = plan_store.remove_block("NOPE")
+    assert removed == []
+    assert len(plan["blocks"][0]["items"]) == 3
+
+
+def test_remove_item_does_not_touch_block_siblings(tmp_path, monkeypatch):
+    # a single-task "not today" on B1 leaves its block sibling B2 in place
+    _redirect(tmp_path, monkeypatch)
+    plan_store.save_plan(_block_plan(), source="generate")
+    plan, removed = plan_store.remove_item("B1")
+    assert [r["id"] for r in removed] == ["B1"]
+    assert [i["id"] for i in plan["blocks"][0]["items"]] == ["B2", "T4"]

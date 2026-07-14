@@ -35,7 +35,10 @@ import cd_paths
 # RMW in-process so no append is lost.
 _WRITE_LOCK = threading.Lock()
 
-STREAMS = ("capture", "negotiate")
+# "deferral" holds "not today" events (a task/block June took off today's list). It rides the same
+# 8h window as the conversation streams so a same-day regenerate can honor a fresh deferral and then
+# let it expire — see plan_generate._recent_deferral_ids / build_context.
+STREAMS = ("capture", "negotiate", "deferral")
 
 # How much session history to hand the LLM on the next turn. The window keeps a prior day from
 # bleeding in; the token budget keeps the prompt bounded as the day accumulates turns. Oldest

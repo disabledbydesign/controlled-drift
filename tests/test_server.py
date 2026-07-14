@@ -443,3 +443,57 @@ def test_project_summaries_route(live_server, monkeypatch):
     assert status == 200
     assert data["summaries"]["Alpha"] == {"what_it_is": "the build", "next_step": "ship it"}
     assert "Beta" not in data["summaries"]   # unparseable → omitted, never fabricated
+
+
+# --- /api/task/not-today ("not today" deferral) -----------------------------
+
+def _seed_task_and_block_plan():
+    plan_store.save_plan({
+        "woven_frame": "wf",
+        "blocks": [{"label": "Afternoon", "time": "13:00 – 17:00", "items": [
+            {"time": "13:00 – 13:30", "task": "a flat task", "id": "T1", "project": "Alpha"},
+            {"time": "13:30 – 14:00", "task": "block step", "id": "B1",
+             "project": "IOP", "project_id": "PROJ", "block_project": True},
+        ]}],
+        "still_here": [],
+    }, source="generate")
+
+
+def test_not_today_task_removes_row_and_logs(live_server):
+    base, _ = live_server
+    _seed_task_and_block_plan()
+    import signal_log
+    status, data = _post(base, "/api/task/not-today", {"id": "T1", "kind": "task"})
+    assert status == 200 and data["ok"] is True
+    ids = [i.get("id") for i in data["plan"]["blocks"][0]["items"]]
+    assert "T1" not in ids and "B1" in ids                 # only the task row goes
+    assert "T1" not in [i.get("id") for i in plan_store.load_plan()["blocks"][0]["items"]]
+    # logged to BOTH the 8h window and the permanent learning store
+    defs = session_store.recent_entries("deferral", hours=8, token_budget=10 ** 7)
+    assert [(e["kind"], e["id"]) for e in defs] == [("task", "T1")]
+    assert [(s["source"], s["reference"]) for s in signal_log.read_signals()] == [("plan_deferral", "T1")]
+
+
+def test_not_today_block_removes_every_project_row(live_server):
+    base, _ = live_server
+    _seed_task_and_block_plan()
+    status, data = _post(base, "/api/task/not-today", {"id": "PROJ", "kind": "block"})
+    assert status == 200 and data["ok"] is True
+    ids = [i.get("id") for i in data["plan"]["blocks"][0]["items"]]
+    assert ids == ["T1"]                                    # the whole block (B1) dropped
+    defs = session_store.recent_entries("deferral", hours=8, token_budget=10 ** 7)
+    assert [(e["kind"], e["id"]) for e in defs] == [("block", "PROJ")]
+
+
+def test_not_today_missing_id_is_400(live_server):
+    base, _ = live_server
+    _seed_task_and_block_plan()
+    status, data = _post(base, "/api/task/not-today", {"kind": "task"})
+    assert status == 400 and "error" in data
+
+
+def test_not_today_unknown_id_is_404(live_server):
+    base, _ = live_server
+    _seed_task_and_block_plan()
+    status, data = _post(base, "/api/task/not-today", {"id": "NOPE", "kind": "task"})
+    assert status == 404 and "error" in data

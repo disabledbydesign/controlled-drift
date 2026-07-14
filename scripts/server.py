@@ -468,6 +468,58 @@ class Handler(BaseHTTPRequestHandler):
             self._send(200, {"ok": True, "when_label": out.get("when_label")})
             return
 
+        if self.path == "/api/task/not-today":
+            # "Not today": take an item off TODAY'S list only. Cache-only by design — no Anytype
+            # write, no status change, no reschedule (June, 2026-07-14: "removed from today's daily
+            # list; the next day handles generation the same way, the item keeps the status it had").
+            # `kind`: "task" (id = task id) or "block" (id = project id → drop all its rows).
+            # The deferral is written to TWO logs, each with its own job:
+            #   • session_store "deferral" stream — the 8h recency window build_context reads, so a
+            #     SAME-DAY regenerate honors the deferral and then lets it expire (the stickiness).
+            #   • signal_log (source plan_deferral) — the permanent qualitative learning record.
+            # Neither touches the task. Removal is the primary effect; a log write that fails is
+            # surfaced (warning + stderr), never silently swallowed and never undoes the removal.
+            body = self._read_json_body()
+            obj_id = (body.get("id") or "").strip()
+            kind = (body.get("kind") or "task").strip()
+            name = (body.get("name") or "").strip()
+            if not obj_id:
+                self._send(400, {"error": "not-today needs an id"})
+                return
+            try:
+                if kind == "block":
+                    plan, removed = plan_store.remove_block(obj_id)
+                else:
+                    plan, removed = plan_store.remove_item(obj_id)
+            except Exception as e:
+                self._send(500, {"error": str(e)})
+                return
+            if plan is None:
+                self._send(404, {"error": "no cached plan to remove from"})
+                return
+            if not removed:
+                self._send(404, {"error": "that item isn't on today's list"})
+                return
+            resp = {"ok": True, "plan": plan}
+            log_name = (name or removed[0].get("task") or removed[0].get("project")
+                        or removed[0].get("name") or obj_id)
+            warnings = []
+            try:
+                session_store.append_entry("deferral", {"kind": kind, "id": obj_id,
+                                                        "name": log_name, "request_type": "not_today"})
+            except Exception as e:
+                print(f"[not-today] deferral-window log failed for {obj_id!r}: {e}", file=sys.stderr)
+                warnings.append("removed for now, but it may come back if the plan regenerates today")
+            try:
+                signal_log.log_signal(log_name, source="plan_deferral", reference=obj_id)
+            except Exception as e:
+                print(f"[not-today] signal_log failed for {obj_id!r}: {e}", file=sys.stderr)
+                warnings.append("removed, but the learning note didn't save")
+            if warnings:
+                resp["warning"] = "; ".join(warnings)
+            self._send(200, resp)
+            return
+
         if self.path == "/api/task/move":
             # Tap-to-place, deterministic: relocate one task LATER in the CACHED plan at the
             # tapped position, clock times re-flowed automatically from existing durations. No

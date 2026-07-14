@@ -322,3 +322,53 @@ def test_parse_first_time_basic():
     assert pg._parse_first_time("12:30 PM") == dt.time(12, 30)
     assert pg._parse_first_time("12:00 AM") == dt.time(0, 0)
     assert pg._parse_first_time("no time here") is None
+
+
+# --- "not today" deferrals feed the 8h exclusion window ----------------------
+
+def test_recent_deferral_ids_splits_task_and_block(tmp_path, monkeypatch):
+    monkeypatch.setenv("CD_CONFIG_DIR", str(tmp_path))
+    import session_store
+    session_store.append_entry("deferral", {"kind": "task", "id": "TASK-A", "name": "a"})
+    session_store.append_entry("deferral", {"kind": "block", "id": "PROJ-X", "name": "Work on X"})
+    task_ids, project_ids = pg._recent_deferral_ids()
+    assert task_ids == {"TASK-A"}
+    assert project_ids == {"PROJ-X"}
+
+
+def test_recent_deferral_ids_drops_entries_past_the_window(tmp_path, monkeypatch):
+    monkeypatch.setenv("CD_CONFIG_DIR", str(tmp_path))
+    import session_store
+    old_ts = (dt.datetime.now() - dt.timedelta(hours=20)).isoformat()   # older than the 8h window
+    session_store.append_entry("deferral", {"kind": "task", "id": "STALE", "ts": old_ts})
+    session_store.append_entry("deferral", {"kind": "task", "id": "FRESH"})
+    task_ids, project_ids = pg._recent_deferral_ids()
+    assert task_ids == {"FRESH"}          # STALE fell out of the recency window
+
+
+def test_recent_deferral_ids_empty_when_none(tmp_path, monkeypatch):
+    monkeypatch.setenv("CD_CONFIG_DIR", str(tmp_path))
+    task_ids, project_ids = pg._recent_deferral_ids()
+    assert task_ids == set() and project_ids == set()
+
+
+def test_drop_deferred_from_plan_task_and_block(tmp_path, monkeypatch):
+    monkeypatch.setenv("CD_CONFIG_DIR", str(tmp_path))
+    import session_store
+    session_store.append_entry("deferral", {"kind": "task", "id": "TASK-A"})
+    session_store.append_entry("deferral", {"kind": "block", "id": "PROJ-X"})
+    plan = {"blocks": [{"items": [
+        {"id": "TASK-A", "task": "deferred task"},
+        {"id": "B1", "task": "block row", "project_id": "PROJ-X"},
+        {"id": "KEEP", "task": "survivor"},
+    ]}], "items": []}
+    pg._drop_deferred_from_plan(plan)
+    ids = [it["id"] for it in plan["blocks"][0]["items"]]
+    assert ids == ["KEEP"]           # both the deferred task and the whole deferred block are gone
+
+
+def test_drop_deferred_from_plan_noop_without_deferrals(tmp_path, monkeypatch):
+    monkeypatch.setenv("CD_CONFIG_DIR", str(tmp_path))
+    plan = {"blocks": [{"items": [{"id": "X", "task": "t"}]}], "items": []}
+    pg._drop_deferred_from_plan(plan)
+    assert [it["id"] for it in plan["blocks"][0]["items"]] == ["X"]

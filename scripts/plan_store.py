@@ -193,6 +193,50 @@ def mark_item_undone(task_id):
     return plan
 
 
+def _remove_rows(pred):
+    """Shared core of the "not today" removals: drop every cached-plan row matching `pred` from
+    TODAY'S view only. Cache-only on purpose — no Anytype write, no status change, no reschedule.
+    The rows just leave the current list; the next generation rebuilds from Anytype and they return
+    as candidates with the exact status they had. Clock times of the remaining rows are left as they
+    are (a gap, not a re-solve — a hide, not a re-plan). Works across both shapes (blocks[] clock day
+    / flat items[] fragmented day). Preserves generated_at (not a regeneration).
+
+    Returns (plan, removed) where `removed` is the list of removed row dicts — empty if nothing
+    matched. Returns (None, []) if there's no cache at all.
+    """
+    plan = load_plan()
+    if plan is None:
+        return None, []
+    removed = []
+    for block in plan.get("blocks", []):
+        kept = []
+        for it in block.get("items", []):
+            (removed if pred(it) else kept).append(it)
+        block["items"] = kept
+    flat = plan.get("items")
+    if isinstance(flat, list):
+        kept = []
+        for it in flat:
+            (removed if pred(it) else kept).append(it)
+        plan["items"] = kept
+    if removed:
+        _persist_plan(plan)
+    return plan, removed
+
+
+def remove_item(task_id):
+    """"Not today" on a single task — drop its row(s) from today's cached list by task id."""
+    return _remove_rows(lambda it: it.get("id") == task_id)
+
+
+def remove_block(project_id):
+    """"Not today" on a work-block — drop every cached row of that block-work project (they carry
+    `project_id`). Same cache-only contract as remove_item: the project's tasks keep their status
+    and return on the next generation (a matching recent deferral keeps the block out for the
+    recency window)."""
+    return _remove_rows(lambda it: it.get("project_id") == project_id)
+
+
 def _persist_plan(plan):
     """Atomically rewrite the cached plan (the overlay never reads a half-written file)."""
     path = _plan_path()
