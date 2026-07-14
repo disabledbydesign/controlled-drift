@@ -651,6 +651,14 @@ textarea.fe-input { resize: vertical; min-height: 64px; line-height: 1.45; }
   display: flex; align-items: baseline; gap: 9px; padding: 3px 6px;
   font-size: 12.5px; line-height: 1.4; border-radius: 6px;
 }
+/* each arc step now carries a real checkbox (checking it marks that task done via toggleItem).
+   Done → a filled rose check + struck-through text, matching a completed task row. */
+.arc-step .item-check { align-self: center; top: 0; }
+.arc-step.done .item-check { background: var(--rose); border-color: var(--rose); }
+.arc-step.done .item-check::after {
+  content: "✓"; inset: 0; opacity: 1; background: none; border-radius: 0;
+  font-size: 10px; line-height: 13px; text-align: center; color: var(--bg);
+}
 .arc-mark { width: 12px; flex-shrink: 0; text-align: center; font-size: 11px; }
 .arc-step.done .arc-mark { color: var(--text-dimmer); }
 .arc-step.done .arc-text { color: var(--text-dimmer); text-decoration: line-through; }
@@ -1003,6 +1011,17 @@ textarea.add-field:focus { border-color: var(--gold); }
   background: var(--gold-dim); border: 1px dashed var(--gold); color: var(--gold); }
 .place-target:disabled { opacity: 0.5; cursor: default; }
 .placing-item { outline: 1px solid var(--gold); border-radius: 8px; }
+/* unified "edit" entry (reuses .move-chip's pill) + the inline panel it reveals: move-later and
+   duration, side by side. One entry point folds what used to be two competing chips. */
+.edit-panel { display: none; align-items: center; flex-wrap: wrap; gap: 8px;
+  padding: 6px 0 3px 22px; }
+.edit-panel.open { display: flex; }
+.edit-move { flex-shrink: 0; font-family: inherit; font-size: 11px; padding: 2px 11px;
+  border-radius: 13px; cursor: pointer; background: var(--surface);
+  border: 1px solid var(--border); color: var(--text-dim); transition: all .12s; }
+.edit-move:hover { border-color: var(--gold); color: var(--gold); }
+.edit-dur-label { font-size: 11px; color: var(--text-dimmer); }
+.edit-dur { margin-left: 0; }
 .verify-box { margin: 8px 14px 16px; background: var(--rose-bg); border: 1px solid var(--rose-border); border-radius: 10px; padding: 12px 13px; }
 .verify-q { font-size: 12.5px; color: var(--text); line-height: 1.45; margin-bottom: 11px; }
 .verify-q b { color: var(--gold); font-weight: 600; }
@@ -1474,7 +1493,7 @@ function setBusy(on) {
 // confirm each way before we flip the check. No regeneration, no fanfare — June's layer.
 async function toggleItem(id, btn) {
   if (btn.classList.contains('pending')) return;
-  const item = btn.closest('.plan-item, .task-sub');
+  const item = btn.closest('.plan-item, .task-sub, .arc-step');
   const isDone = !!(item && item.classList.contains('done'));
   const endpoint = isDone ? '/api/uncomplete' : '/api/complete';
   btn.classList.add('pending');
@@ -1541,7 +1560,7 @@ function openChunkInput(ev, chip, itemId) {
   input.className = 'chunk-input';
   input.value = chunkMinFromLabel(chip.textContent) || '';
   input.placeholder = 'min';
-  input.setAttribute('aria-label', 'chunk length in minutes');
+  input.setAttribute('aria-label', 'duration in minutes');
   chip.replaceWith(input);
   input.focus();
   input.select();
@@ -1984,13 +2003,29 @@ async function loadMap() {
 // expandable project row. This runs entirely in the renderer — no LLM change needed.
 function groupByProject(items) {
   const groups = [];
+  const blockGroupOf = {};   // project key -> its block group (block_project siblings coalesce)
   for (const item of items) {
-    // A block is its whole thread — never fold it in with a sibling task, even one sharing its
-    // project name. It renders atomically (renderFlatItem branches to renderBlock).
+    // A CONTAINER block (block:true, e.g. a task-less "scholarly writing") is its whole thread —
+    // it renders atomically as a bare chunk (renderFlatItem → renderBlock). Never folded.
     if (item.block) { groups.push({ atomic: true, item }); continue; }
+    // A BLOCK-PROJECT task is a REAL task that also belongs to a "Work on X" block. All such rows
+    // sharing a project coalesce into ONE block group — the block is a RENDERING over their real
+    // rows (the arc), never a synthetic replacement, so every row keeps its own checkoffable id.
+    if (item.block_project) {
+      const key = item.project_id || item.project || '';
+      let bg = blockGroupOf[key];
+      if (!bg) {
+        bg = { atomic: false, blockProject: true, project: item.project, tasks: [] };
+        blockGroupOf[key] = bg;
+        groups.push(bg);
+      }
+      bg.tasks.push(item);
+      continue;
+    }
     if (!item.project) { groups.push({ atomic: true, item }); continue; }
     const prev = groups.length ? groups[groups.length - 1] : null;
-    if (prev && !prev.atomic && prev.project === item.project) {
+    // Only coalesce into an ordinary (non-block) consecutive same-project group.
+    if (prev && !prev.atomic && !prev.blockProject && prev.project === item.project) {
       prev.tasks.push(item);
     } else {
       groups.push({ atomic: false, project: item.project, tasks: [item] });
@@ -2035,21 +2070,65 @@ function moveChipHtml(id, bi) {
       ? `<button class="move-chip active" onclick="event.stopPropagation(); startPlacing('${esc(id)}', null)">cancel</button>`
       : '';
   }
+  if (!_hasLaterSpot(id, bi)) return '';
+  const blockArg = (bi === null || bi === undefined) ? 'null' : bi;
+  return `<button class="move-chip" title="move this later in the day" onclick="event.stopPropagation(); startPlacing('${esc(id)}', ${blockArg})">move ›</button>`;
+}
+
+// Is there a spot LATER than this task's current position to move it to? (Shared by the old
+// task-sub move-chip and the new unified edit panel.) On a fragmented day the whole plan is one
+// ordered list; on a clock day it's "later in this block, or any later block."
+function _hasLaterSpot(id, bi) {
   const p = _lastPlan || {};
-  let hasLater = false;
   if (p.shape === 'priority') {
     const items = p.items || [];
     const pos = items.findIndex(it => it.id === id);
-    hasLater = pos >= 0 && pos < items.length - 1;
-  } else {
-    const blocks = p.blocks || [];
-    const here = (blocks[bi] && blocks[bi].items) || [];
-    const pos = here.findIndex(it => it.id === id);
-    hasLater = (bi != null && bi < blocks.length - 1) || (pos >= 0 && pos < here.length - 1);
+    return pos >= 0 && pos < items.length - 1;
   }
-  if (!hasLater) return '';
+  const blocks = p.blocks || [];
+  const here = (blocks[bi] && blocks[bi].items) || [];
+  const pos = here.findIndex(it => it.id === id);
+  return (bi != null && bi < blocks.length - 1) || (pos >= 0 && pos < here.length - 1);
+}
+
+// ── unified "edit" control (Task C, 2026-07-14) ─────────────────────────────
+// June: the separate "move ›" and "set time" chips were messy — both are about time. Now ONE
+// "edit" entry per task row reveals a small inline panel carrying BOTH: "move later ›" (the
+// existing tap-to-place) and a duration chip ("set duration" → the existing numeric editor).
+// Both mechanisms are reused unchanged — only the entry point is unified. In placement mode the
+// panel collapses entirely (one thing at a time): only the moving task shows a "cancel".
+function editChipHtml(id, bi) {
+  if (!id) return '';
+  if (_placing) {
+    // Placement mode: every edit affordance gives way to the tap-targets; the moving task alone
+    // shows a cancel.
+    return _placing.id === id
+      ? `<button class="move-chip active" onclick="event.stopPropagation(); startPlacing('${esc(id)}', null)">cancel</button>`
+      : '';
+  }
+  return `<button class="move-chip edit-chip" title="edit timing" onclick="toggleEditPanel(event, this)">edit</button>`;
+}
+
+function editPanelHtml(id, bi, durationMin) {
+  if (!id || _placing) return '';   // placement mode collapses the panel
+  const canMove = _hasLaterSpot(id, bi);
   const blockArg = (bi === null || bi === undefined) ? 'null' : bi;
-  return `<button class="move-chip" title="move this later in the day" onclick="event.stopPropagation(); startPlacing('${esc(id)}', ${blockArg})">move ›</button>`;
+  const durLabel = durationMin ? fmtChunk(durationMin) : 'set duration';
+  const moveBtn = canMove
+    ? `<button class="edit-move" onclick="event.stopPropagation(); startPlacing('${esc(id)}', ${blockArg})">move later ›</button>`
+    : '';
+  return `<div class="edit-panel">
+    ${moveBtn}
+    <span class="edit-dur-label">duration:</span><span class="chunk-chip dur-chip edit-dur" title="set how long this takes" onclick="openChunkInput(event, this, '${esc(id)}')">${durLabel}</span>
+  </div>`;
+}
+
+function toggleEditPanel(ev, btn) {
+  ev.stopPropagation();
+  const host = btn.closest('.plan-item, .work-block');
+  if (!host) return;
+  const panel = host.querySelector('.edit-panel');
+  if (panel) panel.classList.toggle('open');
 }
 
 // "· N more" chip: this thread's other items are held (not shown). Rendered inline after the
@@ -2105,13 +2184,61 @@ function renderBlock(item, bi) {
     </div>`;
 }
 
-// One arc step. done → ✓ (struck through), here → ● (rose glow), ahead → ☐ (dim). The rose IS
-// the position — no extra "do this next" assertion beyond the mockup's visual (held lightly).
+// One arc step is a REAL task: it carries a checkbox wired to toggleItem(step.id) — checking it
+// marks that task done in Anytype, unchecking undoes it, exactly like any task row. The state
+// class still drives the row's look: done → struck-through + filled check; here → the rose "here"
+// glow (● — the one mark kept, since it carries a position the checkbox can't); ahead → dim. The
+// rose IS the position, held lightly. (Deliberate: the ✓/☐ glyphs the mockup drew alongside the
+// checkbox are dropped — a filled check next to a ✓, or an empty check next to a ☐, is a doubled
+// box that's hard to parse; the checkbox is the single state signal now.)
 function renderArcStep(step) {
   const state = step && step.state === 'done' ? 'done'
               : step && step.state === 'here' ? 'here' : 'ahead';
-  const mark = state === 'done' ? '✓' : state === 'here' ? '●' : '☐';
-  return `<div class="arc-step ${state}"><span class="arc-mark">${mark}</span><span class="arc-text">${esc(step ? step.text : '')}</span></div>`;
+  const mark = state === 'here' ? '●' : '';
+  const id = step && step.id ? esc(step.id) : '';
+  const check = id
+    ? `<button class="item-check" title="${state === 'done' ? 'undo' : 'mark done'}" onclick="toggleItem('${id}', this)"></button>`
+    : '<span class="check-gap"></span>';
+  return `<div class="arc-step ${state}" onclick="event.stopPropagation()">${check}<span class="arc-mark">${mark}</span><span class="arc-text">${esc(step ? step.text : '')}</span></div>`;
+}
+
+// A "Work on X" block rendered OVER a block-work project's real task rows (Task A, 2026-07-14).
+// The block is a rendering, never a replacement: the header carries the project-level did-a-chunk
+// check (toggleBlock — cache-only, NOT completion) and the chunk-length chip (openChunkInput on
+// the project_id); the body is the project's arc — its full ordered step list — where each step
+// is a real, checkoffable task. The arc is taken from the project's `arc` (shared across every
+// surfaced sibling row), never re-derived from just the rows that surfaced today.
+function renderBlockGroup(g, bi) {
+  const first = g.tasks[0] || {};
+  const arc = Array.isArray(first.arc) ? first.arc : [];
+  const expandable = arc.length >= 1;
+  const chunked = !!first.did_chunk_today;
+  const pid = esc(first.project_id || '');
+  const cls = ['work-block', expandable ? 'expandable' : '', chunked ? 'chunked' : '']
+    .filter(Boolean).join(' ');
+  // Head tap opens/closes the arc — but taps on the check or the chunk chip/input must not toggle
+  // it (same click-guard as renderBlock). A block header has no "edit" control: it never had a
+  // move-chip (a block isn't a single movable task), and its one time affordance — the visible
+  // chunk-length chip — is already a single tap-to-edit, so there's nothing to fold behind "edit".
+  const headClick = expandable
+    ? `onclick="if(!event.target.closest('.block-check,.chunk-chip,.chunk-input'))this.closest('.work-block').classList.toggle('open')"`
+    : '';
+  const chevron = expandable ? '<span class="block-chevron">▸</span>' : '';
+  const arcHtml = expandable
+    ? `<div class="block-arc">${arc.map(renderArcStep).join('')}</div>` : '';
+  return `
+    <div class="${cls}" data-project-id="${pid}">
+      <div class="block-head" ${headClick}>
+        <button class="block-check" title="did a chunk today" onclick="toggleBlock('${pid}', this)"></button>
+        <span class="block-time">${esc(fmtTime(first.time))}</span>
+        <span class="block-title">
+          <span class="block-name">Work on ${esc(g.project)}</span><span class="chunk-chip" title="set the chunk length" onclick="openChunkInput(event, this, '${pid}')">${esc(fmtChunk(first.chunk_min))}</span>
+        </span>
+        ${chevron}
+      </div>
+      <div class="did-note">✓ did a chunk today — still open, comes back tomorrow</div>
+      ${arcHtml}
+    </div>`;
 }
 
 // Friendly chunk-length label: minutes under an hour (e.g. 45m), else hours (2h / 1.5h).
@@ -2131,25 +2258,16 @@ function chunkMinFromLabel(label) {
   return parseInt(s, 10) || 0;
 }
 
-// Editable duration chip for a real-object row (a task/recurring carrying an Anytype id).
-// Same tap-type-a-number affordance as a block's chunk chip — one interface for every kind of
-// duration (June, 2026-07-14). Blocks have their own chunk chip in renderBlock; a generated row
-// with no id (a rest suggestion / the walk) gets NO chip — there's nothing to persist to.
-function durationChipHtml(item) {
-  if (!item.id || item.block || item.interstitial) return '';
-  const label = item.duration_min ? fmtChunk(item.duration_min) : 'set time';
-  return `<span class="chunk-chip dur-chip" title="set how long this takes"
-    onclick="openChunkInput(event, this, '${esc(item.id)}')">${label}</span>`;
-}
-
 function renderFlatItem(item, showProject, bi) {
   if (item.block) return renderBlock(item, bi);   // a block renders as its own grain, atomically
   const slim = !!item.interstitial;
   const cls = ['plan-item', item.done ? 'done' : '', slim ? 'interstitial' : ''].filter(Boolean).join(' ');
-  // Interstitial items: no expand, no why, project label suppressed. The click-guard now also
-  // ignores the move control; interstitials get no chip (they carry no task id).
-  const clickAttr = slim ? '' : `onclick="if(!event.target.closest('.item-check,.move-chip'))this.classList.toggle('open')"`;
-  const move = slim ? '' : moveChipHtml(item.id, bi);
+  // Interstitial items: no expand, no why, project label suppressed, no edit control (they carry
+  // no task id). The click-guard ignores the edit entry + its panel so editing never toggles the
+  // row's why-expand.
+  const clickAttr = slim ? '' : `onclick="if(!event.target.closest('.item-check,.move-chip,.edit-chip,.edit-panel,.chunk-chip,.chunk-input'))this.classList.toggle('open')"`;
+  const edit = slim ? '' : editChipHtml(item.id, bi);
+  const panel = slim ? '' : editPanelHtml(item.id, bi, item.duration_min);
   return `
     <div class="${cls}" ${clickAttr}>
       <div class="item-top">
@@ -2159,16 +2277,17 @@ function renderFlatItem(item, showProject, bi) {
           ${!slim && showProject && item.project ? `<span class="item-project">${esc(item.project)}</span><span class="item-sep"> · </span>` : ''}
           <span class="item-task">${esc(item.task)}</span>
           ${slim ? '' : moreChipHtml(item)}
-          ${slim ? '' : durationChipHtml(item)}
         </span>
-        ${move}
+        ${edit}
       </div>
+      ${panel}
       ${!slim ? heldBackHtml(item) : ''}
       ${!slim && item.why ? `<div class="item-why">${esc(item.why)}</div>` : ''}
     </div>`;
 }
 
 function renderGroup(g, bi) {
+  if (g.blockProject) return renderBlockGroup(g, bi);   // "Work on X" over the project's real rows
   if (g.atomic) return renderFlatItem(g.item, false, bi);
   if (g.tasks.length === 1) return renderFlatItem(g.tasks[0], true, bi);
   // Multi-task work-stream row: compute the time span from first start → last end.
@@ -2282,7 +2401,7 @@ function renderPlan(plan) {
       });
       itemsHtml = parts.join('');
     } else {
-      itemsHtml = (plan.items || []).map(renderPriorityItem).join('');
+      itemsHtml = renderPriorityItems(plan.items || []);
     }
     container.innerHTML =
       (plan.header ? `<div class="priority-header">${esc(plan.header)}</div>` : '') +
@@ -2311,22 +2430,33 @@ function renderPlan(plan) {
   // to-do list the daily plan exists to spare her from.
 }
 
+// A fragmented (priority) day's list. Block-work projects still render as their "Work on X"
+// block over the real rows (coalesced by groupByProject); everything else stays the flat, ordered
+// pull-from list — a non-block project isn't turned into a clock-style project-row here.
+function renderPriorityItems(items) {
+  return groupByProject(items).map(g => {
+    if (g.blockProject) return renderBlockGroup(g, null);
+    if (g.atomic) return renderPriorityItem(g.item);
+    return g.tasks.map(renderPriorityItem).join('');
+  }).join('');
+}
+
 // A single priority-list item (Task 6/6D): no clock time, same done-affordance as clock items.
 function renderPriorityItem(it) {
-  if (it.block) return renderBlock(it, null);   // blocks render on fragmented days too
+  if (it.block) return renderBlock(it, null);   // container blocks render on fragmented days too
   const done = it.done ? ' done' : '';
   return `
-    <div class="plan-item priority-item${done}" onclick="if(!event.target.closest('.item-check,.move-chip'))this.classList.toggle('open')">
+    <div class="plan-item priority-item${done}" onclick="if(!event.target.closest('.item-check,.move-chip,.edit-chip,.edit-panel,.chunk-chip,.chunk-input'))this.classList.toggle('open')">
       <div class="item-top">
         ${it.id ? `<button class="item-check" title="${it.done ? 'undo' : 'mark done'}" onclick="toggleItem('${esc(it.id)}', this)"></button>` : '<span class="check-gap"></span>'}
         <span class="item-label">
           ${it.project ? `<span class="item-project">${esc(it.project)}</span><span class="item-sep"> · </span>` : ''}
           <span class="item-task">${esc(it.task)}</span>
           ${moreChipHtml(it)}
-          ${durationChipHtml(it)}
         </span>
-        ${moveChipHtml(it.id, null)}
+        ${editChipHtml(it.id, null)}
       </div>
+      ${editPanelHtml(it.id, null, it.duration_min)}
       ${heldBackHtml(it)}
       ${it.why ? `<div class="item-why">${esc(it.why)}</div>` : ''}
     </div>`;
