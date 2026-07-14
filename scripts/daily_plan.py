@@ -19,6 +19,7 @@ sys.path.insert(0, os.path.dirname(__file__))
 from anytype_test import call
 import gsdo_anytype as g
 import grain
+import chunk_log
 from datetime_seam import recurring_items_for_today
 from neglect import active_untouched
 from scheduler import schedule, DEFAULT_DURATION_MIN
@@ -733,6 +734,7 @@ def blocks_from_scheduled(scheduled, framing_by_label=None):
     downstream consumers parse it by string ops)."""
     from collections import OrderedDict
     framing_by_label = framing_by_label or {}
+    _chunked_today = chunk_log.chunked_today_ids()   # project_ids worked-on today (block checks)
     grouped: OrderedDict = OrderedDict()
     for item in scheduled:
         start = item.get("start_time")
@@ -769,6 +771,16 @@ def blocks_from_scheduled(scheduled, framing_by_label=None):
                     row["held_back_names"] = it.get("held_back_names", [])
                 if it.get("description"):
                     row["description"] = it["description"]
+                if it.get("block"):
+                    # A "work on X" block: carry its render data + today's chunk state. The check
+                    # is a daily "worked on it today" (chunk_log), NOT the task done-affordance —
+                    # the overlay renders it distinctly and the completion route is cache-only.
+                    row["block"] = True
+                    row["project_id"] = it.get("project_id")
+                    row["shape"] = it.get("shape")
+                    row["arc"] = it.get("arc")
+                    row["chunk_min"] = it.get("chunk_min")
+                    row["did_chunk_today"] = it.get("project_id") in _chunked_today
             elif it.get("id") and not it.get("_break"):
                 # A recurring chore/appointment anchor carries a real Anytype id. Expose it so the
                 # overlay renders a checkbox, and flag it `recurring` so completion is a local

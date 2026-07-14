@@ -105,3 +105,47 @@ def test_blockify_container_surfaces_when_foregrounded():
 def test_blockify_workstream_never_emitted():
     proj = _bproj("ws", "A workstream", eng="Steady", side="Wellbeing", ws=True)
     assert pg._blockify([], [proj], None, []) == []
+
+
+# ---------------------------------------------------------------------------
+# Task 7: block data survives resolve -> retime -> rows, keyed by synthetic id
+# ---------------------------------------------------------------------------
+
+def test_resolve_ids_reattaches_block_data_by_id():
+    arc = [{"text": "Cut", "state": "here"}]
+    block = grain.block_unit({"id": "lw", "name": "Leatherworking"}, "arc", arc, 120)
+    plan = {"blocks": [{"items": [{"ref": "T1", "task": "Work on Leatherworking"}]}]}
+    pg._resolve_ids(plan, {"T1": "block:lw"}, [block])
+    item = plan["blocks"][0]["items"][0]
+    assert item["id"] == "block:lw" and item["block"] is True
+    assert item["project_id"] == "lw" and item["shape"] == "arc"
+    assert item["arc"] == arc and item["chunk_min"] == 120
+
+
+def test_retime_dur_by_id_yields_chunk_min_not_30():
+    """A block's duration must be its chunk length through retime — the swarm's 30-min
+    collapse guard. dur_by_id is keyed on the synthetic id."""
+    block = grain.block_unit({"id": "sw", "name": "Scholarly writing"}, "chunk", None, 240)
+    dur_by_id = {t["id"]: t.get("duration_min") for t in [block]}
+    assert dur_by_id["block:sw"] == 240
+
+
+def test_blocks_from_scheduled_tags_block_row_and_chunk_state(cd_sandbox):
+    import datetime as dt
+    import daily_plan, chunk_log
+    s = dt.datetime(2026, 7, 14, 10, 0)
+    scheduled = [{
+        "_composed": True, "id": "block:lw", "task": "Work on Leatherworking",
+        "project": "Leatherworking", "block": True, "project_id": "lw",
+        "shape": "arc", "arc": [{"text": "Cut", "state": "here"}], "chunk_min": 120,
+        "start_time": s, "end_time": s + dt.timedelta(minutes=120),
+    }]
+    blocks = daily_plan.blocks_from_scheduled(scheduled)
+    row = blocks[0]["items"][0]
+    assert row["block"] is True and row["project_id"] == "lw" and row["shape"] == "arc"
+    assert row["chunk_min"] == 120 and row["arc"][0]["state"] == "here"
+    assert row["did_chunk_today"] is False           # nothing logged yet
+
+    chunk_log.log_chunk("lw")                          # mark worked-on today
+    row2 = daily_plan.blocks_from_scheduled(scheduled)[0]["items"][0]
+    assert row2["did_chunk_today"] is True

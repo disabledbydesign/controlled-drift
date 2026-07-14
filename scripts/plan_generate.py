@@ -977,6 +977,10 @@ def _resolve_ids(plan, ref_map, tasks):
     # so the honest 'N more' reaches the cached plan JSON without the model rebuilding the pile.
     held_by_id = {t["id"]: (t.get("held_back") or 0) for t in tasks}
     held_names_by_id = {t["id"]: (t.get("held_back_names") or []) for t in tasks}
+    # Per-block Python-owned data (arc, chunk length, shape), keyed by the block's synthetic id.
+    # The LLM only echoes the ref token — these never enter its output — so they're re-attached
+    # here by id exactly like held_back, keeping the model's ordering the single source of order.
+    block_by_id = {t["id"]: t for t in tasks if t.get("block")}
     mislabels = 0  # resolved items whose model text differed materially from the real name
     resolved = 0   # items that resolved to a real task id (the resolution-health signal)
 
@@ -1012,6 +1016,16 @@ def _resolve_ids(plan, ref_map, tasks):
             if held > 0:
                 item["held_back"] = held
                 item["held_back_names"] = held_names_by_id.get(tid, [])
+            # A block: re-attach its Python-owned data by id so the row renders as a "work on X"
+            # block (arc/chunk) rather than a plain task. `project` stays the real project name
+            # (set above from proj_by_id); the block carries project_id for the completion route.
+            blk = block_by_id.get(tid)
+            if blk:
+                item["block"] = True
+                item["project_id"] = blk["project_id"]
+                item["shape"] = blk["shape"]
+                item["arc"] = blk["arc"]
+                item["chunk_min"] = blk["chunk_min"]
 
     for block in plan.get("blocks", []):        # clock shape
         for item in block.get("items", []):
