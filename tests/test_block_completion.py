@@ -35,3 +35,17 @@ def test_set_block_chunk_updates_cached_length(cd_sandbox):
     _seed_plan([{"id": "block:lw", "block": True, "project_id": "lw", "chunk_min": 90}])
     plan_store.set_block_chunk("lw", 180)
     assert plan_store.load_plan()["blocks"][0]["items"][0]["chunk_min"] == 180
+
+
+def test_set_item_duration_updates_cached_row(cd_sandbox):
+    """General duration edit: a real task/recurring row's cached duration_min updates by id."""
+    _seed_plan([{"id": "t1", "task": "Go on a walk", "duration_min": 30}])
+    plan_store.set_item_duration("t1", 60)
+    assert plan_store.load_plan()["blocks"][0]["items"][0]["duration_min"] == 60
+
+
+def test_is_block_item_false_for_real_task_id(cd_sandbox):
+    """A real task id must NOT match the block predicate, so /api/duration routes it to the
+    task-duration path (its own Duration min field), not the block Project field."""
+    _seed_plan([{"id": "t1", "task": "Go on a walk", "duration_min": 30}])
+    assert plan_store.is_block_item("t1") is False

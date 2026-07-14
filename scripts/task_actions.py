@@ -62,6 +62,23 @@ def complete_task(task_id):
     return {"id": task_id, "name": obj.get("name"), "status": "Done", "done": True}
 
 
+def set_task_duration(item_id, minutes):
+    """Set an item's estimated duration (minutes) on its Anytype object + PROVE it persisted.
+    Works for any object carrying the shared 'Duration min' field (a real task or recurring) —
+    the persistent side of the general duration-edit surface. A block's length is a Project
+    preference, handled separately in block_duration; the /api/duration route dispatches between
+    them. Raises on a read-back mismatch (no silent write)."""
+    minutes = int(minutes)
+    gsdo_objects.update(item_id, properties={"Duration min": minutes})
+    obj = _get_object(item_id)
+    pv = {p.get("key"): p for p in obj.get("properties", [])}
+    got = (pv.get("gsdo_duration_min", {}) or {}).get("number")
+    if got != minutes:
+        raise RuntimeError(
+            f"set_task_duration({item_id!r}): Duration min did not persist (wrote {minutes}, read-back={got!r})")
+    return {"id": item_id, "name": obj.get("name"), "duration_min": minutes}
+
+
 def uncomplete_task(task_id):
     """Undo a completion — the mis-tap fix. Sets Task status back to 'Ready' (the canonical
     active/execution-ready status), so the task returns to the plan. Read-back confirmed.

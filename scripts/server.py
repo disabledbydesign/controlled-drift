@@ -154,7 +154,7 @@ def _start_focus_generation(fn):
 # Security note: 0.0.0.0 exposes the surface to everyone on the local network (no auth) —
 # fine on a trusted home network, her call. Loopback stays the safe default.
 HOST = os.environ.get("CD_BIND", "127.0.0.1")
-PORT = 5050
+PORT = int(os.environ.get("CD_PORT", "5050"))   # override for a sandboxed/second instance
 OVERLAY_HTML = os.path.join(os.path.dirname(__file__), "..", "docs", "overlay_daily.html")
 PROJECT_NAME = "Build Controlled Drift"  # the map's root project
 
@@ -534,12 +534,16 @@ class Handler(BaseHTTPRequestHandler):
             self._send(200, {"uncompleted": confirmed, "plan": plan or {"empty": True}})
             return
 
-        if self.path == "/api/block/duration":
-            # June set a block's chunk length. Durable write: the Anytype Project field + a
-            # timestamped event (raw material for the later recency-weighted proposal). NOT a
-            # completion — this is a preference. Cache mirror follows so the chip updates now.
+        if self.path == "/api/duration":
+            # June set an item's duration from the overlay — one interface, dispatched by what the
+            # row IS (display_grain_design.md + the duration-generalization, 2026-07-14):
+            #   - a BLOCK  -> the durable Project field (block chunk length) via block_duration,
+            #                 plus a timestamped event; a preference, NOT a completion.
+            #   - a real TASK/RECURRING -> its own 'Duration min' field via task_actions (read-back).
+            # A generated row with no backing object (a rest suggestion / the walk) never reaches
+            # here: the overlay shows no duration chip on it, because there's nowhere to persist to.
             body = self._read_json_body()
-            project_id = (body.get("project_id") or "").strip()
+            item_id = (body.get("id") or "").strip()
             minutes = body.get("minutes")
             if isinstance(minutes, bool):     # JSON true is an int subclass — reject it
                 minutes = None
@@ -547,16 +551,20 @@ class Handler(BaseHTTPRequestHandler):
                 minutes = int(minutes)
             except (TypeError, ValueError):
                 minutes = None
-            if not project_id or minutes is None or minutes <= 0:
-                self._send(400, {"error": "block/duration needs project_id and positive integer minutes"})
+            if not item_id or minutes is None or minutes <= 0:
+                self._send(400, {"error": "duration needs id and positive integer minutes"})
                 return
             try:
-                block_duration.set_chunk_min(project_id, minutes)
+                if plan_store.is_block_item(item_id):
+                    block_duration.set_chunk_min(item_id, minutes)
+                    plan = plan_store.set_block_chunk(item_id, minutes)
+                else:
+                    task_actions.set_task_duration(item_id, minutes)
+                    plan = plan_store.set_item_duration(item_id, minutes)
             except Exception as e:
                 self._send(500, {"error": str(e)})
                 return
-            plan = plan_store.set_block_chunk(project_id, minutes)
-            self._send(200, {"ok": True, "project_id": project_id, "chunk_min": minutes,
+            self._send(200, {"ok": True, "id": item_id, "duration_min": minutes,
                              "plan": plan or {"empty": True}})
             return
 

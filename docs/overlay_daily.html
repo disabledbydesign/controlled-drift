@@ -621,6 +621,10 @@ textarea.fe-input { resize: vertical; min-height: 64px; line-height: 1.45; }
   font-variant-numeric: tabular-nums; transition: background .12s;
 }
 .chunk-chip:hover { background: rgba(212,169,106,0.18); }
+/* duration chip on a task/recurring row — neutral, so it reads as an edit affordance, not a
+   block (gold is reserved for blocks). Same tap-to-edit behavior. */
+.chunk-chip.dur-chip { color: var(--text-dim); background: rgba(152,152,159,0.08); border-color: var(--border); }
+.chunk-chip.dur-chip:hover { background: rgba(152,152,159,0.16); }
 /* the inline numeric editor the chip becomes on tap (swarm fix: free value, not a cycle) */
 .chunk-input {
   font-size: 10px; color: var(--gold); background: var(--surface);
@@ -1526,7 +1530,7 @@ async function toggleBlock(projectId, btn) {
 // number, NOT a fixed cycle). Commit (Enter or blur) POSTs the new duration and re-labels the
 // chip; Escape restores it untouched. stopPropagation throughout so editing never toggles the
 // arc open. The chip only re-labels after the write is confirmed (a good answer is not a save).
-function openChunkInput(ev, chip, projectId) {
+function openChunkInput(ev, chip, itemId) {
   ev.stopPropagation();
   if (chip.dataset.editing === '1') return;
   chip.dataset.editing = '1';
@@ -1553,14 +1557,14 @@ function openChunkInput(ev, chip, projectId) {
     if (!minutes || minutes <= 0) { restore(); return; }   // no value → leave the old label
     settled = true;
     try {
-      const res = await fetch('/api/block/duration', {
+      const res = await fetch('/api/duration', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ project_id: projectId, minutes }),
+        body: JSON.stringify({ id: itemId, minutes }),
       });
       if (!res.ok) {
         const data = await res.json().catch(() => ({}));
-        showError(data.error || "couldn't set the chunk length");
+        showError(data.error || "couldn't set the duration");
       } else {
         chip.textContent = fmtChunk(minutes);   // confirmed persisted server-side
       }
@@ -2127,6 +2131,17 @@ function chunkMinFromLabel(label) {
   return parseInt(s, 10) || 0;
 }
 
+// Editable duration chip for a real-object row (a task/recurring carrying an Anytype id).
+// Same tap-type-a-number affordance as a block's chunk chip — one interface for every kind of
+// duration (June, 2026-07-14). Blocks have their own chunk chip in renderBlock; a generated row
+// with no id (a rest suggestion / the walk) gets NO chip — there's nothing to persist to.
+function durationChipHtml(item) {
+  if (!item.id || item.block || item.interstitial) return '';
+  const label = item.duration_min ? fmtChunk(item.duration_min) : 'set time';
+  return `<span class="chunk-chip dur-chip" title="set how long this takes"
+    onclick="openChunkInput(event, this, '${esc(item.id)}')">${label}</span>`;
+}
+
 function renderFlatItem(item, showProject, bi) {
   if (item.block) return renderBlock(item, bi);   // a block renders as its own grain, atomically
   const slim = !!item.interstitial;
@@ -2144,6 +2159,7 @@ function renderFlatItem(item, showProject, bi) {
           ${!slim && showProject && item.project ? `<span class="item-project">${esc(item.project)}</span><span class="item-sep"> · </span>` : ''}
           <span class="item-task">${esc(item.task)}</span>
           ${slim ? '' : moreChipHtml(item)}
+          ${slim ? '' : durationChipHtml(item)}
         </span>
         ${move}
       </div>
@@ -2307,6 +2323,7 @@ function renderPriorityItem(it) {
           ${it.project ? `<span class="item-project">${esc(it.project)}</span><span class="item-sep"> · </span>` : ''}
           <span class="item-task">${esc(it.task)}</span>
           ${moreChipHtml(it)}
+          ${durationChipHtml(it)}
         </span>
         ${moveChipHtml(it.id, null)}
       </div>

@@ -250,6 +250,23 @@ def set_block_chunk(project_id, minutes):
     return plan
 
 
+def set_item_duration(item_id, minutes):
+    """Update the cached duration_min on every plan row carrying this Anytype id (a real task or
+    recurring), so the overlay reflects June's new length immediately. The durable write is on
+    the object itself (task_actions.set_task_duration). Returns the updated plan or None."""
+    plan = load_plan()
+    if plan is None:
+        return None
+    changed = False
+    for item in _iter_items(plan):
+        if item.get("id") == item_id:
+            item["duration_min"] = minutes
+            changed = True
+    if changed:
+        _persist_plan(plan)
+    return plan
+
+
 # --- tap-to-place move (deterministic — no LLM, no regeneration) -------------
 # June moves a task by TAPPING WHERE IT GOES: the overlay shows tap-targets at every later
 # spot in the visible plan, and the tapped spot arrives here as (target_block, position).
