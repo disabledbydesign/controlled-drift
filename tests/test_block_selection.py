@@ -116,6 +116,24 @@ def test_resolve_ids_reattaches_block_data_by_id():
     assert item["arc"] == arc and item["chunk_min"] == 120
 
 
+def test_resolve_ids_name_matches_against_all_active_tasks():
+    # The ghost-killer: a real task the model names that is NOT in the gated order-list but IS in the
+    # full active set must resolve to its id (no uncheckoffable ghost). Exact-normalized match only.
+    gated = [{"id": "t1", "name": "Organize letters"}]
+    all_tasks = gated + [{"id": "t99", "name": "Verify the disability payment process"}]
+    plan = {"blocks": [{"items": [{"task": "Verify the disability payment process"}]}]}
+    pg._resolve_ids(plan, {}, gated, all_tasks=all_tasks)
+    assert plan["blocks"][0]["items"][0]["id"] == "t99"
+
+
+def test_resolve_ids_still_strict_no_loose_match():
+    gated = [{"id": "t1", "name": "Organize letters"}]
+    all_tasks = gated + [{"id": "t99", "name": "Verify the disability payment process"}]
+    plan = {"blocks": [{"items": [{"task": "verify disability"}]}]}   # partial, not exact
+    pg._resolve_ids(plan, {}, gated, all_tasks=all_tasks)
+    assert plan["blocks"][0]["items"][0].get("id") is None            # no loose match → no wrong-task
+
+
 def test_resolve_ids_attaches_block_project_render_data_keeping_real_id():
     arc = [{"text": "Verify disability", "state": "here", "id": "t1"}]
     task = {"id": "t1", "name": "Verify disability", "linked_projects": ["IOP and recovery"],

@@ -244,7 +244,7 @@ def backend_descriptor(backend):
 
 def build_prompt(capacity=None, extra=None):
     """Build the full generation prompt. Public for the compare script and manual testing."""
-    full_context, tasks, start_time, shape, _anchors, _end = build_context(capacity=capacity)
+    full_context, tasks, start_time, shape, _anchors, _end, _all = build_context(capacity=capacity)
     ref_map, task_table = _build_task_refs(tasks)
     prompt = _assemble_prompt(full_context, start_time, capacity=capacity,
                               extra=extra, task_table=task_table, shape=shape)
@@ -778,7 +778,10 @@ def build_context(capacity=None, start_time=None, end_time=None, extra=None):
     # individually accounted / surfaced / ref-tokened downstream (never-pick-her-threads).
     # all_anchors + end_time are handed back so the post-generation re-time pass (_retime_clock_plan)
     # can place the LLM's COMPOSED order in time using the same fixed anchors the suggestion used.
-    return full_context, schedulable, start_time, shape, all_anchors, end_time
+    # 7th value: the FULL active task list (not just the gated schedulable). _resolve_ids name-matches
+    # against it so any real task the model names — from the full-hierarchy context — resolves to its
+    # id instead of ghosting (display_grain_design REVISION, decision C).
+    return full_context, schedulable, start_time, shape, all_anchors, end_time, tasks
 
 
 def _build_task_refs(tasks):
@@ -945,7 +948,7 @@ def _norm(s):
     return re.sub(r"\s+", " ", (s or "").strip().lower())
 
 
-def _resolve_ids(plan, ref_map, tasks):
+def _resolve_ids(plan, ref_map, tasks, all_tasks=None):
     """Thread the real Anytype task id onto each plan item, in place. Returns
     (mislabel_count, resolved_count):
 
@@ -973,12 +976,17 @@ def _resolve_ids(plan, ref_map, tasks):
     legitimately shortened it for display — identity beats brevity, and the overlay truncates
     gracefully. Non-task items (Lunch, breaks — ref null, no name match) keep their model text.
     """
-    by_name = {_norm(t["name"]): t["id"] for t in tasks}
-    context_by_id = {t["id"]: (t.get("context") or "").strip() for t in tasks}
+    # Identity + the name-match fallback run against ALL active tasks (not just the gated set), so a
+    # real task the model names from the full-hierarchy context resolves to its id instead of ghosting
+    # (display_grain_design REVISION, decision C). The STRICT exact-normalized match still holds — a
+    # loose match could mark the WRONG task done. Metadata maps below stay keyed on the gated `tasks`.
+    identity = all_tasks if all_tasks is not None else tasks
+    by_name = {_norm(t["name"]): t["id"] for t in identity}
+    context_by_id = {t["id"]: (t.get("context") or "").strip() for t in identity}
     # Python-owned identity fields, keyed by real id: the canonical task name, and the task's
     # project (first linked project, if any). The overwrite below reads from these.
-    name_by_id = {t["id"]: t["name"] for t in tasks}
-    proj_by_id = {t["id"]: (t.get("linked_projects") or [None])[0] for t in tasks}
+    name_by_id = {t["id"]: t["name"] for t in identity}
+    proj_by_id = {t["id"]: (t.get("linked_projects") or [None])[0] for t in identity}
     # Per-thread held-back data (count + names of this thread's not-today items), keyed by the
     # shown task's id. Python owns this map — the LLM only echoes a ref token, never the count —
     # so the honest 'N more' reaches the cached plan JSON without the model rebuilding the pile.
@@ -1204,7 +1212,7 @@ def generate_plan(capacity=None, source="generate", extra=None):
     framing below): a fresh generation still selects from the whole active list, but her words
     are the strongest signal for what to prioritize. Writes cache, logs what surfaced.
     """
-    full_context, tasks, start_time, shape, all_anchors, end_time = build_context(capacity=capacity, extra=extra)
+    full_context, tasks, start_time, shape, all_anchors, end_time, all_active_tasks = build_context(capacity=capacity, extra=extra)
     ref_map, task_table = _build_task_refs(tasks)
     prompt = _assemble_prompt(full_context, start_time, capacity=capacity, task_table=task_table,
                               extra=extra, request_kind="generate", shape=shape)
@@ -1225,7 +1233,7 @@ def generate_plan(capacity=None, source="generate", extra=None):
         try:
             model_text = generate(prompt)
             plan = parse_plan(model_text)
-            mislabels, resolved = _resolve_ids(plan, ref_map, tasks)
+            mislabels, resolved = _resolve_ids(plan, ref_map, tasks, all_tasks=all_active_tasks)
             _ensure_all_tasks_accounted(plan, tasks)
         except Exception as e:
             generation_log.log_generation(
@@ -1316,7 +1324,7 @@ def reorder(message, kind):
     re-surfaces (the renegotiated plan is what she's now working from).
     """
     before = plan_store.load_plan()
-    full_context, tasks, start_time, shape, all_anchors, end_time = build_context(extra=message)
+    full_context, tasks, start_time, shape, all_anchors, end_time, all_active_tasks = build_context(extra=message)
     ref_map, task_table = _build_task_refs(tasks)
     history = session_store.recent_entries("negotiate")
     current_plan_summary = _format_current_plan(before)
@@ -1329,7 +1337,7 @@ def reorder(message, kind):
     try:
         model_text = generate(prompt)
         plan = parse_plan(model_text)
-        mislabels, _resolved = _resolve_ids(plan, ref_map, tasks)
+        mislabels, _resolved = _resolve_ids(plan, ref_map, tasks, all_tasks=all_active_tasks)
         _ensure_all_tasks_accounted(plan, tasks)
         # Python re-times June's newly composed order (AI_LAYER_SPEC:69), same as generate_plan.
         _retime_clock_plan(plan, tasks, all_anchors, start_time, end_time)
@@ -1447,7 +1455,7 @@ if __name__ == "__main__":
     args = ap.parse_args()
 
     if args.dry_context:
-        ctx, tasks, st, _shape, _anchors, _end = build_context(capacity=args.capacity)
+        ctx, tasks, st, _shape, _anchors, _end, _all = build_context(capacity=args.capacity)
         print(ctx)
         print(f"\n[{len(tasks)} tasks would be logged as surfaced]")
     elif args.reorder:

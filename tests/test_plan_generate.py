@@ -140,7 +140,7 @@ def _stub_pipeline(monkeypatch, tmp_path):
     monkeypatch.setattr(pg, "build_context",
                         lambda capacity=None, start_time=None, end_time=None, extra=None, **kw:
                         ("ctx", fake_tasks, dt.datetime(2026, 6, 23, 9, 0), "clock",
-                         [], dt.datetime(2026, 6, 23, 18, 0)))
+                         [], dt.datetime(2026, 6, 23, 18, 0), fake_tasks))
     monkeypatch.setattr(pg, "generate", lambda prompt: _CANNED)
     surfaced, corrections = [], []
     monkeypatch.setattr(pg, "log_surfaced_batch", lambda items, **k: surfaced.append(items))
@@ -278,7 +278,7 @@ def test_generate_plan_no_gated_tasks_is_valid(tmp_path, monkeypatch):
     monkeypatch.setattr(pg, "build_context",
                         lambda capacity=None, start_time=None, end_time=None, extra=None, **kw:
                         ("ctx", [], dt.datetime(2026, 6, 23, 20, 0), "clock",
-                         [], dt.datetime(2026, 6, 23, 23, 0)))
+                         [], dt.datetime(2026, 6, 23, 23, 0), []))
     monkeypatch.setattr(pg, "log_surfaced_batch", lambda items, **k: None)
     calls = {"n": 0}
     def once(prompt):
