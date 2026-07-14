@@ -91,9 +91,10 @@ def _tkey(o):
 def project_arc(project_name, all_objects, proj_id_to_name):
     """The project's direct tasks as an ordered arc, or None if it has none.
 
-    Returns a list of {"text": <task name>, "state": <"done"|"here"|"ahead">},
+    Returns a list of {"text": <task name>, "state": <"done"|"here"|"ahead">, "id": <task id>},
     ordered by "Step order" then task name (no-order tasks sort last, stable by
-    name — mirrors orient_map._steps_for). State:
+    name — mirrors orient_map._steps_for). The `id` is the real Anytype task id so
+    the overlay can wire a checkbox per arc step (check + undo). State:
         done  -> a finished step
         here  -> the FIRST not-done step
         ahead -> every not-done step after the first
@@ -128,7 +129,7 @@ def project_arc(project_name, all_objects, proj_id_to_name):
         # Step order read by NAME — its Anytype key is auto-generated.
         order = (by_name.get("Step order") or {}).get("number")
 
-        steps.append({"name": o.get("name", ""), "done": done, "order": order})
+        steps.append({"id": o.get("id"), "name": o.get("name", ""), "done": done, "order": order})
 
     if not steps:
         return None
@@ -147,5 +148,5 @@ def project_arc(project_name, all_objects, proj_id_to_name):
             here_marked = True
         else:
             state = "ahead"
-        arc.append({"text": s["name"], "state": state})
+        arc.append({"text": s["name"], "state": state, "id": s["id"]})
     return arc

@@ -76,6 +76,8 @@ def test_project_arc_states_in_order():
     arc = grain.project_arc("Write paper", all_objects, proj_id_to_name)
     assert [s["state"] for s in arc] == ["done", "here", "ahead"]
     assert [s["text"] for s in arc] == ["Outline", "Draft", "Revise"]
+    # Each step carries the real task id so the overlay can wire a per-step checkbox.
+    assert [s["id"] for s in arc] == ["task-Outline", "task-Draft", "task-Revise"]
 
 
 def test_project_arc_none_when_no_linked_tasks():
