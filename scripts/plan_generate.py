@@ -798,12 +798,21 @@ def _build_task_refs(tasks):
     for i, t in enumerate(tasks, start=1):
         token = f"T{i}"
         ref_map[token] = t["id"]
-        # Each item is its thread's ONE next move (nearest-due / longest-quiet), picked in the
-        # gate. Surface the held-back count so the plan can honestly say "next in X · N more".
-        held = t.get("held_back") or 0
-        suffix = f"  · {held} more in this thread" if held > 0 else ""
-        lines.append(f"  {token} — {t['name']}{suffix}")
+        lines.append(_task_ref_line(token, t))
     return ref_map, "\n".join(lines)
+
+
+def _task_ref_line(token, t):
+    """One ref-table line for the prompt. A block is presented as a single 'work on X' chunk
+    the model orders and narrates as a whole — never an enumerated task list, and no '· N more'
+    (a block IS the thread; it has no held-back siblings to count)."""
+    if t.get("block"):
+        return f"  {token} — {t['name']} — a chunk of time (do not list its internal steps)"
+    # A task item is its thread's ONE next move (nearest-due / longest-quiet), picked in the
+    # gate. Surface the held-back count so the plan can honestly say "next in X · N more".
+    held = t.get("held_back") or 0
+    suffix = f"  · {held} more in this thread" if held > 0 else ""
+    return f"  {token} — {t['name']}{suffix}"
 
 
 def _format_current_plan(plan):

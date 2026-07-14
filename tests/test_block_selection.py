@@ -149,3 +149,21 @@ def test_blocks_from_scheduled_tags_block_row_and_chunk_state(cd_sandbox):
     chunk_log.log_chunk("lw")                          # mark worked-on today
     row2 = daily_plan.blocks_from_scheduled(scheduled)[0]["items"][0]
     assert row2["did_chunk_today"] is True
+
+
+# ---------------------------------------------------------------------------
+# Task 8: prompt ref line — a block is a chunk, not a task list
+# ---------------------------------------------------------------------------
+
+def test_task_ref_line_block_says_chunk_no_more():
+    block = grain.block_unit({"id": "sw", "name": "Scholarly writing"}, "chunk", None, 240)
+    line = pg._task_ref_line("T1", block)
+    assert "Work on Scholarly writing" in line
+    assert "chunk of time" in line
+    assert "more" not in line          # a block has no held-back siblings to count
+
+
+def test_task_ref_line_task_keeps_held_back_suffix():
+    task = {"id": "t1", "name": "Write needs statement", "held_back": 3}
+    line = pg._task_ref_line("T2", task)
+    assert "· 3 more" in line and "chunk of time" not in line

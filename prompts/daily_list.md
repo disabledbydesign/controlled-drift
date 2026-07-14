@@ -51,9 +51,11 @@ Output shape for each block:
 - Afternoon → admin, errands, household, or wind-down.
 - Evening → only if things actually land there; acknowledge the day is wrapping.
 
-**What "next tangible item" means:** the one specific action she can start without prior setup. "SSRC grant: write the needs statement paragraph" ✓ — "work on SSRC" ✗ (too vague) — "writing" ✗ (wrong grain, activity not thread).
+**What "next tangible item" means:** the one specific action she can start without prior setup. "SSRC grant: write the needs statement paragraph" ✓ — "work on SSRC" ✗ (too vague) — "writing" ✗ (wrong grain, activity not thread). *This rule is for TASK items. It does not apply to blocks — see below.*
 
-**Never organize by activity type.** "Writing", "admin", "communication" are not organizing axes. The unit is *project/thread*. Each item belongs to a thread, not a category.
+**Blocks — a whole chunk of ongoing work.** Some candidate moves are marked in the TASK REFERENCE as `Work on X — a chunk of time (do not list its internal steps)`. These are **blocks**: a deliberate stretch of time on an ongoing thread June returns to bit by bit (e.g. "Work on scholarly writing"), *not* a single action. For a block, "Work on X" is the CORRECT grain — do not try to make it a specific next action, do not break it into steps, and do not enumerate what's inside it. Order it and narrate it as one chunk, by the same judgment (Focus Period intent, Strategies, capacity) you use for everything else. It carries its own duration; place it like any other move. The overlay renders its internal arc itself — your job is only where the chunk sits in the day.
+
+**Never organize by activity type.** "Writing", "admin", "communication" are not organizing axes. The unit is *project/thread*. Each item belongs to a thread, not a category. (A block is a thread, not an activity type — "Work on scholarly writing" is one project's chunk, not the category "writing.")
 
 **3. The "still here, not today" list — held, not dropped.** After the time-block plan: threads/items with genuinely nothing to do today — a `blocked_on`/waiting item, or a discrete errand with no thread — surfaced positively: "waiting on X — nothing to do here right now is the right answer." Reassure concretely (its rhythm, why deferred, that the system keeps holding it). **Do NOT list a thread's other tasks here.** Each shown item is its thread's ONE next move; the thread's remaining tasks are held under that same thread — the surface labels them "· N more" automatically. Re-listing them here rebuilds the whole pile the plan exists to avoid. still_here is for threads with nothing today, not for the tasks a shown thread is holding.
 
