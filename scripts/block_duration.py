@@ -48,12 +48,29 @@ def get_chunk_min(project, default=BLOCK_DEFAULT_MIN):
     return int(v) if v is not None else default
 
 
+def _get_object(object_id):
+    """Re-fetch one object to read its persisted state. Raises if it can't be read."""
+    from anytype_test import call
+    import gsdo_anytype as g
+    st, b = call("GET", f"/spaces/{g.get_space_id()}/objects/{object_id}")
+    if st != 200 or not isinstance(b, dict) or "object" not in b:
+        raise RuntimeError(f"could not read back {object_id!r}: {st} {b}")
+    return b["object"]
+
+
 def set_chunk_min(project_id, minutes, path=None):
-    """Persist June's chosen chunk length: write the durable Anytype Project field AND
-    append a local 'set' event. Property passed by display name ("Block chunk min"), the
-    same convention every other write uses."""
+    """Persist June's chosen chunk length: write the durable Anytype Project field, PROVE it
+    persisted (read-back — a good answer is not a saved object), THEN append the local 'set'
+    event (so a logged event always reflects a real write). Property passed by display name
+    ("Block chunk min"); its auto-generated key is block_chunk_min. Raises on mismatch."""
     minutes = int(minutes)
     gsdo_objects.update(project_id, properties={"Block chunk min": minutes})
+    obj = _get_object(project_id)
+    pv = {p.get("key"): p for p in obj.get("properties", [])}
+    got = (pv.get("block_chunk_min", {}) or {}).get("number")
+    if got != minutes:
+        raise RuntimeError(
+            f"set_chunk_min({project_id!r}): Block chunk min did not persist (wrote {minutes}, read-back={got!r})")
     _append("set", project_id, minutes, path)
 
 

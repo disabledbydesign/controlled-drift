@@ -20,22 +20,36 @@ def test_get_chunk_min_falls_back_to_default_when_unset():
     assert block_duration.get_chunk_min({}, default=45) == 45
 
 
-def test_set_chunk_min_writes_anytype_and_logs_event(tmp_path, monkeypatch):
+def test_set_chunk_min_writes_anytype_reads_back_and_logs_event(tmp_path, monkeypatch):
     calls = []
     monkeypatch.setattr(block_duration.gsdo_objects, "update",
                         lambda oid, properties=None, **kw: calls.append((oid, properties)))
+    # Read-back proof: the write persisted (returns the value that was set).
+    monkeypatch.setattr(block_duration, "_get_object",
+                        lambda oid: {"properties": [{"key": "block_chunk_min", "number": 180}]})
     p = tmp_path / "block_duration_log.jsonl"
     block_duration.set_chunk_min("proj-1", 180, path=str(p))
 
     # Anytype write: by display name, correct value.
     assert calls == [("proj-1", {"Block chunk min": 180})]
-    # Local event appended: full ts, event 'set', minutes.
+    # Local event appended AFTER read-back proof: full ts, event 'set', minutes.
     events = block_duration.read_events(path=str(p))
     assert len(events) == 1
     assert events[0]["event"] == "set"
     assert events[0]["project_id"] == "proj-1"
     assert events[0]["minutes"] == 180
     assert "T" in events[0]["ts"]  # full timestamp kept for later pattern-mining
+
+
+def test_set_chunk_min_raises_and_does_not_log_on_readback_mismatch(tmp_path, monkeypatch):
+    monkeypatch.setattr(block_duration.gsdo_objects, "update", lambda *a, **k: None)
+    monkeypatch.setattr(block_duration, "_get_object",
+                        lambda oid: {"properties": [{"key": "block_chunk_min", "number": 90}]})
+    p = tmp_path / "block_duration_log.jsonl"
+    import pytest
+    with pytest.raises(RuntimeError):
+        block_duration.set_chunk_min("proj-1", 180, path=str(p))   # wrote 180, read-back 90
+    assert block_duration.read_events(path=str(p)) == []            # no event on a failed write
 
 
 def test_log_scheduled_appends_without_anytype_write(tmp_path, monkeypatch):
