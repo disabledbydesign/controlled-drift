@@ -623,54 +623,38 @@ def _gate_and_collapse(tasks, projects, neglected, period, extra=None, surface_d
 
 
 def _blockify(kept, projects, period, neglected):
-    """Turn the gate's task list into the grain the daily plan surfaces: real project work
-    becomes a "work on X" BLOCK; discrete tasks (daily-life chores, no-project actions) stay
-    tasks. Two emission paths, both feeding the SAME list the LLM orders — nothing is placed
-    behind the model (display_grain_design.md decision 1, 8; plan Task 6).
+    """Emit the ONE remaining synthetic block: a task-LESS container project (scholarly writing —
+    a bundle of subprojects with nothing to check off) becomes a bare "did a chunk today" block.
 
-      1. Arc/thread blocks — a block-classified project whose task(s) survived the gate: its
-         collapsed thread is replaced by ONE block_unit. Its arc is the project's full step
-         progression (project["arc"], done steps included), not the single surviving task.
-      2. Container blocks — a block-classified, non-workstream project with NO surviving task
-         that still surfaces on the engagement gate (Steady / foregrounded): a bare chunk. This
-         is the scholarly-writing / GRA headline case — task-less bundles that are real work.
+    Everything else passes through UNCHANGED. A block is now a RENDER concern, not a selection
+    one (display_grain_design.md REVISION 2026-07-14): a block-project's REAL tasks stay in the
+    list — resolvable and checkoffable — and get grouped under a "Work on X" header at render time
+    (metadata attached in build_context, Task 3). We no longer replace a task-having project's
+    tasks with a synthetic unit; doing so severed them from resolution (the ghost-row bug).
 
-    Workstreams and Fun/hobby never reach here (classify → excluded); daily-life chores classify
-    → task and pass through unchanged."""
-    by_name = {p.get("name"): p for p in projects}
-
+    A synthetic container block is correct here because there is NO real task to displace — the
+    project has no direct tasks at all (`project["arc"]` is falsy). A project whose tasks merely
+    got gated out THIS cycle still has an arc, so it is NOT turned into a bare chunk."""
     def proj_of(t):
         ps = t.get("linked_projects") or []
         return ps[0] if ps else ""
 
-    def _unit(proj):
-        arc = proj.get("arc")
-        return grain.block_unit(proj, "arc" if arc else "chunk", arc,
-                                block_duration.get_chunk_min(proj))
+    out = list(kept)                                  # real tasks pass straight through
+    projects_with_survivors = {proj_of(t) for t in kept if proj_of(t)}
 
-    out, consumed = [], set()
-    # Path 1: block-classified threads → one block; everything else stays a task.
-    for t in kept:
-        proj = by_name.get(proj_of(t))
-        if proj and grain.classify(proj) == "block":
-            name = proj["name"]
-            if name not in consumed:
-                consumed.add(name)
-                out.append(_unit(proj))
-            # a same-thread survivor after the first: the block already represents it — drop.
-        else:
-            out.append(t)
-
-    # Path 2: task-less block projects that surface on the gate (containers).
+    # Container pass: a task-less block-project that surfaces → one synthetic bare-chunk block.
     fg = set((period or {}).get("foreground") or [])
     neg_names = {n.get("name") for n in (neglected or []) if isinstance(n, dict)}
     for proj in projects:
         name = proj.get("name")
-        if name in consumed or grain.classify(proj) != "block":
+        if name in projects_with_survivors or grain.classify(proj) != "block":
+            continue
+        if proj.get("arc"):                           # has direct tasks (just gated) → not a container
             continue
         eng = proj.get("engagement") or "unset"
         if _surfaces(eng, name in fg, name in neg_names):
-            out.append(_unit(proj))
+            out.append(grain.block_unit(proj, "chunk", None,
+                                        block_duration.get_chunk_min(proj)))
     return out
 
 

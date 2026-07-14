@@ -60,21 +60,15 @@ def _bproj(pid, name, eng=None, side=None, ws=False, arc=None, chunk_min=None):
             "parent_project_id": None, "is_workstream": ws, "arc": arc, "chunk_min": chunk_min}
 
 
-def test_blockify_thread_becomes_one_arc_block():
+def test_blockify_block_project_tasks_pass_through_unchanged():
+    # REVISION: a block-project's REAL tasks stay in the list (checkoffable) — NOT replaced by a
+    # synthetic block. The block is a render grouping (metadata attached later), not a selection unit.
     proj = _bproj("lw", "Leatherworking", eng="Steady", side="Wellbeing",
-                  arc=[{"text": "Cut", "state": "here"}], chunk_min=120)
-    kept = [_task("t1", "Cut", "Leatherworking")]
-    out = pg._blockify(kept, [proj], None, [])
-    assert len(out) == 1
-    assert out[0]["id"] == "block:lw" and out[0]["shape"] == "arc" and out[0]["duration_min"] == 120
-
-
-def test_blockify_multiple_survivors_collapse_to_one_block():
-    proj = _bproj("lw", "Leatherworking", eng="Steady", side="Wellbeing",
-                  arc=[{"text": "Cut", "state": "here"}], chunk_min=120)
+                  arc=[{"text": "Cut", "state": "here", "id": "t1"}], chunk_min=120)
     kept = [_task("t1", "Cut", "Leatherworking"), _task("t2", "Stitch", "Leatherworking")]
     out = pg._blockify(kept, [proj], None, [])
-    assert len([o for o in out if o.get("block")]) == 1  # one block for the thread, not two
+    assert out == kept                                   # both real tasks pass through, keep their ids
+    assert not any(o.get("block") for o in out)          # no synthetic block emitted
 
 
 def test_blockify_daily_life_stays_task():
