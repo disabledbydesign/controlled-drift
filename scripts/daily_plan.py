@@ -434,14 +434,38 @@ def format_context(goals, projects, tasks, strategies, today_recurrings, neglect
             else:
                 no_project.append(t)
 
-        for pname, ptasks in project_tasks.items():
-            lines.append(f"- **{pname}**")
-            for t in ptasks:
-                lines.append(f"  - {t['name']}{_task_extras(t)}")
-        if no_project:
-            lines.append("- **[No project]**")
-            for t in no_project:
-                lines.append(f"  - {t['name']}{_task_extras(t)}")
+        # Split the hierarchy into two labeled categories so the model knows which kind each is
+        # (display_grain_design REVISION, decision C): "block-organized work" (ongoing projects it
+        # orders as a 'Work on X' block; their tasks are the arc) vs "daily tasks" (discrete chores
+        # + standalone actions it checks off). Category = grain.classify; excluded projects omitted.
+        proj_by_name = {p["name"]: p for p in projects}
+
+        def _grain_of(pname):
+            p = proj_by_name.get(pname)
+            return grain.classify(p) if p else "task"        # no-project → discrete, daily-side
+
+        block_projects = {pn: ts for pn, ts in project_tasks.items() if _grain_of(pn) == "block"}
+        daily_projects = {pn: ts for pn, ts in project_tasks.items() if _grain_of(pn) == "task"}
+
+        if block_projects:
+            lines.append("### Block-organized work — ongoing projects. Order each as ONE 'Work on X'"
+                         " block; the tasks under it are its arc (do not enumerate them as separate"
+                         " plan items).")
+            for pname, ptasks in block_projects.items():
+                lines.append(f"- **{pname}**")
+                for t in ptasks:
+                    lines.append(f"  - {t['name']}{_task_extras(t)}")
+        if daily_projects or no_project:
+            lines.append("### Daily tasks — discrete chores + standalone actions. Surface each as its"
+                         " own task to check off.")
+            for pname, ptasks in daily_projects.items():
+                lines.append(f"- **{pname}**")
+                for t in ptasks:
+                    lines.append(f"  - {t['name']}{_task_extras(t)}")
+            if no_project:
+                lines.append("- **[No project]**")
+                for t in no_project:
+                    lines.append(f"  - {t['name']}{_task_extras(t)}")
         lines.append("")
 
     if today_recurrings:
