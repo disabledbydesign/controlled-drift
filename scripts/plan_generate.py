@@ -714,9 +714,23 @@ def build_context(capacity=None, start_time=None, end_time=None, extra=None):
     from surface_log import surfaced_dates
     schedulable = _gate_and_collapse(schedulable, projects, neglected, period, extra=extra,
                                      surface_dates=surfaced_dates(), rollover_ids=rollover_ids)
-    # Grain: real project work → "work on X" blocks (one per surviving thread + one per surfacing
-    # task-less container); discrete tasks stay tasks. Emitted into the SAME list the LLM orders.
+    # Grain: a task-less container project → one synthetic bare-chunk block. Real tasks pass through.
     schedulable = _blockify(schedulable, projects, period, neglected)
+    # Block-RENDER metadata: a real task whose project is block-work is displayed grouped under a
+    # "Work on X" block (with its project's arc) at render time. Attach the render fields here WITHOUT
+    # leaving selection — the task keeps its real id (resolvable, checkoffable). Threaded by id through
+    # _resolve_ids → blocks_from_scheduled, exactly like held_back. (display_grain_design REVISION.)
+    _by_name = {p.get("name"): p for p in projects}
+    for t in schedulable:
+        if t.get("block"):
+            continue                                   # synthetic container already carries its fields
+        ps = t.get("linked_projects") or []
+        proj = _by_name.get(ps[0]) if ps else None
+        if proj and grain.classify(proj) == "block":
+            t["block_project"] = True
+            t["project_id"] = proj["id"]
+            t["arc"] = proj.get("arc")
+            t["chunk_min"] = block_duration.get_chunk_min(proj)
 
     # Output SHAPE (Phase 6, Task 6): a fragmented / unknown-timing day (a caregiving window, or
     # a period that asks for a priority list) can't be expressed as a clock schedule — forcing one
@@ -974,6 +988,10 @@ def _resolve_ids(plan, ref_map, tasks):
     # The LLM only echoes the ref token — these never enter its output — so they're re-attached
     # here by id exactly like held_back, keeping the model's ordering the single source of order.
     block_by_id = {t["id"]: t for t in tasks if t.get("block")}
+    # Block-RENDER metadata for a REAL task whose project is block-work — keyed by the task's own
+    # id (no synthetic id). The task resolves normally; these fields make the row render grouped
+    # under a "Work on X" block with the project's arc.
+    block_render_by_id = {t["id"]: t for t in tasks if t.get("block_project")}
     mislabels = 0  # resolved items whose model text differed materially from the real name
     resolved = 0   # items that resolved to a real task id (the resolution-health signal)
 
@@ -1019,6 +1037,13 @@ def _resolve_ids(plan, ref_map, tasks):
                 item["shape"] = blk["shape"]
                 item["arc"] = blk["arc"]
                 item["chunk_min"] = blk["chunk_min"]
+            # A real block-project task: attach render fields so it groups under a "Work on X" block.
+            brender = block_render_by_id.get(tid)
+            if brender:
+                item["block_project"] = True
+                item["project_id"] = brender["project_id"]
+                item["arc"] = brender["arc"]
+                item["chunk_min"] = brender["chunk_min"]
 
     for block in plan.get("blocks", []):        # clock shape
         for item in block.get("items", []):

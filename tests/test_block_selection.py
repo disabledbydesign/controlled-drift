@@ -116,6 +116,18 @@ def test_resolve_ids_reattaches_block_data_by_id():
     assert item["arc"] == arc and item["chunk_min"] == 120
 
 
+def test_resolve_ids_attaches_block_project_render_data_keeping_real_id():
+    arc = [{"text": "Verify disability", "state": "here", "id": "t1"}]
+    task = {"id": "t1", "name": "Verify disability", "linked_projects": ["IOP and recovery"],
+            "block_project": True, "project_id": "iop", "arc": arc, "chunk_min": 90}
+    plan = {"blocks": [{"items": [{"ref": "T1", "task": "Verify disability"}]}]}
+    pg._resolve_ids(plan, {"T1": "t1"}, [task])
+    item = plan["blocks"][0]["items"][0]
+    assert item["id"] == "t1"                        # keeps its REAL task id — checkoffable, no ghost
+    assert item["block_project"] is True and item["project_id"] == "iop"
+    assert item["arc"] == arc and item["chunk_min"] == 90
+
+
 def test_retime_dur_by_id_yields_chunk_min_not_30():
     """A block's duration must be its chunk length through retime — the swarm's 30-min
     collapse guard. dur_by_id is keyed on the synthetic id."""

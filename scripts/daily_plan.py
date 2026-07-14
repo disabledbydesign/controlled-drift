@@ -772,12 +772,21 @@ def blocks_from_scheduled(scheduled, framing_by_label=None):
                 if it.get("description"):
                     row["description"] = it["description"]
                 if it.get("block"):
-                    # A "work on X" block: carry its render data + today's chunk state. The check
-                    # is a daily "worked on it today" (chunk_log), NOT the task done-affordance —
-                    # the overlay renders it distinctly and the completion route is cache-only.
+                    # A synthetic CONTAINER block (task-less project): a bare "work on X" chunk. The
+                    # check is a daily "worked on it today" (chunk_log), NOT a task done — cache-only.
                     row["block"] = True
                     row["project_id"] = it.get("project_id")
                     row["shape"] = it.get("shape")
+                    row["arc"] = it.get("arc")
+                    row["chunk_min"] = it.get("chunk_min")
+                    row["did_chunk_today"] = it.get("project_id") in _chunked_today
+                elif it.get("block_project"):
+                    # A REAL task whose project is block-work: keeps its own id/checkbox (row["id"]
+                    # is the task — check-off marks it done). These fields let the overlay GROUP the
+                    # project's rows under a "Work on X" header + its arc; the project-level
+                    # did-a-chunk lives on that header (project_id), distinct from the task's done.
+                    row["block_project"] = True
+                    row["project_id"] = it.get("project_id")
                     row["arc"] = it.get("arc")
                     row["chunk_min"] = it.get("chunk_min")
                     row["did_chunk_today"] = it.get("project_id") in _chunked_today
