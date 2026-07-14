@@ -28,6 +28,7 @@ import plan_store
 import session_store
 import cd_paths
 import generation_log
+import grain
 
 PROMPT_PATH = os.path.join(os.path.dirname(__file__), "..", "prompts", "daily_list.md")
 GEN_TIMEOUT = 300  # seconds. A full plan runs ~160s (JSON-only); 300 gives margin for a
@@ -499,6 +500,7 @@ def _gate_and_collapse(tasks, projects, neglected, period, extra=None, surface_d
     so the renderer can label 'next in X · N more'. No-project tasks are discrete actions: never
     collapsed together. `surface_dates` is injectable for pure testing; it defaults to the live log."""
     proj_eng = {p.get("name"): (p.get("engagement") or "unset") for p in projects}
+    proj_by_name = {p.get("name"): p for p in projects}
     proj_deadline = {p.get("name"): p.get("deadline") for p in projects}
     fg = set((period or {}).get("foreground") or [])
     neg_names = {n.get("name") for n in (neglected or []) if isinstance(n, dict)}
@@ -529,6 +531,12 @@ def _gate_and_collapse(tasks, projects, neglected, period, extra=None, surface_d
             # engagement default, so discrete tasks only ever surfaced once 16-days stale. They are
             # always eligible for the day. (June, 2026-07-13 — restoring the design's discrete
             # actions; the LLM composer decides how many actually fit today.)
+            survivors.append(t)
+            continue
+        if grain.classify(proj_by_name.get(proj, {})) == "task":
+            # Side = Daily life: its own always-eligible chore track, exempt from the
+            # engagement gate (its engagement is unset ON PURPOSE — Side governs it, not
+            # engagement). display_grain_design.md decision 1.
             survivors.append(t)
             continue
         eng = proj_eng.get(proj, "unset")
@@ -562,6 +570,9 @@ def _gate_and_collapse(tasks, projects, neglected, period, extra=None, surface_d
         proj = proj_of(t)
         if not proj:
             kept.append(t)                                 # discrete action — never collapsed
+            continue
+        if grain.classify(proj_by_name.get(proj, {})) == "task":
+            kept.append(t)                                 # Daily-life chore: discrete, like a no-project task
             continue
         if is_forced(t):
             seen_thread.add(proj)
