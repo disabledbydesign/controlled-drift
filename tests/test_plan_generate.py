@@ -137,6 +137,22 @@ def test_ensure_all_anchors_accounted_skips_anchor_already_in_still_here():
     assert len(plan["still_here"]) == 1
 
 
+def test_ensure_all_anchors_accounted_handles_mixed_real_and_synthesized_anchors():
+    """A day's all_anchors is realistically a MIX — real Recurring chores alongside a
+    synthesized default meal. The synthesized one must never be force-appended (nothing to
+    lose), while a dropped real one alongside it must still be caught — the two shouldn't
+    interfere with each other."""
+    anchors = [
+        {"id": "a1", "name": "Do the dishes"},         # real, dropped -> must be caught
+        {"name": "Lunch"},                              # synthesized, dropped -> must be skipped
+        {"id": "a2", "name": "Clean the toilet"},       # real, already placed -> not duplicated
+    ]
+    plan = {"blocks": [{"items": [{"id": "a2", "task": "Clean the toilet"}]}], "still_here": []}
+    pg._ensure_all_anchors_accounted(plan, anchors)
+    labels = {sh["label"] for sh in plan["still_here"]}
+    assert labels == {"Do the dishes"}
+
+
 def test_retime_clock_plan_never_drops_an_overdue_anchor_at_end_time():
     """REGRESSION (live 2026-07-16): build_schedule demotes an OVERDUE Recurring anchor
     (fixed_time already past relative to start_time) to a flexible item so it can float into
