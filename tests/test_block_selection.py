@@ -263,3 +263,9 @@ def test_ensure_all_tasks_accounted_counts_block_absorbed_and_arc_ids():
     labels = {sh["label"] for sh in plan["still_here"]}
     assert "Dye" not in labels and "Stitch" not in labels   # absorbed + in-arc -> accounted
     assert "Loose" in labels                                # genuinely unplaced -> parked
+
+
+def test_task_ref_line_block_reads_as_a_chunk():
+    block = grain.block_unit({"id": "sw", "name": "Scholarly writing"}, "chunk", None, 240)
+    line = pg._task_ref_line("T1", block)
+    assert "Work on Scholarly writing" in line and "chunk of time" in line and "more" not in line
