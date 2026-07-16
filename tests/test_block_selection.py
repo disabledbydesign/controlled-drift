@@ -62,44 +62,55 @@ def _bproj(pid, name, eng=None, side=None, ws=False, arc=None, chunk_min=None):
 
 
 def test_blockify_block_project_tasks_pass_through_unchanged():
-    # REVISION: a block-project's REAL tasks stay in the list (checkoffable) — NOT replaced by a
-    # synthetic block. The block is a render grouping (metadata attached later), not a selection unit.
+    # A block-project's REAL tasks stay in the list (checkoffable) — NOT replaced by a synthetic
+    # unit (the shipped zero-ghost design). The block is a render grouping (Task 9), not selection.
     proj = _bproj("lw", "Leatherworking", eng="Steady", side="Wellbeing",
                   arc=[{"text": "Cut", "state": "here", "id": "t1"}], chunk_min=120)
     kept = [_task("t1", "Cut", "Leatherworking"), _task("t2", "Stitch", "Leatherworking")]
-    out = pg._blockify(kept, [proj], None, [])
-    assert out == kept                                   # both real tasks pass through, keep their ids
+    out = pg._blockify(kept, [proj])
+    assert out == kept                                   # both real tasks pass through, keep ids
     assert not any(o.get("block") for o in out)          # no synthetic block emitted
 
 
 def test_blockify_daily_life_stays_task():
     proj = _bproj("hh", "Household", eng=None, side="Daily life")
     kept = [_task("t1", "Dishes", "Household")]
-    out = pg._blockify(kept, [proj], None, [])
-    assert out == kept  # unchanged — a chore is a discrete task, not a block
+    assert pg._blockify(kept, [proj]) == kept
 
 
-def test_blockify_container_bare_chunk_when_steady():
-    proj = _bproj("sw", "Scholarly writing", eng="Steady", side="Wellbeing")
-    out = pg._blockify([], [proj], None, [])
+def test_blockify_container_bare_chunk_for_taskless_project():
+    proj = _bproj("sw", "Scholarly writing", eng="Steady", side="Wellbeing")   # arc None, no tasks
+    out = pg._blockify([], [proj])
     assert len(out) == 1 and out[0]["shape"] == "chunk" and out[0]["id"] == "block:sw"
-    assert out[0]["duration_min"] == block_duration.BLOCK_DEFAULT_MIN  # unset -> 90 default
+    assert out[0]["duration_min"] == block_duration.BLOCK_DEFAULT_MIN
 
 
-def test_blockify_container_hidden_when_open_not_foregrounded():
+def test_blockify_container_surfaces_every_active_taskless_project():
+    # No _surfaces gate anymore — active-only-at-load is the filter, so an Open task-less block
+    # project surfaces as a container (decision 8: Open is in the input, available if-room).
     proj = _bproj("q", "Quiet project", eng="Open", side="Wellbeing")
-    assert pg._blockify([], [proj], None, []) == []
-
-
-def test_blockify_container_surfaces_when_foregrounded():
-    proj = _bproj("q", "Quiet project", eng="Open", side="Wellbeing")
-    out = pg._blockify([], [proj], {"foreground": ["Quiet project"]}, [])
+    out = pg._blockify([], [proj])
     assert len(out) == 1 and out[0]["id"] == "block:q"
+
+
+def test_blockify_container_with_a_survivor_is_not_double_emitted():
+    # If a block project already has a real task in `kept`, it is NOT a task-less container -> no
+    # synthetic unit (dedup at the source; no survivor row + synthetic header for one project).
+    proj = _bproj("lw", "Leatherworking", eng="Steady", side="Wellbeing")   # arc None
+    kept = [_task("t1", "Cut", "Leatherworking")]
+    out = pg._blockify(kept, [proj])
+    assert out == kept and not any(o.get("block") for o in out)
+
+
+def test_blockify_paused_taskless_project_skipped():
+    proj = _bproj("q", "Paused", eng="Steady", side="Wellbeing")
+    assert pg._blockify([], [proj], paused={"Paused"}) == []
+    assert len(pg._blockify([], [proj])) == 1             # not paused -> one container
 
 
 def test_blockify_workstream_never_emitted():
     proj = _bproj("ws", "A workstream", eng="Steady", side="Wellbeing", ws=True)
-    assert pg._blockify([], [proj], None, []) == []
+    assert pg._blockify([], [proj]) == []
 
 
 # ---------------------------------------------------------------------------

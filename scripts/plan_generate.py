@@ -496,25 +496,6 @@ def _pick_within_thread(candidates, proj_deadline_raw, surface_dates):
     return min(candidates, key=key)
 
 
-def _surfaces(eng, foregrounded, neglected):
-    """The engagement show/hide rule, in ONE place. Does a project surface today?
-
-    - foregrounded (in a Focus Period, or June-named/forced) → always yes.
-    - Open → no unless foregrounded (available, self-paced: never pushed, never nagged).
-    - Backburner / unset → no unless neglected (dormant, but resurfaced when stale).
-    - anything else (Steady, Sprint, Hyperfixation, …) → yes.
-
-    Shared by the task hide-gate (_gate_and_collapse) and the container-block pass (_blockify)
-    so a task-less block project surfaces on exactly the same rule its tasks would have."""
-    if foregrounded:
-        return True
-    if eng == "Open":
-        return False
-    if eng in ("Backburner", "unset") and not neglected:
-        return False
-    return True
-
-
 def _gate_and_collapse(tasks, projects, neglected, period, extra=None, surface_dates=None,
                        rollover_ids=None):
     """Relevance pass-through (seam 2026-07-14/16). The engagement hide-gate and the
@@ -548,39 +529,32 @@ def _gate_and_collapse(tasks, projects, neglected, period, extra=None, surface_d
     return kept
 
 
-def _blockify(kept, projects, period, neglected):
-    """Emit the ONE remaining synthetic block: a task-LESS container project (scholarly writing —
-    a bundle of subprojects with nothing to check off) becomes a bare "did a chunk today" block.
+def _blockify(kept, projects, paused=None):
+    """Emit the ONE remaining synthetic block: a task-LESS container project (e.g. scholarly
+    writing — a bundle of subprojects with nothing to check off) becomes a bare 'did a chunk today'
+    block. Everything else passes through UNCHANGED — a block-project's REAL tasks stay in selection,
+    resolvable and checkoffable (the shipped zero-ghost design, commit 13d14bf: block is a RENDER
+    layer, not a synthetic selection unit for task-having projects; replacing real tasks with a
+    synthetic unit severed them -> ghost rows). 'One block per project' for task-HAVING projects is
+    an OUTPUT property applied post-LLM (_group_block_project_items, Task 9), NOT here.
 
-    Everything else passes through UNCHANGED. A block is now a RENDER concern, not a selection
-    one (display_grain_design.md REVISION 2026-07-14): a block-project's REAL tasks stay in the
-    list — resolvable and checkoffable — and get grouped under a "Work on X" header at render time
-    (metadata attached in build_context, Task 3). We no longer replace a task-having project's
-    tasks with a synthetic unit; doing so severed them from resolution (the ghost-row bug).
-
-    A synthetic container block is correct here because there is NO real task to displace — the
-    project has no direct tasks at all (`project["arc"]` is falsy). A project whose tasks merely
-    got gated out THIS cycle still has an arc, so it is NOT turned into a bare chunk."""
-    def proj_of(t):
-        ps = t.get("linked_projects") or []
-        return ps[0] if ps else ""
-
-    out = list(kept)                                  # real tasks pass straight through
-    projects_with_survivors = {proj_of(t) for t in kept if proj_of(t)}
-
-    # Container pass: a task-less block-project that surfaces → one synthetic bare-chunk block.
-    fg = set((period or {}).get("foreground") or [])
-    neg_names = {n.get("name") for n in (neglected or []) if isinstance(n, dict)}
+    Surfacing is by active-only-at-load: every project reaching here is active, so every task-less
+    block project surfaces (no engagement/_surfaces gate — deleted; decision 8: an Open task-less
+    block project is in the input). A project with a real task already in `kept` is NOT a task-less
+    container (its task represents it -> no synthetic). A project PAUSED this Focus Period is skipped
+    (decision 7)."""
+    paused = paused or set()
+    out = list(kept)
+    projects_with_survivors = {pn for t in kept for pn in (t.get("linked_projects") or [])}
     for proj in projects:
         name = proj.get("name")
         if name in projects_with_survivors or grain.classify(proj) != "block":
             continue
-        if proj.get("arc"):                           # has direct tasks (just gated) → not a container
+        if name in paused:
             continue
-        eng = proj.get("engagement") or "unset"
-        if _surfaces(eng, name in fg, name in neg_names):
-            out.append(grain.block_unit(proj, "chunk", None,
-                                        block_duration.get_chunk_min(proj)))
+        if proj.get("arc"):                              # has direct tasks (in selection) -> not a container
+            continue
+        out.append(grain.block_unit(proj, "chunk", None, block_duration.get_chunk_min(proj)))
     return out
 
 
@@ -684,7 +658,8 @@ def build_context(capacity=None, start_time=None, end_time=None, extra=None):
     schedulable = _gate_and_collapse(schedulable, projects, neglected, period, extra=extra,
                                      surface_dates=surfaced_dates(), rollover_ids=rollover_ids)
     # Grain: a task-less container project → one synthetic bare-chunk block. Real tasks pass through.
-    schedulable = _blockify(schedulable, projects, period, neglected)
+    _paused = set((period or {}).get("paused") or [])
+    schedulable = _blockify(schedulable, projects, paused=_paused)
     # Block-RENDER metadata: a real task whose project is block-work is displayed grouped under a
     # "Work on X" block (with its project's arc) at render time. Attach the render fields here WITHOUT
     # leaving selection — the task keeps its real id (resolvable, checkoffable). Threaded by id through

@@ -997,13 +997,17 @@ def run():
     # necessary rest stays regardless of side (see partition_by_side). Wellbeing-side work
     # (walks, care) is NOT excluded here — only Fun/hobby is.
     schedulable, hobby_excluded = partition_by_side(ordered, projects)
-    # Engagement gate + one-move-per-thread — the SAME reduction the overlay path applies
-    # (plan_generate.build_context). Without it, the chat "what should I do today" plan was built
-    # from the WHOLE active pile — the overwhelm the 2026-07-11 selection fix removed on the overlay
-    # but never reached this second, diverged pipeline. Now both paths gate identically.
+    # Relevance pass-through + container blockify — the SAME reduction the overlay path applies
+    # (plan_generate.build_context), kept identical across both pipelines (seam 2026-07-14/16). The
+    # engagement hide-gate + one-move-per-thread collapse are gone: active-only-at-load is the sole
+    # engagement filter and the LLM composes from the visible [Engagement] label. _gate_and_collapse
+    # now only drops a task whose every linked project is dormant; _blockify adds a synthetic block
+    # for a task-less container project. Both paths stay in lockstep.
     from surface_log import surfaced_dates
     schedulable = plan_generate._gate_and_collapse(schedulable, projects, neglected, period,
                                                    surface_dates=surfaced_dates())
+    _paused = set((period or {}).get("paused") or [])
+    schedulable = plan_generate._blockify(schedulable, projects, paused=_paused)
     # NOTE (deliberate scope, 2026-07-13): rollover_ids is intentionally NOT passed here. Rollover
     # lives on the overlay/morning path (plan_generate.build_context), the only path that writes plan
     # snapshots. This chat path gets the overwhelm gate but not carry-over; wiring rollover through
