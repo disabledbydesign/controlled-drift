@@ -1172,6 +1172,43 @@ def _ensure_all_tasks_accounted(plan, tasks):
     return plan
 
 
+def _ensure_all_anchors_accounted(plan, all_anchors):
+    """Force every real (id-carrying) Recurring anchor — a chore like dishes/kitchen/toilet,
+    not a synthesized meal default — to appear somewhere in the output: scheduled or in
+    still_here. The anchor counterpart to `_ensure_all_tasks_accounted` above, closing the
+    same silent-drop hole for the OTHER always-eligible item kind (live-verified 2026-07-16:
+    three Recurring chores — dishes, clean the kitchen, clean the toilet — vanished from a
+    renegotiated plan with no trace).
+
+    Root cause: `daily_plan.build_schedule` demotes an OVERDUE anchor (fixed_time already
+    passed relative to the plan's start_time) to a FLEXIBLE item so it can float into the
+    current queue ("was HH:MM" — see build_schedule's docstring). But a flexible item is
+    subject to `scheduler.schedule()`'s end_time cutoff, and once the cursor reaches
+    end_time, remaining flexible items are silently dropped from the output — with no
+    still_here fallback, because `_ensure_all_tasks_accounted` only ever looked at `tasks`,
+    never at `all_anchors`. A synthesized anchor (e.g. a default meal, no `id`) is not a
+    real object that can be "lost" so it's skipped. Deterministic set-difference — no model
+    judgment, same pattern as `_ensure_all_tasks_accounted`.
+    """
+    placed_ids = {item.get("id")
+                  for block in plan.get("blocks", [])
+                  for item in block.get("items", [])}
+    placed_ids |= {item.get("id") for item in plan.get("items", [])}  # priority shape (flat)
+    still_here = plan.setdefault("still_here", [])
+    covered_labels = {_norm(sh.get("label")) for sh in still_here if sh.get("label")}
+    for a in all_anchors:
+        aid = a.get("id")
+        if not aid:
+            continue                                   # synthesized (e.g. default meal) — nothing to lose
+        if aid in placed_ids or _norm(a.get("name")) in covered_labels:
+            continue
+        still_here.append({
+            "label": a["name"],
+            "note": "didn't fit in today's schedule — carries forward, not dropped.",
+        })
+    return plan
+
+
 def _retime_clock_plan(plan, tasks, all_anchors, start_time, end_time):
     """Python places the LLM's COMPOSED order in time — the '...Python places it in time
     (determinism)' half of AI_LAYER_SPEC:69, applied AFTER the model composes selection + order.
@@ -1240,6 +1277,11 @@ def _retime_clock_plan(plan, tasks, all_anchors, start_time, end_time):
     # exactly the silent vanish the net exists to catch (live 2026-07-13: three real tasks
     # lost from the cached plan). Whatever couldn't be placed lands in still_here instead.
     _ensure_all_tasks_accounted(plan, tasks)
+    # Same net, for the other always-eligible item kind: an OVERDUE Recurring anchor (dishes,
+    # kitchen, toilet — fixed_time already past) was just demoted to a flexible item above and
+    # is equally exposed to this end_time cutoff. Without this, it vanishes with no still_here
+    # trace (live 2026-07-16 — see _ensure_all_anchors_accounted's docstring).
+    _ensure_all_anchors_accounted(plan, all_anchors)
     return plan
 
 

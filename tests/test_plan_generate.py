@@ -108,6 +108,61 @@ def test_generate_plan_never_drops_a_task_silently(tmp_path, monkeypatch):
         assert t["id"] in scheduled_ids or t["name"] in still_here_labels
 
 
+# --- the anchor silent-drop regression (live 2026-07-16: dishes/kitchen/toilet vanished) ---
+
+def test_ensure_all_anchors_accounted_appends_missing_anchor():
+    """Mirrors the task version above, for the other always-eligible item kind — a Recurring
+    chore anchor (dishes, kitchen, toilet)."""
+    anchors = [{"id": "a1", "name": "Do the dishes"}, {"id": "a2", "name": "Lunch"}]
+    plan = {"blocks": [{"items": [{"id": "a2", "task": "Lunch"}]}], "still_here": []}
+    pg._ensure_all_anchors_accounted(plan, anchors)
+    labels = {sh["label"] for sh in plan["still_here"]}
+    assert "Do the dishes" in labels             # the dropped anchor got caught
+    assert "Lunch" not in labels                 # the placed anchor wasn't duplicated
+
+
+def test_ensure_all_anchors_accounted_skips_synthesized_anchor_without_id():
+    """A default meal anchor has no real Anytype id — there's nothing June can lose track of,
+    so it's never force-appended even if it's absent from the plan."""
+    anchors = [{"name": "Lunch"}]   # no "id" key — a synthesized default, not a real object
+    plan = {"blocks": [], "still_here": []}
+    pg._ensure_all_anchors_accounted(plan, anchors)
+    assert plan["still_here"] == []
+
+
+def test_ensure_all_anchors_accounted_skips_anchor_already_in_still_here():
+    anchors = [{"id": "a1", "name": "Clean the toilet"}]
+    plan = {"blocks": [], "still_here": [{"label": "Clean the toilet", "note": "later"}]}
+    pg._ensure_all_anchors_accounted(plan, anchors)
+    assert len(plan["still_here"]) == 1
+
+
+def test_retime_clock_plan_never_drops_an_overdue_anchor_at_end_time():
+    """REGRESSION (live 2026-07-16): build_schedule demotes an OVERDUE Recurring anchor
+    (fixed_time already past relative to start_time) to a flexible item so it can float into
+    the queue — but a flexible item is subject to scheduler.schedule()'s end_time cutoff, and
+    a tight end_time can drop it with NO trace: not in blocks, not in still_here. Three real
+    chores (dishes, clean the kitchen, clean the toilet) vanished this way from a live
+    renegotiated plan. Reproduces the minimal case: one task fills the entire window up to
+    end_time, leaving no room for the overdue anchor — it must land in still_here, not vanish."""
+    start = dt.datetime(2026, 7, 16, 12, 0)
+    end = dt.datetime(2026, 7, 16, 12, 30)
+    tasks = [{"id": "t1", "name": "Fill the window", "duration_min": 30}]
+    all_anchors = [{"id": "a1", "name": "Do the dishes",
+                    "fixed_time": dt.datetime(2026, 7, 16, 9, 0), "duration_min": 20}]
+    plan = {
+        "shape": "clock",
+        "blocks": [{"label": "Midday", "time": "12:00 - 12:30", "framing": "",
+                    "items": [{"time": "12:00 - 12:30", "task": "Fill the window",
+                               "project": None, "why": None, "interstitial": False, "id": "t1"}]}],
+        "still_here": [],
+    }
+    pg._retime_clock_plan(plan, tasks, all_anchors, start, end)
+    scheduled_ids = {item.get("id") for b in plan["blocks"] for item in b["items"]}
+    still_here_labels = {sh.get("label") for sh in plan["still_here"]}
+    assert "a1" in scheduled_ids or "Do the dishes" in still_here_labels
+
+
 # --- the data-injection regression (tonight's bug) --------------------------
 
 def test_assemble_prompt_includes_the_real_data():
