@@ -93,58 +93,61 @@ def test_total_tie_falls_back_to_stable_order():
     assert pg._pick_within_thread([b, a], None, {})["id"] == "b"
 
 
-# --- Task 4: the gate uses the pick + records held_back ---------------------
+# --- Task 7 (plan-input seam): relevance-only gate — no hide, no collapse ----
 
-def _proj(name, eng="Steady", deadline=None):
-    return {"name": name, "engagement": eng, "deadline": deadline}
+def _proj(name, eng="Steady", side="Wellbeing"):
+    return {"name": name, "engagement": eng, "side": side}
 
 
-def test_gate_picks_the_signal_winner_not_storage_order():
-    # Two Steady-thread tasks in storage order [a, b]; b is least-recently-surfaced.
-    # Old behavior kept a (first seen); the signal keeps b.
-    tasks = [{"id": "a", "name": "a", "linked_projects": ["P"], "due_date": None},
-             {"id": "b", "name": "b", "linked_projects": ["P"], "due_date": None}]
+def test_block_project_task_stays_in_selection():
+    # Reconciled 2026-07-16: a block-project's REAL tasks stay resolvable/checkoffable in selection
+    # (the shipped zero-ghost design) — NOT dropped, NOT replaced by a synthetic unit.
+    tasks = [{"id": "a", "name": "Cut", "linked_projects": ["Leatherworking"]}]
+    projects = [_proj("Leatherworking")]
+    kept = pg._gate_and_collapse(tasks, projects, [], None, surface_dates={})
+    assert [t["id"] for t in kept] == ["a"]
+
+
+def test_task_of_a_dormant_project_is_dropped():
+    # A Backburner project was excluded at load (Task 2), so it isn't in `projects`; its task must
+    # not leak into the input (the recovery-week off-focus leak the seam fixes).
+    tasks = [{"id": "t1", "name": "Dye", "linked_projects": ["Old hobby"]}]
+    kept = pg._gate_and_collapse(tasks, [], [], None, surface_dates={})   # "Old hobby" not active
+    assert kept == []
+
+
+def test_dormant_project_task_survives_when_rolled_over():
+    tasks = [{"id": "t1", "name": "Email editor", "linked_projects": ["Paper"]}]
+    kept = pg._gate_and_collapse(tasks, [], [], None, surface_dates={}, rollover_ids={"t1"})
+    assert [t["id"] for t in kept] == ["t1"]
+
+
+def test_dormant_project_task_survives_when_named():
+    tasks = [{"id": "t1", "name": "Email editor", "linked_projects": ["Paper"]}]
+    kept = pg._gate_and_collapse(tasks, [], [], None, surface_dates={}, extra="email editor today")
+    assert [t["id"] for t in kept] == ["t1"]
+
+
+def test_no_project_task_always_kept():
+    tasks = [{"id": "a", "name": "Call surgeon", "linked_projects": []}]
+    kept = pg._gate_and_collapse(tasks, [], [], None, surface_dates={})
+    assert [t["id"] for t in kept] == ["a"]
+
+
+def test_held_back_is_always_zero_now():
+    tasks = [{"id": "a", "name": "a", "linked_projects": ["P"]},
+             {"id": "b", "name": "b", "linked_projects": ["P"]}]
     projects = [_proj("P")]
-    surface = {"a": dt.datetime(2026, 7, 11), "b": dt.datetime(2026, 6, 18)}
-    kept = pg._gate_and_collapse(tasks, projects, [], None, surface_dates=surface)
-    assert [t["id"] for t in kept] == ["b"]
+    kept = pg._gate_and_collapse(tasks, projects, [], None, surface_dates={})
+    assert {t["id"] for t in kept} == {"a", "b"}          # no collapse — both stay
+    assert all(t["held_back"] == 0 for t in kept)
 
 
-def test_gate_records_held_back_count():
-    # b is least-recently-surfaced -> it's the shown move; a and c are the 2 held back.
-    tasks = [{"id": "a", "name": "a", "linked_projects": ["P"], "due_date": None},
-             {"id": "b", "name": "b", "linked_projects": ["P"], "due_date": None},
-             {"id": "c", "name": "c", "linked_projects": ["P"], "due_date": None}]
-    projects = [_proj("P")]
-    surface = {"a": dt.datetime(2026, 7, 11), "b": dt.datetime(2026, 6, 18),
-               "c": dt.datetime(2026, 7, 10)}
-    kept = pg._gate_and_collapse(tasks, projects, [], None, surface_dates=surface)
-    assert len(kept) == 1
-    assert kept[0]["id"] == "b"                         # the signal pick is the one shown
-    assert kept[0]["held_back"] == 2                    # 3 in thread, 1 shown -> 2 held
-
-
-def test_gate_no_project_tasks_never_collapsed():
-    # No-project tasks are discrete errands. The hide gate treats an empty project as unset
-    # (hidden-unless-neglected) — unchanged, pre-existing behavior — so make them visible via
-    # neglect, then assert the COLLAPSE pass never merges them: both survive, held_back 0.
-    tasks = [{"id": "a", "name": "a", "linked_projects": [], "due_date": None},
-             {"id": "b", "name": "b", "linked_projects": [], "due_date": None}]
-    neglected = [{"name": ""}]                          # "" project counts as neglected -> visible
-    kept = pg._gate_and_collapse(tasks, [], neglected, None, surface_dates={})
-    assert {t["id"] for t in kept} == {"a", "b"}        # discrete actions, both kept, not collapsed
-    assert all(t.get("held_back", 0) == 0 for t in kept)
-
-
-def test_gate_forced_task_still_passes_through():
-    tasks = [{"id": "a", "name": "alpha move", "linked_projects": ["P"], "due_date": None},
-             {"id": "b", "name": "beta move", "linked_projects": ["P"], "due_date": None}]
-    projects = [_proj("P")]
-    # June explicitly names task b -> it must surface even if the signal would pick a.
-    surface = {"b": dt.datetime(2026, 7, 11)}           # b is the freshest -> not the signal pick
-    kept = pg._gate_and_collapse(tasks, projects, [], None, extra="put beta move in today",
-                                 surface_dates=surface)
-    assert "b" in {t["id"] for t in kept}              # forced through the collapse
+def test_daily_life_task_kept():
+    tasks = [{"id": "a", "name": "Dishes", "linked_projects": ["Household"]}]
+    projects = [_proj("Household", eng="Steady", side="Daily life")]
+    kept = pg._gate_and_collapse(tasks, projects, [], None, surface_dates={})
+    assert [t["id"] for t in kept] == ["a"]
 
 
 # --- Task 5: the held-back count reaches the LLM context --------------------
@@ -158,29 +161,7 @@ def test_task_ref_line_carries_held_back():
     assert "T2 — Email Donna" in table                 # no annotation when nothing held back
 
 
-# --- per-thread rendering (Task 5): held_back NAMES + threading onto the plan JSON ----------
-
-def test_gate_records_held_back_names():
-    # b is shown; a and c are held. The names of the held items travel with the shown one so the
-    # renderer can reveal them on expand — held, not dropped.
-    tasks = [{"id": "a", "name": "task a", "linked_projects": ["P"], "due_date": None},
-             {"id": "b", "name": "task b", "linked_projects": ["P"], "due_date": None},
-             {"id": "c", "name": "task c", "linked_projects": ["P"], "due_date": None}]
-    projects = [_proj("P")]
-    surface = {"a": dt.datetime(2026, 7, 11), "b": dt.datetime(2026, 6, 18),
-               "c": dt.datetime(2026, 7, 10)}
-    kept = pg._gate_and_collapse(tasks, projects, [], None, surface_dates=surface)
-    assert kept[0]["id"] == "b"
-    assert kept[0]["held_back"] == 2
-    assert set(kept[0]["held_back_names"]) == {"task a", "task c"}   # the shown item is not among them
-
-
-def test_gate_no_held_names_when_thread_is_alone():
-    tasks = [{"id": "a", "name": "only move", "linked_projects": ["P"], "due_date": None}]
-    kept = pg._gate_and_collapse(tasks, [_proj("P")], [], None, surface_dates={})
-    assert kept[0]["held_back"] == 0
-    assert kept[0]["held_back_names"] == []
-
+# --- held_back threading onto the plan JSON (renderer still consumes the field) -------------
 
 def test_resolve_ids_threads_held_back_onto_plan_item():
     # Python owns the id->held-back map; the model only echoes the ref token. The count + names

@@ -23,13 +23,14 @@ def test_daily_life_chores_all_survive_uncollapsed():
     assert {t["id"] for t in kept} >= {"t1", "t2"}
 
 
-def test_non_daily_life_unset_engagement_still_hidden():
-    """Contrast: an ordinary unset-engagement project (not Daily life, not neglected) is still
-    hidden by the gate — the bypass is specific to Daily life, not a blanket opening."""
+def test_non_daily_life_unset_engagement_task_stays_when_project_active():
+    # Reconciled: the engagement hide-gate is gone. An unset-engagement project that IS in the
+    # active set keeps its task (Task 9 renders it as a block at output). Only a task whose project
+    # is absent from the active set (dormant) is dropped.
     projects = [_proj("Some project", eng=None, side="Wellbeing")]
     tasks = [_task("t1", "A task", "Some project")]
     kept = pg._gate_and_collapse(tasks, projects, [], None, surface_dates={})
-    assert {t["id"] for t in kept} == set()
+    assert {t["id"] for t in kept} == {"t1"}
 
 
 # ---------------------------------------------------------------------------

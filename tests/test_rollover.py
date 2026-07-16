@@ -8,31 +8,25 @@ import rollover_log as rl
 import cd_paths
 
 
-def test_rollover_id_survives_the_hide_gate():
-    # A task under a Backburner project is normally hidden from the plan. If it was undone
-    # yesterday, rollover must make it an eligible candidate the model can choose to carry —
-    # otherwise "call mom rolls to tomorrow" is impossible for anything under a quiet project.
+def test_rollover_carries_a_dormant_project_task_into_today():
+    # "Paper" is dormant (excluded at load -> not in `projects`). Its undone task would be dropped;
+    # rollover makes it eligible so "email editor rolls to today" works.
     tasks = [{"id": "t1", "name": "Email the editor", "linked_projects": ["Paper"]}]
-    projects = [{"name": "Paper", "engagement": "Backburner"}]
-    hidden = pg._gate_and_collapse(tasks, projects, neglected=[], period=None, surface_dates={})
-    assert hidden == []                                    # Backburner, not neglected/foregrounded → hidden
-    carried = pg._gate_and_collapse(tasks, projects, neglected=[], period=None,
+    dropped = pg._gate_and_collapse(tasks, [], neglected=[], period=None, surface_dates={})
+    assert dropped == []
+    carried = pg._gate_and_collapse(tasks, [], neglected=[], period=None,
                                     surface_dates={}, rollover_ids={"t1"})
-    assert [t["id"] for t in carried] == ["t1"]            # rollover makes it eligible
+    assert [t["id"] for t in carried] == ["t1"]
 
 
-def test_rollover_task_does_not_double_surface_its_thread():
-    # A carried-over (forced) task and its thread's natural winner must collapse to ONE move — the
-    # forced task represents the thread. Regression: when the natural winner was iterated first it
-    # slipped through alongside the forced task, showing two moves for one thread.
-    tasks = [
-        {"id": "a", "name": "Natural winner", "linked_projects": ["P"], "due_date": None},
-        {"id": "b", "name": "Carried-over task", "linked_projects": ["P"], "due_date": None},
-    ]
-    projects = [{"name": "P", "engagement": "Steady", "deadline": None}]
-    surface = {"b": dt.datetime(2026, 7, 11)}   # a never surfaced → a is the natural winner
-    kept = pg._gate_and_collapse(tasks, projects, [], None, surface_dates=surface, rollover_ids={"b"})
-    assert [t["id"] for t in kept] == ["b"]     # exactly one move for thread P — the carried-over task
+def test_active_project_tasks_all_survive_uncollapsed():
+    # No collapse anymore: both tasks of an active project stay (Task 9 groups them into one block
+    # at OUTPUT). This gate no longer picks one representative.
+    tasks = [{"id": "a", "name": "a", "linked_projects": ["P"]},
+             {"id": "b", "name": "b", "linked_projects": ["P"]}]
+    projects = [{"name": "P", "engagement": "Steady", "side": "Wellbeing"}]
+    kept = pg._gate_and_collapse(tasks, projects, [], None, surface_dates={})
+    assert {t["id"] for t in kept} == {"a", "b"}
 
 
 def test_rollover_log_classifies_carried_and_dropped(cd_sandbox):

@@ -517,117 +517,34 @@ def _surfaces(eng, foregrounded, neglected):
 
 def _gate_and_collapse(tasks, projects, neglected, period, extra=None, surface_dates=None,
                        rollover_ids=None):
-    """Engagement grain gate + one-next-move-per-thread (spec AI_LAYER_SPEC.md §2/§9; reconciled in
-    docs/spec_reconciliation_selection_2026-07-11.md). Backburner/Open/unset are hidden unless the
-    project is foregrounded (Focus Period) — and, for Backburner/unset only, unless neglected (Open
-    is self-paced: never surfaced by neglect, only by foreground). Everything surfacing collapses to
-    ONE next move per project-thread, PICKED by `_pick_within_thread` (nearest deadline, else
-    least-recently-surfaced, else stable order) — not the storage-order accident. A task/project June
-    named in `extra` is guaranteed through (task-named bypasses hide AND collapse; project-named is
-    foregrounded, still one move). Held-back tasks are NOT dropped — they stay in Anytype, just not in
-    today's plan; each surfaced item carries `held_back` (how many same-thread survivors are not shown)
-    so the renderer can label 'next in X · N more'. No-project tasks are discrete actions: never
-    collapsed together. `surface_dates` is injectable for pure testing; it defaults to the live log."""
-    proj_eng = {p.get("name"): (p.get("engagement") or "unset") for p in projects}
-    proj_by_name = {p.get("name"): p for p in projects}
-    proj_deadline = {p.get("name"): p.get("deadline") for p in projects}
-    fg = set((period or {}).get("foreground") or [])
-    neg_names = {n.get("name") for n in (neglected or []) if isinstance(n, dict)}
+    """Relevance pass-through (seam 2026-07-14/16). The engagement hide-gate and the
+    one-move-per-thread collapse are REMOVED (plan_input_seam_design.md decisions 9 & 10):
+    active-only-at-load (daily_plan.load_active_items) is the sole engagement filter, and the LLM
+    applies the room-logic from the visible [Engagement] label (format_context). Here we drop only a
+    task whose EVERY linked project is not in the active `projects` list — i.e. its project was
+    excluded at load (Backburner/Done/future) — so off-focus work can't leak in via a task whose
+    project is dormant. A discrete (no-project) task always stays. A task June named (`extra`) or
+    carried over undone (`rollover_ids`) is kept even if its project is dormant (an explicit ask /
+    carry-over overrides). Block-project real tasks whose project is active pass through UNCHANGED —
+    resolvable and checkoffable (the shipped zero-ghost design; they are never replaced by a
+    synthetic selection unit). Nothing collapses, so held_back is always 0 (the overlay must render
+    no phantom '· N more'). `neglected`, `period`, `surface_dates` are accepted for call-site
+    compatibility but gate nothing. `_pick_within_thread` is intentionally not called (retained,
+    still directly tested)."""
+    active_names = {p.get("name") for p in projects}
     named = _match_extra(extra, projects, tasks)
-    rollover_ids = set(rollover_ids or [])   # yesterday's undone: eligible so the model can carry them
-    if surface_dates is None:
-        from surface_log import surfaced_dates
-        surface_dates = surfaced_dates()
-
-    def proj_of(t):
-        ps = t.get("linked_projects") or []
-        return ps[0] if ps else ""
+    rollover_ids = set(rollover_ids or [])
 
     def is_forced(t):
-        # named-in-extra OR carried over from yesterday (undone): both bypass hide + collapse so the
-        # task is a real, checkable candidate the model can choose to carry, not an invisible ghost row.
         return t.get("id") in named["task_ids"] or t.get("id") in rollover_ids
 
-    # Pass 1 — the hide gate: which tasks survive to be considered at all.
-    survivors = []
+    kept = []
     for t in tasks:
-        proj = proj_of(t)
-        if not proj:
-            # A task with NO linked project is a discrete standalone action (call the surgeon, go
-            # for a walk, organize letters) — not a dormant project. Pass 2 already intends to keep
-            # every no-project task ("discrete action — never collapsed"), but the old code hid them
-            # HERE: proj_eng.get("", "unset") collided the empty-string project with the unset-
-            # engagement default, so discrete tasks only ever surfaced once 16-days stale. They are
-            # always eligible for the day. (June, 2026-07-13 — restoring the design's discrete
-            # actions; the LLM composer decides how many actually fit today.)
-            survivors.append(t)
-            continue
-        if grain.classify(proj_by_name.get(proj, {})) == "task":
-            # Side = Daily life: its own always-eligible chore track, exempt from the
-            # engagement gate (its engagement is unset ON PURPOSE — Side governs it, not
-            # engagement). display_grain_design.md decision 1.
-            survivors.append(t)
-            continue
-        eng = proj_eng.get(proj, "unset")
-        foregrounded = proj in fg or proj in named["projects"] or is_forced(t)
-        if not _surfaces(eng, foregrounded, proj in neg_names):
-            continue
-        survivors.append(t)
-
-    # Pick each real thread's ONE representative from its survivors, by the honest signal.
-    by_thread = {}
-    for t in survivors:
-        proj = proj_of(t)
-        if proj:
-            by_thread.setdefault(proj, []).append(t)
-    winner_id = {proj: _pick_within_thread(cands, proj_deadline.get(proj), surface_dates)["id"]
-                 for proj, cands in by_thread.items()}
-
-    # Pass 2 — collapse to one move per thread. A forced item (June-named OR carried over from
-    # yesterday) ALWAYS passes and represents its thread, suppressing that thread's natural winner.
-    # `forced_threads` is precomputed so the natural winner is suppressed even when it is iterated
-    # BEFORE the forced task (survivors order isn't forced-first) — otherwise a forced task PLUS the
-    # natural winner both survived: two moves for one thread. No-project (discrete) tasks never
-    # collapse. (Several tasks that all match a loose `extra` can still co-surface — that is
-    # _match_extra's breadth, not this collapse's job to trim.)
-    forced_threads = {proj_of(t) for t in survivors if proj_of(t) and is_forced(t)}
-    kept, seen_thread = [], set()
-    for t in survivors:
-        proj = proj_of(t)
-        if not proj:
-            kept.append(t)                                 # discrete action — never collapsed
-            continue
-        if grain.classify(proj_by_name.get(proj, {})) == "task":
-            kept.append(t)                                 # Daily-life chore: discrete, like a no-project task
-            continue
-        if is_forced(t):
-            seen_thread.add(proj)
-            kept.append(t)                                 # explicitly named / carried-over — always through
-            continue
-        if proj in seen_thread or proj in forced_threads:
-            continue                                       # already shown, or a forced task represents this thread
-        if t["id"] != winner_id[proj]:
-            continue                                       # not the signal pick — its winner comes later
-        seen_thread.add(proj)
+        projs = t.get("linked_projects") or []
+        if projs and not is_forced(t) and not any(pn in active_names for pn in projs):
+            continue                                   # every linked project dormant -> off today
+        t["held_back"], t["held_back_names"] = 0, []
         kept.append(t)
-
-    # Annotate each surfaced task with its same-thread survivors that are held back (for the honest
-    # 'N more' label + drill-down the renderer builds). `held_back` is the count (tests + the LLM
-    # task-ref line depend on the int); `held_back_names` lists those not-shown items so the overlay
-    # can reveal them on expand — held, not dropped. Discrete/no-project tasks: 0 / [].
-    shown_ids_by_thread = {}
-    for t in kept:
-        proj = proj_of(t)
-        if proj:
-            shown_ids_by_thread.setdefault(proj, set()).add(t["id"])
-    for t in kept:
-        proj = proj_of(t)
-        if not proj:
-            t["held_back"], t["held_back_names"] = 0, []
-            continue
-        shown_ids = shown_ids_by_thread.get(proj, set())
-        held = [c["name"] for c in by_thread.get(proj, []) if c["id"] not in shown_ids]
-        t["held_back"], t["held_back_names"] = len(held), held
     return kept
 
 
