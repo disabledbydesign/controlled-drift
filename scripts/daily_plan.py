@@ -99,6 +99,13 @@ def load_active_items(sid):
             if engagement == "Done":
                 continue  # Done projects are invisible in the daily plan
 
+            # Active-only at load (plan_input_seam_design.md decision 1 + REFINEMENT): Backburner is
+            # off-focus by construction — excluded before the LLM sees it, for EVERY project,
+            # Daily-life included (engagement is universal; Side is grain only, no exemption). Open /
+            # unset stay active — this filter is relevance, not a day-size gate.
+            if engagement == "Backburner":
+                continue
+
             # Side: Obligation / Wellbeing / Fun / hobby — June's three categories, read by display
             # name like Engagement (Anytype-generated key). "Fun / hobby" = self-directed
             # creative/dev work held out of the daily plan; Obligation (must-do life+career) and

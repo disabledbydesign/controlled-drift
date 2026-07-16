@@ -243,3 +243,47 @@ def test_loader_project_with_no_goal_link_has_none(monkeypatch):
     ])
     _, projects, _, _, _, _ = dp.load_active_items("sid")
     assert projects[0]["goal_id"] is None and projects[0]["goal_name"] is None
+
+
+# --- Task 2 (plan-input seam): active-only at load — Backburner excluded ------
+
+def test_backburner_project_excluded_at_load(monkeypatch):
+    import daily_plan as dp
+    monkeypatch.setattr(dp.g, "get_space_id", lambda: "sid")
+    monkeypatch.setattr(dp.g, "fetch_all_objects", lambda sid: [
+        _project_obj_with_goal("p1", "Old hobby", engagement="Backburner"),
+        _project_obj_with_goal("p2", "Job search", engagement="Steady"),
+    ])
+    _, projects, _, _, _, _ = dp.load_active_items("sid")
+    assert {p["name"] for p in projects} == {"Job search"}
+
+
+def _daily_life_project_obj(oid, name, engagement=None):
+    props = [{"name": "Side", "select": {"name": "Daily life"}}]
+    if engagement:
+        props.append({"name": "Engagement", "select": {"name": engagement}})
+    return {"id": oid, "type": {"key": "gsdo_project"}, "name": name, "properties": props}
+
+
+def test_daily_life_backburner_project_is_also_excluded(monkeypatch):
+    # REFINEMENT: engagement is universal — a Backburner Daily-life project is dormant like any
+    # other. No Daily-life exemption anymore.
+    import daily_plan as dp
+    monkeypatch.setattr(dp.g, "get_space_id", lambda: "sid")
+    monkeypatch.setattr(dp.g, "fetch_all_objects", lambda sid: [
+        _daily_life_project_obj("p1", "Old chores", engagement="Backburner"),
+        _daily_life_project_obj("p2", "Household", engagement="Steady"),
+    ])
+    _, projects, _, _, _, _ = dp.load_active_items("sid")
+    assert {p["name"] for p in projects} == {"Household"}
+
+
+def test_open_and_unset_engagement_projects_stay_active(monkeypatch):
+    import daily_plan as dp
+    monkeypatch.setattr(dp.g, "get_space_id", lambda: "sid")
+    monkeypatch.setattr(dp.g, "fetch_all_objects", lambda sid: [
+        _project_obj_with_goal("p1", "Open thread", engagement="Open"),
+        _project_obj_with_goal("p2", "Unset thread"),
+    ])
+    _, projects, _, _, _, _ = dp.load_active_items("sid")
+    assert {p["name"] for p in projects} == {"Open thread", "Unset thread"}
