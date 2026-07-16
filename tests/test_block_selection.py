@@ -269,3 +269,27 @@ def test_task_ref_line_block_reads_as_a_chunk():
     block = grain.block_unit({"id": "sw", "name": "Scholarly writing"}, "chunk", None, 240)
     line = pg._task_ref_line("T1", block)
     assert "Work on Scholarly writing" in line and "chunk of time" in line and "more" not in line
+
+
+# ---------------------------------------------------------------------------
+# Task 11 (plan-input seam): resolution correct-by-construction; deferred stays dropped
+# ---------------------------------------------------------------------------
+
+def test_resolve_ids_name_match_never_finds_a_dormant_task():
+    # Correct-by-construction: a dormant project's task is dropped at the gate / load, so it isn't in
+    # all_tasks — no name to match, ghost or otherwise.
+    gated = [{"id": "t1", "name": "Organize letters"}]
+    plan = {"blocks": [{"items": [{"task": "A task from a Backburner project"}]}]}
+    pg._resolve_ids(plan, {}, gated, all_tasks=gated)
+    assert plan["blocks"][0]["items"][0].get("id") is None
+
+
+def test_deferred_item_stays_dropped_after_resolution(monkeypatch):
+    # win #7: a "not today" deferred task the model re-added from context is dropped by id, even with
+    # the larger full-active name-match surface. _drop_deferred_from_plan is the guarantee — it keys
+    # on the live deferral store (_recent_deferral_ids), so drive that, not a still_here flag.
+    monkeypatch.setattr(pg, "_recent_deferral_ids", lambda *a, **k: ({"t1"}, set()))
+    plan = {"blocks": [{"items": [{"id": "t1", "task": "Do the thing"}]}], "still_here": []}
+    pg._drop_deferred_from_plan(plan)
+    assert all(it.get("task") != "Do the thing"
+               for b in plan["blocks"] for it in b["items"])
