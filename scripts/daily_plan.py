@@ -361,7 +361,7 @@ def format_context(goals, projects, tasks, strategies, today_recurrings, neglect
         lines.append("(engagement: Steady → normal; Backburner → note but de-emphasize. What's "
                      "elevated right now comes from the Focus Period foreground, not the tag.)")
         for g_ in goals:
-            eng = g_.get("engagement") or "Steady"
+            eng = g_.get("engagement") or "Open"
             line = f"- {g_['name']} [{eng}]"
             rf = g_.get("reaching_for") or ""
             rc = g_.get("resolution_condition") or ""
@@ -377,21 +377,23 @@ def format_context(goals, projects, tasks, strategies, today_recurrings, neglect
 
     if projects:
         lines.append("## Active projects")
-        lines.append("(engagement: Steady → a normal daily move; Backburner → only if neglected;"
-                     " Needs Clarifying → flag it. What's elevated right now is set by the Focus"
-                     " Period foreground, not the engagement tag — don't inflate a project's space"
-                     " just for its label.)")
+        lines.append("(engagement: Steady → a normal daily move; Open → available, not pushed;"
+                     " unset → treat as active, never hidden. What's elevated right now is set by"
+                     " the Focus Period foreground, not the tag — don't inflate a project's space"
+                     " just for its label. Backburner projects are excluded before you see this.)")
         lines.append("(sub-projects are indented under their parent)")
 
         fg = set((period or {}).get("foreground") or [])
         paused = set((period or {}).get("paused") or [])
 
         def _project_line(p, indent=""):
-            eng = p.get("engagement") or "Steady"
+            eng = p.get("engagement") or "Open"
             eng_notes = p.get("engagement_notes") or ""
             line = f"{indent}- {p['name']} [{eng}]"
             if p.get("side"):
                 line += f" | side: {p['side']}"
+            if p.get("goal_name"):
+                line += f" | goal: {p['goal_name']}"
             if p["name"] in paused:
                 line += " [paused this period]"
             if eng_notes:
@@ -430,7 +432,14 @@ def format_context(goals, projects, tasks, strategies, today_recurrings, neglect
                 lines.append(_project_line(p) + " [sub-project]")
         lines.append("")
 
-    if tasks:
+    # Block-work subsection lists the schedulable block-grain projects — excluding any paused this
+    # Focus Period (they aren't scheduled; a paused project still appears, marked, in the
+    # `## Active projects` section above, so it isn't hidden).
+    _paused_names = set((period or {}).get("paused") or [])
+    block_projects = [p for p in projects
+                      if grain.classify(p) == "block" and p["name"] not in _paused_names]
+
+    if tasks or block_projects:
         lines.append("## Active tasks by project/thread")
         lines.append("(The LLM should organize the plan by these project/thread groupings,")
         lines.append(" NOT by activity category like 'writing' or 'admin'.)")
@@ -449,7 +458,6 @@ def format_context(goals, projects, tasks, strategies, today_recurrings, neglect
                 extras.append(f"access: {', '.join(t['access'])}")
             return f" ({'; '.join(extras)})" if extras else ""
 
-        # Group tasks by project. A task linked to multiple projects appears under each.
         project_tasks: dict = {}
         no_project = []
         for t in tasks:
@@ -460,32 +468,41 @@ def format_context(goals, projects, tasks, strategies, today_recurrings, neglect
             else:
                 no_project.append(t)
 
-        # Split the hierarchy into two labeled categories so the model knows which kind each is
-        # (display_grain_design REVISION, decision C): "block-organized work" (ongoing projects it
-        # orders as a 'Work on X' block; their tasks are the arc) vs "daily tasks" (discrete chores
-        # + standalone actions it checks off). Category = grain.classify; excluded projects omitted.
         proj_by_name = {p["name"]: p for p in projects}
 
         def _grain_of(pname):
             p = proj_by_name.get(pname)
             return grain.classify(p) if p else "task"        # no-project → discrete, daily-side
 
-        block_projects = {pn: ts for pn, ts in project_tasks.items() if _grain_of(pn) == "block"}
         daily_projects = {pn: ts for pn, ts in project_tasks.items() if _grain_of(pn) == "task"}
 
         if block_projects:
-            lines.append("### Block-organized work — ongoing projects. Order each as ONE 'Work on X'"
-                         " block; the tasks under it are its arc (do not enumerate them as separate"
-                         " plan items).")
-            for pname, ptasks in block_projects.items():
-                lines.append(f"- **{pname}**")
-                for t in ptasks:
-                    lines.append(f"  - {t['name']}{_task_extras(t)}")
+            lines.append("### Block-organized work — one 'Work on X' unit per project, scheduled as"
+                         " ONE chunk of time (not a task list). Each carries its [Engagement]"
+                         " (Steady → a normal daily move; Open → pull in only if there's room, and"
+                         " never on a rest/low-energy focus). Its steps are shown below as its arc —"
+                         " context for you, not separate plan items.")
+            _STATE_MARK = {"done": "[x]", "here": "[ ] (next)", "ahead": "[ ]"}
+            for p in block_projects:
+                eng = p.get("engagement") or "Open"
+                goal_bit = f" — goal: {p['goal_name']}" if p.get("goal_name") else ""
+                lines.append(f"- **{p['name']}** [{eng}]{goal_bit}")
+                arc = p.get("arc")
+                if arc:
+                    for step in arc:
+                        lines.append(f"  - {_STATE_MARK.get(step.get('state'), '[ ]')} {step['text']}")
+                else:
+                    lines.append("  - (no individual steps tracked — a bare chunk of time)")
         if daily_projects or no_project:
-            lines.append("### Daily tasks — discrete chores + standalone actions. Surface each as its"
-                         " own task to check off.")
+            lines.append("### Daily tasks — discrete chores + standalone actions, scheduled one at a"
+                         " time. Each project header carries its [Engagement] (Steady → its chores"
+                         " belong today; Open → pull one in only if the day has room, never on a"
+                         " rest/low-energy focus). True every-day chores (dishes, meds) come through"
+                         " as Recurring items by their own cadence, not from engagement.")
             for pname, ptasks in daily_projects.items():
-                lines.append(f"- **{pname}**")
+                dproj = proj_by_name.get(pname)
+                eng = (dproj.get("engagement") if dproj else None) or "Open"
+                lines.append(f"- **{pname}** [{eng}]")
                 for t in ptasks:
                     lines.append(f"  - {t['name']}{_task_extras(t)}")
             if no_project:
