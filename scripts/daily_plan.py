@@ -60,6 +60,8 @@ def load_active_items(sid):
     # resolved by id here, not read as dicts. (Fixes a long-standing empty-linked_projects bug.)
     proj_id_to_name = {o["id"]: o.get("name") for o in data
                        if isinstance(o.get("type"), dict) and o["type"].get("key") == "gsdo_project"}
+    goal_id_to_name = {o["id"]: o.get("name") for o in data
+                       if isinstance(o.get("type"), dict) and o["type"].get("key") == "gsdo_goal"}
 
     for obj in data:
         t = obj.get("type")
@@ -104,6 +106,13 @@ def load_active_items(sid):
             side_tag = pvn("Side", "select") or {}
             side = side_tag.get("name") if isinstance(side_tag, dict) else None
 
+            # Goal link -> goal_name (2026-07-14 fix): the loader used to drop this relation, so
+            # every project arrived goal-less and the "how does today advance her goals" instruction
+            # had nothing to work from (plan_input_seam_design.md, diagnosis 3). Real fixed key.
+            goal_ids = pv("gsdo_goal_link", "objects") or []
+            goal_id = goal_ids[0] if goal_ids else None
+            goal_name = goal_id_to_name.get(goal_id) if goal_id else None
+
             parent_proj_ids = pv("gsdo_parent_project", "objects") or []
             parent_project_id = parent_proj_ids[0] if parent_proj_ids else None
 
@@ -115,6 +124,8 @@ def load_active_items(sid):
                               "engagement": engagement,
                               "engagement_notes": pvn("Engagement notes", "text"),
                               "side": side,
+                              "goal_id": goal_id,
+                              "goal_name": goal_name,
                               "is_workstream": bool((props.get("is_workstream") or {}).get("checkbox")),
                               # Block chunk length (minutes). Read BY NAME — Anytype auto-generated
                               # its key (block_chunk_min, no gsdo_ prefix), like Engagement/Side.

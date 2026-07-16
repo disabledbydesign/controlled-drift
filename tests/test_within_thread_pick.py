@@ -205,3 +205,41 @@ def test_resolve_ids_omits_held_back_when_zero():
     assert item["id"] == "id-x"
     assert "held_back" not in item
     assert "held_back_names" not in item
+
+
+# --- Task 1 (plan-input seam): loader resolves a project's Goal link ---------
+
+def _goal_obj(oid, name):
+    return {"id": oid, "type": {"key": "gsdo_goal"}, "name": name, "properties": []}
+
+
+def _project_obj_with_goal(oid, name, goal_ids=None, engagement=None):
+    props = []
+    if goal_ids:
+        props.append({"key": "gsdo_goal_link", "objects": goal_ids})
+    if engagement:
+        props.append({"name": "Engagement", "select": {"name": engagement}})
+    return {"id": oid, "type": {"key": "gsdo_project"}, "name": name, "properties": props}
+
+
+def test_loader_resolves_goal_link_to_goal_name(monkeypatch):
+    import daily_plan as dp
+    monkeypatch.setattr(dp.g, "get_space_id", lambda: "sid")
+    monkeypatch.setattr(dp.g, "fetch_all_objects", lambda sid: [
+        _goal_obj("g1", "Stay a scholar-builder"),
+        _project_obj_with_goal("p1", "Leatherworking", goal_ids=["g1"], engagement="Steady"),
+    ])
+    _, projects, _, _, _, _ = dp.load_active_items("sid")
+    proj = next(p for p in projects if p["name"] == "Leatherworking")
+    assert proj["goal_id"] == "g1"
+    assert proj["goal_name"] == "Stay a scholar-builder"
+
+
+def test_loader_project_with_no_goal_link_has_none(monkeypatch):
+    import daily_plan as dp
+    monkeypatch.setattr(dp.g, "get_space_id", lambda: "sid")
+    monkeypatch.setattr(dp.g, "fetch_all_objects", lambda sid: [
+        _project_obj_with_goal("p1", "Household", engagement="Steady"),
+    ])
+    _, projects, _, _, _, _ = dp.load_active_items("sid")
+    assert projects[0]["goal_id"] is None and projects[0]["goal_name"] is None
