@@ -846,6 +846,7 @@ def blocks_from_scheduled(scheduled, framing_by_label=None):
                     row["shape"] = it.get("shape")
                     row["arc"] = it.get("arc")
                     row["chunk_min"] = it.get("chunk_min")
+                    row["absorbed_ids"] = it.get("absorbed_ids", [])
                     row["did_chunk_today"] = it.get("project_id") in _chunked_today
                 elif it.get("block_project"):
                     # A REAL task whose project is block-work: keeps its own id/checkbox (row["id"]

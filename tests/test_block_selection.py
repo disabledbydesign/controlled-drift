@@ -220,3 +220,46 @@ def test_log_scheduled_blocks_records_one_event_per_block(monkeypatch):
     ]}]}
     pg._log_scheduled_blocks(plan)
     assert logged == [("lw", 120), ("sw", 240)]
+
+
+# ---------------------------------------------------------------------------
+# Task 9 (plan-input seam): coded output dedup — one "Work on X" block per project
+# ---------------------------------------------------------------------------
+
+def test_group_block_project_items_dedups_two_tasks_into_one_block():
+    # THE dedup invariant: an LLM plan naming TWO individual tasks of one block project resolves to
+    # ONE 'Work on X' block, both marked '→ here' in its arc — never two rows, never a duplicate.
+    arc = [{"text": "Cut", "state": "done", "id": "t1"},
+           {"text": "Dye", "state": "here", "id": "t2"},
+           {"text": "Stitch", "state": "ahead", "id": "t3"}]
+    items = [
+        {"id": "t2", "task": "Dye", "project": "Leatherworking", "block_project": True,
+         "project_id": "lw", "arc": arc, "chunk_min": 120, "_composed": True},
+        {"id": "t3", "task": "Stitch", "project": "Leatherworking", "block_project": True,
+         "project_id": "lw", "arc": arc, "chunk_min": 120, "_composed": True},
+    ]
+    out = pg._group_block_project_items(items)
+    assert len(out) == 1                                  # ONE block, not two rows
+    blk = out[0]
+    assert blk["block"] is True and blk["project_id"] == "lw"
+    assert blk["duration_min"] == 120                     # chunk_min ONCE, not 240
+    assert set(blk["absorbed_ids"]) == {"t2", "t3"}       # both real ids retained (accounting)
+    states = {s["id"]: s["state"] for s in blk["arc"]}
+    assert states["t2"] == "here" and states["t3"] == "here" and states["t1"] == "done"
+
+
+def test_group_block_project_items_passes_non_block_through():
+    items = [{"id": "d", "task": "Dishes", "project": "Household"},
+             {"id": "c", "task": "Call", "project": None}]
+    assert pg._group_block_project_items(items) == items
+
+
+def test_ensure_all_tasks_accounted_counts_block_absorbed_and_arc_ids():
+    # win #1: a task a block absorbed into its arc must NOT be spammed to still_here.
+    plan = {"blocks": [{"items": [{"block": True, "project_id": "lw", "absorbed_ids": ["t2"],
+                                   "arc": [{"id": "t3", "state": "ahead"}]}]}], "still_here": []}
+    tasks = [{"id": "t2", "name": "Dye"}, {"id": "t3", "name": "Stitch"}, {"id": "t9", "name": "Loose"}]
+    pg._ensure_all_tasks_accounted(plan, tasks)
+    labels = {sh["label"] for sh in plan["still_here"]}
+    assert "Dye" not in labels and "Stitch" not in labels   # absorbed + in-arc -> accounted
+    assert "Loose" in labels                                # genuinely unplaced -> parked

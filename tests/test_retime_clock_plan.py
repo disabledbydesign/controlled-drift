@@ -252,3 +252,26 @@ def test_no_project_discrete_task_survives_the_gate():
     tasks = [{"id": "d", "name": "Call the surgeon", "linked_projects": []}]
     kept = pg._gate_and_collapse(tasks, projects=[], neglected=[], period=None, surface_dates={})
     assert [t["id"] for t in kept] == ["d"]
+
+
+def test_retime_groups_block_project_tasks_into_one_chunk():
+    # Two block-project tasks the LLM scheduled collapse to ONE "Work on X" chunk (chunk_min once).
+    arc = [{"text": "Dye", "state": "here", "id": "t2"},
+           {"text": "Stitch", "state": "ahead", "id": "t3"}]
+    tasks = [{"id": "t2", "name": "Dye", "duration_min": 45},
+             {"id": "t3", "name": "Stitch", "duration_min": 45}]
+    plan = _clock_plan([
+        {"time": "x", "task": "Dye", "project": "Leatherworking", "why": "w", "interstitial": False,
+         "id": "t2", "block_project": True, "project_id": "lw", "arc": arc, "chunk_min": 90},
+        {"time": "x", "task": "Stitch", "project": "Leatherworking", "why": "w", "interstitial": False,
+         "id": "t3", "block_project": True, "project_id": "lw", "arc": arc, "chunk_min": 90},
+    ])
+    pg._retime_clock_plan(plan, tasks, all_anchors=[],
+                          start_time=dt.datetime(2026, 7, 16, 10, 0),
+                          end_time=dt.datetime(2026, 7, 16, 18, 0))
+    rows = [it for b in plan["blocks"] for it in b["items"]]
+    block_rows = [r for r in rows if r.get("block")]
+    assert len(block_rows) == 1                            # one "Work on X" row for the project
+    assert block_rows[0]["time"] == "10:00 – 11:30"        # chunk_min=90 ONCE, not 45+45 twice
+    # neither absorbed task appears as its own loose row
+    assert not any(r.get("task") == "Stitch" and not r.get("block") for r in rows)

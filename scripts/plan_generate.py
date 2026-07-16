@@ -1048,10 +1048,22 @@ def _ensure_all_tasks_accounted(plan, tasks):
     duplicate mention (the model already named it in still_here under different wording) costs
     nothing; a silent drop costs June's trust that the plan is honest about what's there.
     """
-    placed_ids = {item.get("id")
-                  for block in plan.get("blocks", [])
-                  for item in block.get("items", [])}
-    placed_ids |= {item.get("id") for item in plan.get("items", [])}  # priority shape (flat)
+    placed_ids = set()
+    for block in plan.get("blocks", []):
+        for item in block.get("items", []):
+            if item.get("id"):
+                placed_ids.add(item["id"])
+            placed_ids.update(item.get("absorbed_ids") or [])
+            for step in (item.get("arc") or []):
+                if step.get("id"):
+                    placed_ids.add(step["id"])
+    for item in plan.get("items", []):                # priority shape (flat)
+        if item.get("id"):
+            placed_ids.add(item["id"])
+        placed_ids.update(item.get("absorbed_ids") or [])
+        for step in (item.get("arc") or []):
+            if step.get("id"):
+                placed_ids.add(step["id"])
     still_here = plan.setdefault("still_here", [])
     covered_labels = {_norm(sh.get("label")) for sh in still_here if sh.get("label")}
     for t in tasks:
@@ -1099,6 +1111,50 @@ def _ensure_all_anchors_accounted(plan, all_anchors):
             "note": "didn't fit in today's schedule — carries forward, not dropped.",
         })
     return plan
+
+
+def _mark_arc_here(arc, task_id):
+    """Mark the arc step whose id == task_id as the current focus ('here'). In place; a no-op if the
+    id isn't a step (defensive, not an error)."""
+    for step in (arc or []):
+        if step.get("id") == task_id:
+            step["state"] = "here"
+            return
+
+
+def _group_block_project_items(items):
+    """Collapse a block-project's scheduled task items into ONE 'Work on X' block per project_id
+    (plan_input_seam_design.md decision 3, reconciled 2026-07-16: 'one block per project' is an
+    OUTPUT property, NOT a synthetic selection unit — real tasks stayed resolvable through selection
+    and here group at output). DEDUP by project_id: a block project yields EXACTLY ONE block row,
+    never a 'Work on X' header row beside a loose row for one of that project's own tasks (the
+    project scheduled twice). The block's duration is chunk_min allocated ONCE (never the sum of the
+    tasks); every scheduled task's step is marked '→ here' in the arc; the absorbed real task ids are
+    retained (`absorbed_ids`) so the silent-drop guard counts them placed. Non-block items pass
+    through unchanged, order preserved (a project anchors at its first item's position). A task-LESS
+    container synthetic block (already block=True, one per project) folds through idempotently."""
+    grouped, by_pid = [], {}
+    for it in items:
+        pid = it.get("project_id") if (it.get("block_project") or it.get("block")) else None
+        if not pid:
+            grouped.append(it)
+            continue
+        block = by_pid.get(pid)
+        if block is None:
+            label = f"Work on {it.get('project') or ''}".rstrip()
+            block = {"task": label, "name": label, "project": it.get("project"),
+                     "why": it.get("why"), "block": True, "project_id": pid,
+                     "arc": [dict(s) for s in (it.get("arc") or [])],
+                     "chunk_min": it.get("chunk_min"), "duration_min": it.get("chunk_min"),
+                     "shape": "arc" if it.get("arc") else "chunk",
+                     "interstitial": False, "_composed": bool(it.get("_composed")),
+                     "absorbed_ids": []}
+            by_pid[pid] = block
+            grouped.append(block)
+        if it.get("id"):
+            _mark_arc_here(block["arc"], it["id"])
+            block["absorbed_ids"].append(it["id"])
+    return grouped
 
 
 def _retime_clock_plan(plan, tasks, all_anchors, start_time, end_time):
@@ -1160,6 +1216,7 @@ def _retime_clock_plan(plan, tasks, all_anchors, start_time, end_time):
             fi["duration_min"] = dur_by_id.get(it.get("id")) or it.get("duration_min")
             fi["_composed"] = True              # tags real items so blocks_from_scheduled can tell them from anchors
             composed.append(fi)
+    composed = _group_block_project_items(composed)   # one 'Work on X' per project, chunk_min once
     framing_by_label = {b.get("label"): b.get("framing", "") for b in plan.get("blocks", [])}
     scheduled = dp.build_schedule(composed, all_anchors, start_time, end_time=end_time)
     plan["blocks"] = dp.blocks_from_scheduled(scheduled, framing_by_label)
@@ -1287,6 +1344,8 @@ def generate_plan(capacity=None, source="generate", extra=None):
     # re-added here as non-interstitial rows must not be miscounted as claimed focused work), and
     # BEFORE check_plan/save so the logged + cached blocks carry the authoritative clock times.
     _retime_clock_plan(plan, tasks, all_anchors, start_time, end_time)
+    if plan.get("shape") == "priority":   # retime is a no-op for priority — group its flat items here
+        plan["items"] = _group_block_project_items(plan.get("items", []))
     generation_log.log_generation(
         backend=backend_label, duration_s=time.monotonic() - t0,
         success=True, source=source,
@@ -1360,6 +1419,8 @@ def reorder(message, kind):
         _ensure_all_tasks_accounted(plan, tasks)
         # Python re-times June's newly composed order (AI_LAYER_SPEC:69), same as generate_plan.
         _retime_clock_plan(plan, tasks, all_anchors, start_time, end_time)
+        if plan.get("shape") == "priority":   # retime is a no-op for priority — group flat items here
+            plan["items"] = _group_block_project_items(plan.get("items", []))
     except Exception as e:
         generation_log.log_generation(
             backend=backend_label, duration_s=time.monotonic() - t0,
