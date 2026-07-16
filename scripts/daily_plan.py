@@ -20,6 +20,7 @@ from anytype_test import call
 import gsdo_anytype as g
 import grain
 import chunk_log
+import when_resolve
 from datetime_seam import recurring_items_for_today
 from neglect import active_untouched
 from scheduler import schedule, DEFAULT_DURATION_MIN
@@ -184,6 +185,13 @@ def load_active_items(sid):
             if status in (None, "Active", "Ready", "Needs Clarifying"):
                 done = pv("done", "checkbox")
                 if done:
+                    continue
+                # Future-Scheduled exclusion (June-ratified 2026-07-16): a task with a Scheduled
+                # date in the future is not eligible for TODAY's plan. Undated / today-or-earlier
+                # pass. `Scheduled` = "start considering on/after this day" (distinct from Due). The
+                # predicate was written for the loader (when_resolve) and finally wired here.
+                scheduled = pv("scheduled", "date")
+                if not when_resolve.is_scheduled_for_today_or_earlier(scheduled):
                     continue
                 # The tags live under the key `gsdo_access_conditions` (display "Access
                 # conditions") — NOT `gsdo_access`. Reading the wrong key meant every task's

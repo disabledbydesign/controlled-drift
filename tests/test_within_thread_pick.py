@@ -287,3 +287,36 @@ def test_open_and_unset_engagement_projects_stay_active(monkeypatch):
     ])
     _, projects, _, _, _, _ = dp.load_active_items("sid")
     assert {p["name"] for p in projects} == {"Open thread", "Unset thread"}
+
+
+# --- Task 3 (plan-input seam): future-Scheduled tasks held off today ---------
+
+def _task_obj_scheduled(oid, name, scheduled=None):
+    props = [{"key": "gsdo_task_status", "select": {"name": "Active"}}]
+    if scheduled is not None:
+        props.append({"key": "scheduled", "date": scheduled})
+    return {"id": oid, "type": {"key": "task"}, "name": name, "properties": props}
+
+
+def test_future_scheduled_task_excluded_at_load(monkeypatch):
+    import datetime as dt, daily_plan as dp
+    future = (dt.date.today() + dt.timedelta(days=5)).isoformat()
+    monkeypatch.setattr(dp.g, "get_space_id", lambda: "sid")
+    monkeypatch.setattr(dp.g, "fetch_all_objects", lambda sid: [
+        _task_obj_scheduled("t1", "Future thing", scheduled=future),
+        _task_obj_scheduled("t2", "No date thing"),
+    ])
+    _, _, tasks, _, _, _ = dp.load_active_items("sid")
+    assert {t["id"] for t in tasks} == {"t2"}          # the future-dated one is held off today
+
+
+def test_today_or_earlier_scheduled_task_stays(monkeypatch):
+    import datetime as dt, daily_plan as dp
+    past = (dt.date.today() - dt.timedelta(days=1)).isoformat()
+    monkeypatch.setattr(dp.g, "get_space_id", lambda: "sid")
+    monkeypatch.setattr(dp.g, "fetch_all_objects", lambda sid: [
+        _task_obj_scheduled("t1", "Overdue-scheduled", scheduled=past),
+        _task_obj_scheduled("t2", "Today", scheduled=dt.date.today().isoformat()),
+    ])
+    _, _, tasks, _, _, _ = dp.load_active_items("sid")
+    assert {t["id"] for t in tasks} == {"t1", "t2"}
