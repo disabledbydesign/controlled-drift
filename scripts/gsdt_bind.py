@@ -107,6 +107,18 @@ def _detect_parent_project_id(folder):
     return projects[0]["id"] if projects else None
 
 
+def _prompt_engagement(name, _input=input):
+    """Ask, in the terminal, how June is engaging with this project. Empty accepts the Open default
+    (returns None -> the caller omits Engagement -> the shared builder writes Open). An unrecognized
+    answer also returns None rather than guessing."""
+    import capture_fields
+    ans = _input(f"  Engagement for {name!r}? [Open]/Steady/Backburner: ").strip()
+    if not ans:
+        return None
+    v = ans.capitalize()
+    return v if v in capture_fields.PROJECT_ENGAGEMENTS else None
+
+
 _CLAUDE_MD_MARKER = "## Controlled Drift binding"
 
 
@@ -201,7 +213,8 @@ def init_binding(folder, project_name, goal_id=None, goal_name=None,
     if pid:
         print(f"  [reuse] Project {project_name!r} ({pid[:12]})")
     else:
-        props = {"Engagement": "Steady"}
+        import capture_fields
+        props = {"Engagement": capture_fields._engagement_value(_prompt_engagement(project_name))}
         if _goal_ids:
             props["Goal link"] = _goal_ids
         if parent_project_id:
