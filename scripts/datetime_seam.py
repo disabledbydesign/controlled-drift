@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
-"""Datetime seam: converts a Recurring item's schedule fields into a concrete
-fixed_time datetime for today (or None if not scheduled today).
+"""Datetime seam: decides whether a Recurring item is due today, and separately, whether
+it has a real clock time.
 
 Rule: all reasoning is in local wall-clock time (America/Los_Angeles by default,
 but derived from the system TZ — not hardcoded, so a GA move doesn't silently break).
@@ -19,10 +19,19 @@ Scheduling logic:
   week/N  — if day_of_week is set, recurs on those weekdays. If not set, recurs weekly
             (any day — treated as today for scheduling purposes in v1).
   month/N — recurs on day_of_month each month (clamped to the last day for short months,
-            so "31" fires on Feb 28/29). If day_of_month is unset, returns None (no anchor
-            to guess from). v1 fires monthly regardless of N — every-N-months needs a stored
+            so "31" fires on Feb 28/29). If day_of_month is unset, not due (no anchor to
+            guess from). v1 fires monthly regardless of N — every-N-months needs a stored
             start anchor we don't yet keep; count>1 is treated as monthly until then.
-  as_needed / None — not scheduled; returns None.
+  as_needed / None — not scheduled automatically; browsable on the Map instead
+            (orient_map.py lists every Recurring under its linked project regardless
+            of schedule — an as-needed item is there for June to pull up, not on autopilot).
+
+DUE vs. TIMED (2026-07-17 — see today_fixed_time's docstring): whether an item recurs today
+and whether it has a real clock time are independent questions. A recurring item due today
+with no time_of_day set has no clock preference at all — it is NOT given a fabricated one.
+`recurring_items_for_today` returns it with `fixed_time: None`; the caller
+(daily_plan.load_active_items) routes a None-fixed_time item into the same composable task
+pool the LLM places freely, instead of the fixed-time anchor pipeline.
 """
 import calendar
 import datetime as dt
@@ -34,7 +43,6 @@ DOW_NAME_TO_WEEKDAY = {
 }
 
 DEFAULT_DURATION_MIN = 30
-DEFAULT_TIME = dt.time(9, 0)  # 9:00 AM fallback when no time_of_day set
 
 
 def _local_tz():
@@ -46,14 +54,23 @@ def _local_tz():
 
 
 def _parse_time(time_of_day_str):
-    """Parse 'HH:MM' or 'H:MM' text. Returns dt.time or DEFAULT_TIME."""
+    """Parse 'HH:MM' or 'H:MM' text. Returns dt.time, or None if unset/unparseable.
+
+    No fallback default (changed 2026-07-17): a recurring item with no stated time has no
+    clock preference — it should never be handed a fabricated one. The earlier 9am default
+    made every timeless chore (dishes, kitchen, toilet) a fake anchor that was immediately
+    "overdue" on generation (plans rarely start before 10am) and got demoted + shoved behind
+    every real task the LLM had already placed — structurally losing the scheduling race
+    every day (June, 2026-07-17: "the clock time is getting in the way"). The LLM is meant
+    to place a no-time chore wherever it fits, same as any other task; see
+    recurring_items_for_today / daily_plan.load_active_items for the split."""
     if not time_of_day_str:
-        return DEFAULT_TIME
+        return None
     try:
         parts = time_of_day_str.strip().split(":")
         return dt.time(int(parts[0]), int(parts[1]))
     except Exception:
-        return DEFAULT_TIME
+        return None
 
 
 def _parse_dow_names(multi_select_tags):
@@ -69,7 +86,16 @@ def _parse_dow_names(multi_select_tags):
 
 
 def today_fixed_time(item, today=None):
-    """Return a tz-naive local-time datetime for item if it recurs today, else None.
+    """Return (due, clock) for item today.
+
+      due   — True if the item recurs today, from interval math ALONE — never touches
+              whether a clock time is set. An every-day chore is due every day whether or
+              not it has a time_of_day.
+      clock — dt.time if item has an explicit, parseable time_of_day; else None. A None
+              clock is not "unscheduled" — it means "due today, no time preference," which
+              the caller folds into the composable task pool instead of the anchor pipeline
+              (daily_plan.load_active_items). Only a genuinely time-bound recurring item
+              (a real time_of_day) stays a true clock anchor.
 
     item dict keys (all optional, all from Anytype property values):
       interval_unit   — select tag name string ("day", "week", "month", "as_needed")
@@ -79,49 +105,40 @@ def today_fixed_time(item, today=None):
       duration_min    — int (not used here; passed through by scheduler)
 
     today: date to check against (default: dt.date.today()).
-    Returns datetime (tz-naive, local wall-clock) or None.
     """
     today = today or dt.date.today()
     unit = item.get("interval_unit")
-    if not unit or unit == "as_needed":
-        return None
-
-    count = int(item.get("interval_count") or 1)
     clock = _parse_time(item.get("time_of_day"))
+    if not unit or unit == "as_needed":
+        return False, clock
 
     if unit == "day":
         # Every N days — v1: schedule daily items every day (anchor refinement is post-v1)
-        if count == 1:
-            return dt.datetime.combine(today, clock)
-        # Every-N-days: return today (caller can add anchor-based filtering later)
-        return dt.datetime.combine(today, clock)
+        return True, clock
 
     if unit == "week":
         dow_weekdays = _parse_dow_names(item.get("day_of_week") or [])
         if not dow_weekdays:
             # Weekly with no specific day — treat as schedulable today (v1)
-            return dt.datetime.combine(today, clock)
-        if today.weekday() in dow_weekdays:
-            return dt.datetime.combine(today, clock)
-        return None
+            return True, clock
+        return (today.weekday() in dow_weekdays), clock
 
     if unit == "month":
         dom = item.get("day_of_month")
         if not dom:
-            return None
+            return False, clock
         dom = int(dom)
         last_day = calendar.monthrange(today.year, today.month)[1]
         target = min(dom, last_day)  # clamp so "31" fires on the last day of short months
-        if today.day == target:
-            return dt.datetime.combine(today, clock)
-        return None
+        return (today.day == target), clock
 
-    return None
+    return False, clock
 
 
 def recurring_items_for_today(anytype_objects, today=None):
-    """Filter a list of Anytype Recurring objects to those scheduled today.
-    Returns list of dicts with keys: id, name, fixed_time, duration_min.
+    """Filter a list of Anytype Recurring objects to those due today.
+    Returns list of dicts with keys: id, name, fixed_time (datetime, or None if no
+    time_of_day is set — see today_fixed_time), duration_min.
     anytype_objects: raw dicts from the Anytype API (/spaces/{sid}/objects).
     """
     today = today or dt.date.today()
@@ -146,12 +163,13 @@ def recurring_items_for_today(anytype_objects, today=None):
             "time_of_day":    pval("gsdo_time_of_day", "text"),
             "duration_min":   pval("gsdo_duration_min", "number"),
         }
-        fixed = today_fixed_time(item, today)
-        if fixed is not None:
-            results.append({
-                "id":           item["id"],
-                "name":         item["name"],
-                "fixed_time":   fixed,
-                "duration_min": item["duration_min"] or DEFAULT_DURATION_MIN,
-            })
+        due, clock = today_fixed_time(item, today)
+        if not due:
+            continue
+        results.append({
+            "id":           item["id"],
+            "name":         item["name"],
+            "fixed_time":   dt.datetime.combine(today, clock) if clock else None,
+            "duration_min": item["duration_min"] or DEFAULT_DURATION_MIN,
+        })
     return results

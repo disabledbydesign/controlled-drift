@@ -236,7 +236,46 @@ def load_active_items(sid):
         elif tkey == "gsdo_recurring":
             recurrings.append(obj)
 
-    today_recurrings = recurring_items_for_today(recurrings)
+    # Due-but-timeless recurring items (no time_of_day) fold into `tasks` as synthetic
+    # task-shaped rows instead of the fixed-time anchor pipeline (2026-07-17 — see
+    # datetime_seam's module docstring for why the old 9am default was wrong). This lets them
+    # ride the SAME machinery a real task already gets: the LLM composes/places them freely
+    # (AI_LAYER_SPEC:69 — the model owns order, Python owns clock arithmetic), a ref token
+    # makes them resolvable, and `_ensure_all_tasks_accounted` already guarantees they never
+    # silently vanish — no parallel guard needed. `is_recurring` marks them so completion
+    # still routes to the cache-only "done for today" flip (task_actions never gets a
+    # Recurring id — Recurring objects have no Task status, and they recur).
+    # `today_recurrings` keeps its original meaning after this split: ONLY items with a real
+    # clock time, so every existing consumer (all_anchors, default_meal_anchors, the neglect
+    # filter below) is unaffected — fewer items reach it, nothing about how it's read changes.
+    today_recurrings_all = recurring_items_for_today(recurrings)
+    today_recurrings = [r for r in today_recurrings_all if r.get("fixed_time") is not None]
+    untimed_ids = {r["id"] for r in today_recurrings_all if r.get("fixed_time") is None}
+    if untimed_ids:
+        recurring_obj_by_id = {o.get("id"): o for o in recurrings}
+        for r in today_recurrings_all:
+            if r["id"] not in untimed_ids:
+                continue
+            obj = recurring_obj_by_id.get(r["id"])
+            if obj is None:
+                continue
+            rprops = {p.get("key"): p for p in obj.get("properties", [])}
+            proj_ids = _prop_val(rprops, "gsdo_project_link", "objects") or []
+            linked = []
+            for x in proj_ids:
+                pid = x.get("id") if isinstance(x, dict) else x
+                nm = proj_id_to_name.get(pid)
+                if nm:
+                    linked.append(nm)
+            tasks.append({
+                "id": r["id"], "name": r["name"], "status": "Ready",
+                "duration_min": r.get("duration_min"),
+                "affective": None, "access": [], "blocked_on": None,
+                "context": _prop_val(rprops, "gsdo_context", "text"),
+                "due_date": None,
+                "linked_projects": linked,
+                "is_recurring": True,
+            })
 
     # Focus Period + resolved calendar facts — loaded HERE, the one seam both the terminal
     # (run) and live (plan_generate.build_context) paths call, so the feature reaches every
@@ -495,8 +534,11 @@ def format_context(goals, projects, tasks, strategies, today_recurrings, neglect
             lines.append("### Daily tasks — discrete chores + standalone actions, scheduled one at a"
                          " time. Each project header carries its [Engagement] (Steady → its chores"
                          " belong today; Open → pull one in only if the day has room, never on a"
-                         " rest/low-energy focus). True every-day chores (dishes, meds) come through"
-                         " as Recurring items by their own cadence, not from engagement.")
+                         " rest/low-energy focus). A due-today recurring chore with no set time"
+                         " (dishes, laundry, a walk) is listed right here, mixed in with the rest —"
+                         " place it wherever it actually fits your day, exactly like any other task."
+                         " Only a recurring item with a REAL clock time (an appointment, meds at a"
+                         " specific hour) arrives separately below, already timed — never re-list it here.")
             for pname, ptasks in daily_projects.items():
                 dproj = proj_by_name.get(pname)
                 eng = (dproj.get("engagement") if dproj else None) or "Open"
@@ -601,7 +643,11 @@ def default_meal_anchors(today_recurrings, start_time):
 
     The default_hour is a learned parameter updated by update_meal_learned_time()
     when the corrections loop (post-v1) sees June moving the Lunch item.
-    June can also override entirely by adding a Recurring 'Lunch' item in Anytype.
+    June can also override entirely by adding a Recurring 'Lunch' item in Anytype —
+    but only a TIMED one dedups here (today_recurrings, post 2026-07-17, holds only
+    recurring items with a real time_of_day; an untimed 'Lunch' item would instead be
+    a synthetic task in the composable pool and wouldn't suppress this default). Not a
+    live concern today (no such object exists) — worth knowing if one's ever added.
     """
     existing = {r["name"].lower() for r in today_recurrings}
     params = _load_meal_params()
@@ -836,6 +882,12 @@ def blocks_from_scheduled(scheduled, framing_by_label=None):
                     row["held_back_names"] = it.get("held_back_names", [])
                 if it.get("description"):
                     row["description"] = it["description"]
+                if it.get("recurring"):
+                    # A due-but-timeless Recurring chore, now composed/placed by the LLM like any
+                    # task (2026-07-17) — carries a real id (row["id"] above) but must route
+                    # completion through the SAME cache-only "done for today" flip a timed
+                    # recurring anchor gets below, never a real Anytype Task-status write.
+                    row["recurring"] = True
                 if it.get("block"):
                     # A synthetic CONTAINER block (task-less project): a bare "work on X" chunk. The
                     # check is a daily "worked on it today" (chunk_log), NOT a task done — cache-only.

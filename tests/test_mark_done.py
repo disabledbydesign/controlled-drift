@@ -63,6 +63,25 @@ def test_resolve_ids_no_match_leaves_item_without_id():
         assert "id" not in item
 
 
+def test_resolve_ids_flags_a_recurring_task_so_completion_stays_cache_only():
+    """A due-but-timeless Recurring chore folded into `tasks` (daily_plan.load_active_items,
+    2026-07-17) carries is_recurring=True. Once resolved, the plan row must carry
+    recurring=True too — plan_store.is_recurring_item reads that flag to route completion to
+    the cache-only 'done for today' flip instead of a real Anytype Task-status write (Recurring
+    objects have no Task status). A regular task must NOT get this flag."""
+    ref_map = {"T1": "id-dishes", "T2": "id-aaa"}
+    tasks = [{"id": "id-dishes", "name": "Do the dishes", "is_recurring": True},
+             {"id": "id-aaa", "name": "Write the grant"}]
+    plan = {"blocks": [{"items": [
+        {"task": "Do the dishes", "ref": "T1"},
+        {"task": "Write the grant", "ref": "T2"},
+    ]}]}
+    pg._resolve_ids(plan, ref_map, tasks)
+    dishes, grant = plan["blocks"][0]["items"]
+    assert dishes["id"] == "id-dishes" and dishes["recurring"] is True
+    assert grant["id"] == "id-aaa" and "recurring" not in grant
+
+
 # --- same task named twice -> one row, not two ------------------------------
 
 def test_dedup_resolved_items_drops_second_occurrence_across_blocks():

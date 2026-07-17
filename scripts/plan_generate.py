@@ -975,6 +975,12 @@ def _resolve_ids(plan, ref_map, tasks, all_tasks=None):
     # id (no synthetic id). The task resolves normally; these fields make the row render grouped
     # under a "Work on X" block with the project's arc.
     block_render_by_id = {t["id"]: t for t in identity if t.get("block_project")}
+    # A due-but-timeless Recurring chore folded into `tasks` as a synthetic task
+    # (daily_plan.load_active_items, 2026-07-17) — flagged here so its resolved row routes
+    # completion to the cache-only "done for today" flip (plan_store.is_recurring_item),
+    # never a real Anytype Task-status write. Same id space as any other task; no separate
+    # ref-token handling needed.
+    recurring_ids = {t["id"] for t in identity if t.get("is_recurring")}
     mislabels = 0  # resolved items whose model text differed materially from the real name
     resolved = 0   # items that resolved to a real task id (the resolution-health signal)
 
@@ -1027,6 +1033,10 @@ def _resolve_ids(plan, ref_map, tasks, all_tasks=None):
                 item["project_id"] = brender["project_id"]
                 item["arc"] = brender["arc"]
                 item["chunk_min"] = brender["chunk_min"]
+            # A due-but-timeless Recurring chore — flag so the overlay's completion route
+            # never writes an Anytype Task-status field that doesn't exist on the object.
+            if tid in recurring_ids:
+                item["recurring"] = True
 
     for block in plan.get("blocks", []):        # clock shape
         for item in block.get("items", []):

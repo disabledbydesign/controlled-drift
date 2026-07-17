@@ -167,6 +167,30 @@ def test_recurring_anchor_is_checkable_meal_and_break_are_not():
     assert "id" not in rows["Break — stand, stretch, move"]                   # break: no checkbox
 
 
+def test_untimed_recurring_chore_is_placed_wherever_the_model_composed_it():
+    # 2026-07-17: a due-but-timeless Recurring chore (no time_of_day) is no longer a fake 9am
+    # anchor demoted and shoved behind every real task — it's a synthetic task the LLM composes
+    # and orders freely, same as Alpha/Beta. Composing it FIRST must schedule it first, proving
+    # the model controls placement (the old anchor path always lost this race). NOT in
+    # all_anchors — that's exactly what makes it un-demotable.
+    tasks = [{"id": "dishes", "name": "Do the dishes", "duration_min": 20, "is_recurring": True},
+             {"id": "a", "name": "Alpha", "duration_min": 60}]
+    plan = _clock_plan([
+        {"time": "x", "task": "Do the dishes", "project": None, "why": None,
+         "interstitial": False, "id": "dishes", "recurring": True},
+        {"time": "x", "task": "Alpha", "project": None, "why": "w", "interstitial": False, "id": "a"},
+    ])
+    pg._retime_clock_plan(plan, tasks, all_anchors=[],
+                          start_time=dt.datetime(2026, 7, 13, 10, 0),
+                          end_time=dt.datetime(2026, 7, 13, 18, 0))
+    out = _times(plan)
+    assert [t for t, _ in out] == ["Do the dishes", "Alpha"]   # composed order honored
+    assert out[0][1] == "10:00 – 10:20"                         # dishes: 20min from 10:00
+    dishes_row = next(it for b in plan["blocks"] for it in b["items"] if it["task"] == "Do the dishes")
+    assert dishes_row["id"] == "dishes"                         # checkoffable
+    assert dishes_row["recurring"] is True                      # completion routes cache-only, not Anytype
+
+
 def test_priority_shape_is_left_untouched():
     plan = {"shape": "priority", "items": [{"task": "x", "id": "a"}], "still_here": []}
     before = dict(plan)

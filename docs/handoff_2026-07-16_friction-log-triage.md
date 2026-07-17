@@ -97,8 +97,42 @@ Full text of each entry is in `signal_log.jsonl`; numbering below is just this t
 - ✅ **FIXED (session 2)** — Walk duration doesn't include drive time.
 - ✅ **FIXED (session 2)** — Duplicate task creation ("bleed") — earlier chat-turn tasks get
   recreated.
-- Duration change on a task doesn't propagate to the schedule. *(still open)*
-- Recurring "dishes" task won't toggle back on via focus period or regen instructions. *(still open)*
+- ✅ **FIXED (session 3, 2026-07-16 night)** — Duration change on a task doesn't propagate
+  to the schedule. Root cause was two bugs stacked: `plan_store.set_item_duration` updated
+  the cached `duration_min` number but never touched the displayed clock-time ranges, and
+  `_reflow_block` (the existing time-recompute helper used by tap-to-move) derived slot
+  length only from the OLD time range, never from `duration_min` (backend, `524fff5`).
+  Separately, the overlay's duration-chip commit handler discarded the `plan` the server
+  already returned and only patched its own chip's label — every other mutating handler in
+  the file re-renders from `data.plan`, this was the one exception (frontend, `923e869`).
+  Live-verified end-to-end via agent-browser against an isolated server instance (not June's
+  real data): changing a task's duration now visibly re-times it and cascades every later
+  item in the same block.
+- ✅ **FIXED (session 3, 2026-07-17)** — Recurring "dishes" task won't toggle back on via
+  focus period or regen instructions. Real root cause, corrected from an earlier wrong
+  diagnosis in this same session (initially misdiagnosed as fixed by `acdd54a`'s never-drop
+  guard — that guard only stops the data from vanishing; `still_here` isn't rendered in the
+  UI at all, June turned it off 2026-07-13, so that "fix" left the actual symptom untouched).
+  The real bug: every recurring item due today (dishes, kitchen, toilet, laundry, recycling,
+  a walk) with no `time_of_day` set was defaulting to a fabricated 9am, which made it
+  "overdue" on every generation (plans rarely start before 10am), demoted it to a flexible
+  item, and shoved it behind every real task the model had already placed — losing the
+  scheduling race by construction, every day. Not something June asked for: traced to an
+  unreviewed default from the original 2026-06-18 pipeline build. Fix: `datetime_seam.py`
+  now separates "due today" from "has a real clock time" — a due-but-timeless item no longer
+  gets an invented time; `daily_plan.load_active_items` folds it into the same task pool the
+  LLM composes and orders (real ref token, real id, `_resolve_ids`/`_ensure_all_tasks_accounted`
+  cover it for free — no parallel guard needed); only a genuinely time-bound recurring item
+  (a real `time_of_day`) stays a true clock anchor. Prompt text updated to match. 13 tests in
+  `test_datetime_seam.py` rewritten for the new `(due, clock)` contract; 2 new regression
+  tests (`test_mark_done.py`, `test_retime_clock_plan.py`) cover the completion-routing flag
+  and composed-order placement. Live-verified read-only against June's real Anytype data (no
+  writes): all 6 of her real untimed recurring chores now appear correctly in the live prompt
+  as normal composable tasks instead of fake 9am anchors. Also answered in the same pass:
+  "as needed" recurring items never enter the daily-plan pipeline at all (browsable on the Map
+  instead, by design); a scheduled chore's "done" state is cache-only, never written to
+  Anytype, so it reenters the next day's plan unconditionally regardless of whether it was
+  completed — there's no adherence/streak tracking today, worth knowing on its own.
 - ✅ **FIXED (session 2)** — "Insurance" task appears multiple times in one plan.
 - A calendar event isn't loading for today. *(still open)*
 - Plan text claims "low-EF first" while actually scheduling a high-EF (leave-the-house) task first. *(still open)*
