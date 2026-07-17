@@ -2015,9 +2015,14 @@ async function loadMap() {
 }
 
 // ── Project grouping helpers ────────────────────────────────────────────────
-// Group consecutive same-project items within a block. Items without a project
-// field render flat; 2+ consecutive tasks from the same project become one
-// expandable project row. This runs entirely in the renderer — no LLM change needed.
+// Only a real "Work on X" block (block / block_project, from grain.classify's block grain)
+// ever coalesces multiple rows into one group. Every other item — which, by grain.classify's
+// task/block split, means every Daily-life chore — renders flat and alone, per
+// display_grain_design.md's "Daily-life groups render flat" decision. Grouping plain items by
+// consecutive same-project name (pre-grain-split behavior) used to run here too and would
+// silently fold 2+ same-day household/medical/etc. chores into one collapsible row that looked
+// exactly like a work block; removed 2026-07-17 (June: "shouldn't household render as individual
+// tasks, not a block?").
 function groupByProject(items) {
   const groups = [];
   const blockGroupOf = {};   // project key -> its block group (block_project siblings coalesce)
@@ -2040,13 +2045,10 @@ function groupByProject(items) {
       continue;
     }
     if (!item.project) { groups.push({ atomic: true, item }); continue; }
-    const prev = groups.length ? groups[groups.length - 1] : null;
-    // Only coalesce into an ordinary (non-block) consecutive same-project group.
-    if (prev && !prev.atomic && !prev.blockProject && prev.project === item.project) {
-      prev.tasks.push(item);
-    } else {
-      groups.push({ atomic: false, project: item.project, tasks: [item] });
-    }
+    // Plain project-tagged item (not a block, not a block_project row) — always its own
+    // single-task group (renderGroup's tasks.length===1 path keeps the "project · task" label),
+    // never coalesced with a same-project sibling. See the function comment above.
+    groups.push({ atomic: false, project: item.project, tasks: [item] });
   }
   return groups;
 }
