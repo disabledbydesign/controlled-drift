@@ -274,6 +274,8 @@ The Reframe codebase was built for June, by June, and encodes hard-won knowledge
 
 **Don't specialize for the current edge case.** Building around June's current state creates dead weight when the state changes. Test current states against the general design.
 
+**Persistence is the guarantee; daily-plan surfacing is not.** Everything captured lives durably in Anytype — that's the non-negotiable half. Whether an item shows up in *today's generated plan* is a separate, much weaker guarantee: the daily plan is a curated subset (by capacity, engagement grain, what fits the clock), not an inventory. An item that doesn't make today's plan is not lost — it's still in Anytype and comes back the next time it's eligible. When triaging a "this didn't show up" report, check whether the object persisted correctly *first*; don't treat absence from today's rendered plan as itself the bug. (Origin, 2026-07-17: `still_here` — the plan's own "didn't fit, carries forward" list — exists to prove nothing vanished from the *data*; June turned off its UI rendering on 2026-07-13 on purpose. She does not want to be reminded of every deferred task every day — she wants to know every captured task is held somewhere. Those are different guarantees; building a fix that only restores the first one does not answer a complaint about the second.)
+
 ---
 
 ## 6. Extensibility pattern
