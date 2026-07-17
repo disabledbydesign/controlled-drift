@@ -90,3 +90,28 @@ def test_all_fields_together():
     assert got == {"Duration min": 20, "Duration source": "stated",
                    "Affective": "dread", "Blocked on": "the API key",
                    "Access conditions": ["Requires-talking-to-a-person"]}
+
+
+def test_engagement_valid_value_kept():
+    assert cf.build_project_engagement_props(engagement="Steady")["Engagement"] == "Steady"
+    assert cf.build_project_engagement_props(engagement="Backburner")["Engagement"] == "Backburner"
+
+
+def test_engagement_case_insensitive():
+    assert cf.build_project_engagement_props(engagement="open")["Engagement"] == "Open"
+
+
+def test_engagement_absent_or_invalid_defaults_open():
+    assert cf.build_project_engagement_props(engagement=None)["Engagement"] == "Open"
+    assert cf.build_project_engagement_props(engagement="")["Engagement"] == "Open"
+    # retired values are NOT valid engagement anymore -> fall back to Open, never written through
+    assert cf.build_project_engagement_props(engagement="Sprint")["Engagement"] == "Open"
+    assert cf.build_project_engagement_props(engagement="Hyperfixation")["Engagement"] == "Open"
+
+
+def test_engagement_notes_written_only_when_present():
+    out = cf.build_project_engagement_props(engagement="Steady", engagement_notes="deadline Friday")
+    assert out["Engagement notes"] == "deadline Friday"
+    assert "Engagement notes" not in cf.build_project_engagement_props(engagement="Steady", engagement_notes="")
+    # guard #3: a bare number is not valid free text
+    assert "Engagement notes" not in cf.build_project_engagement_props(engagement="Steady", engagement_notes=3)

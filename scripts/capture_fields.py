@@ -108,3 +108,36 @@ def build_optional_props(*, duration_min=None, duration_estimate_min=None, affec
     if acc is not None:
         props["Access conditions"] = acc
     return props
+
+
+# The coarse, reconciled Project-engagement set (docs/spec_reconciliation_selection_2026-07-11.md):
+# Steady = a normal daily move the system commits to the day; Open = available, shown gently, not
+# pushed (the neutral default); Backburner = set aside, not in the plan unless a neglected obligation.
+# Sprint/Hyperfixation are RETIRED from engagement (Sprint -> Focus Period foreground; Hyperfixation ->
+# the qualitative Engagement-notes/Affective free text). Done is never a birth value.
+PROJECT_ENGAGEMENTS = {"Steady", "Open", "Backburner"}
+DEFAULT_ENGAGEMENT = "Open"
+
+
+def _engagement_value(raw):
+    """The proposed Project engagement, validated against the coarse set. Anything else — blank,
+    None, a retired value (Sprint/Hyperfixation), a typo — becomes Open. This is the ONE place the
+    default-Open lives (there is deliberately no born-Open chokepoint in gsdo_objects: the post-seam
+    loader already reads a blank engagement as Open, so the default belongs here in the proposal)."""
+    if isinstance(raw, str):
+        v = raw.strip().capitalize()   # "backburner" -> "Backburner"; all three are single words
+        if v in PROJECT_ENGAGEMENTS:
+            return v
+    return DEFAULT_ENGAGEMENT
+
+
+def build_project_engagement_props(engagement=None, engagement_notes=None):
+    """Project-only. The Engagement select (always written; default Open) plus the optional free-text
+    Engagement notes (absent/invalid stays absent — the situated specifics the select can't hold:
+    'deadline July 1', '~30 min daily', 'hyperfixating but stuck'). Both write paths call this so
+    capture and the memory pass can never diverge on the default or the coarse-set validation."""
+    props = {"Engagement": _engagement_value(engagement)}
+    notes = _text_prop(engagement_notes)   # reuses the guard-#3 free-text validator above
+    if notes is not None:
+        props["Engagement notes"] = notes
+    return props
