@@ -29,3 +29,12 @@ docs/controlled_drift_tree.html
 docs/controlled_drift_tree.md
 docs/controlled_drift_tree_june_edits.md
 docs/controlled_drift_changes.json
+
+# Handoff/design docs quoting real health, financial, or relationship detail from June's
+# Anytype space (surgery dates, disability paperwork, savings/rent figures, family caregiving).
+# LOCAL ONLY, never commit — scrubbed from history 2026-07-16 before this repo's first push.
+docs/survival_plan.md
+docs/route_structure_assessment_2026-07-12.md
+docs/focus_configuration_addendum.md
+docs/discovery_D_open_pass.md
+docs/handoff_2026-07-13_review_surface_pass.md
