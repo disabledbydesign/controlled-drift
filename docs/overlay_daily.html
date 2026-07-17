@@ -1558,9 +1558,11 @@ async function toggleBlock(projectId, btn) {
 }
 
 // Tap the chunk chip → an inline numeric input (free minutes value — swarm fix: June's own
-// number, NOT a fixed cycle). Commit (Enter or blur) POSTs the new duration and re-labels the
-// chip; Escape restores it untouched. stopPropagation throughout so editing never toggles the
-// arc open. The chip only re-labels after the write is confirmed (a good answer is not a save).
+// number, NOT a fixed cycle). Commit (Enter or blur) POSTs the new duration and re-renders the
+// whole plan from the server's response, so a task's slot AND every later item in its block
+// re-time to match (2026-07-15 friction: a duration edit used to leave the schedule untouched);
+// Escape restores it untouched. stopPropagation throughout so editing never toggles the arc
+// open. The chip only updates after the write is confirmed (a good answer is not a save).
 function openChunkInput(ev, chip, itemId) {
   ev.stopPropagation();
   if (chip.dataset.editing === '1') return;
@@ -1593,11 +1595,14 @@ function openChunkInput(ev, chip, itemId) {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ id: itemId, minutes }),
       });
+      const data = await res.json().catch(() => ({}));
       if (!res.ok) {
-        const data = await res.json().catch(() => ({}));
         showError(data.error || "couldn't set the duration");
+      } else if (data.plan) {
+        renderPlan(data.plan);   // re-render from server state: this AND every later item in
+                                  // the block re-time to reflect the new duration, not just the chip
       } else {
-        chip.textContent = fmtChunk(minutes);   // confirmed persisted server-side
+        chip.textContent = fmtChunk(minutes);   // no plan came back — at least label it correctly
       }
     } catch (_) {
       showError("couldn't reach the server — is it running?");
