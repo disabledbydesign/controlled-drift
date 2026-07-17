@@ -16,6 +16,7 @@ Routes:
   POST /api/negotiate   {preset_id}|{message} -> start a renegotiation (async, 202); poll status
   POST /api/complete    {id} -> mark a task done in Anytype (read-back) + flip the cache
   POST /api/task/reschedule {id, when} -> anchor a when-token to a date (read-back) {ok, when_label}
+  POST /api/project/engagement {id, old, new} -> correct a Project's Engagement (read-back) {ok, engagement}
   POST /api/uncomplete  {id} -> undo: status back to Ready (read-back) + un-flip the cache
   GET  /api/session     ?stream=capture|negotiate -> recent session log entries (the receipt)
   POST /api/capture     {text} -> weed input into typed/linked Anytype objects (async, 202)
@@ -33,6 +34,8 @@ import project_summary
 import plan_generate
 import task_actions
 import capture_generate
+import gsdo_objects
+import engagement_log
 import session_store
 import orient_map
 import period_view
@@ -99,6 +102,22 @@ def _health_summary():
             "nothing you did, and the system caught each one. If capture has felt off "
             "lately, that's why.")
     return {"line": line, "count": n}
+
+
+def set_project_engagement(pid, old, new):
+    """Write a Project's Engagement (the tap-to-change chip on the capture receipt), read it
+    back BY DISPLAY NAME to prove it persisted (never trust the write call alone), then log the
+    old->new change (engagement_log no-ops when old == new — a re-tap isn't a correction).
+    Returns `new` so the route can echo it straight back to the chip."""
+    gsdo_objects.update(pid, properties={"Engagement": new})
+    obj = capture_generate._get_object(pid)
+    by_name = {p.get("name"): p for p in obj.get("properties", [])}
+    got = ((by_name.get("Engagement") or {}).get("select") or {}).get("name")
+    if got != new:
+        raise RuntimeError(f"engagement read-back mismatch for {pid!r}: wrote {new!r}, got {got!r}")
+    engagement_log.log_change(pid, obj.get("name"), old, new)
+    return new
+
 
 # A generation (the LLM call) takes ~60-110s — far longer than a phone browser will hold a
 # connection open, so it must NOT block the HTTP request (that's the "build my plan from bed"
@@ -466,6 +485,24 @@ class Handler(BaseHTTPRequestHandler):
                 self._send(500, {"error": str(e)})
                 return
             self._send(200, {"ok": True, "when_label": out.get("when_label")})
+            return
+
+        if self.path == "/api/project/engagement":
+            # The tap-to-change engagement chip on the capture receipt: June corrects the weeding
+            # LLM's proposed Steady/Open/Backburner for a just-created Project.
+            body = self._read_json_body()
+            project_id = (body.get("id") or "").strip()
+            old = body.get("old")
+            new = (body.get("new") or "").strip()
+            if not project_id or not new:
+                self._send(400, {"error": "engagement needs id and new"})
+                return
+            try:
+                out = set_project_engagement(project_id, old, new)
+            except Exception as e:
+                self._send(500, {"error": str(e)})
+                return
+            self._send(200, {"ok": True, "engagement": out})
             return
 
         if self.path == "/api/task/not-today":

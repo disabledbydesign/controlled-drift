@@ -379,7 +379,7 @@ def _create_one(type_name, item, ref_map, id2name, scheduled=None, is_today=Fals
     obj = _get_object(oid)
     if obj.get("name") != name:
         raise RuntimeError(f"read-back mismatch for {name!r}: got {obj.get('name')!r}")
-    return {
+    record = {
         "id": oid,
         "type": type_name,
         "name": name,
@@ -389,6 +389,12 @@ def _create_one(type_name, item, ref_map, id2name, scheduled=None, is_today=Fals
         "when_label": _when_label(scheduled, is_today, is_parked),
         "is_today": bool(is_today),
     }
+    if type_name == "Project":
+        # So the receipt can render the tap-to-change engagement chip on a newly-created Project
+        # without a second fetch — the value actually written (props is the single validator/
+        # default via capture_fields.build_project_engagement_props), never re-derived.
+        record["engagement"] = props.get("Engagement") or "Open"
+    return record
 
 
 def _summarize(created, failed, skipped):
