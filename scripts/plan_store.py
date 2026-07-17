@@ -125,11 +125,17 @@ def _iter_items(plan):
     """Every schedulable item in a cached plan, across BOTH shapes: a clock day keeps rows under
     blocks[]; a fragmented/priority day keeps them in a flat items[] list with no blocks. Iterating
     only blocks[] was the mark-done-doesn't-stick bug on fragmented days — the Anytype write landed
-    but the cache never changed, so reopening showed the task unchecked."""
+    but the cache never changed, so reopening showed the task unchecked. Also covers appointments[]
+    (2026-07-17, daily_plan.format_appointments) — today's real timed anchors, present on every
+    plan regardless of shape; without walking it here, checking one off would route through
+    is_recurring_item correctly (its id is real) but the cache flip in mark_item_done would never
+    find the row to update, so it'd un-check itself the moment the overlay re-rendered."""
     for block in plan.get("blocks", []):
         for item in block.get("items", []):
             yield item
     for item in plan.get("items", []):
+        yield item
+    for item in plan.get("appointments", []):
         yield item
 
 

@@ -926,6 +926,34 @@ def blocks_from_scheduled(scheduled, framing_by_label=None):
     return blocks
 
 
+def format_appointments(today_recurrings):
+    """Today's real timed Recurring anchors (an appointment — therapy, meds at a set hour) as
+    Python-owned rows: id, task, time, duration_min, recurring=True — same shape + same
+    cache-only completion route (`recurring`) blocks_from_scheduled already gives a timed
+    anchor in the clock path. Independent of plan shape, unlike everything else here: a
+    fixed-time commitment is a different kind of thing than a schedulable task, and a day's
+    clock-vs-priority shape should never decide whether it's even visible. Before this, a timed
+    anchor's ONLY path into a plan was the clock scheduler — a priority/fragmented day had no
+    route to it at all, so it could vanish with zero trace and zero accounting-guard coverage
+    (live 2026-07-16: "Therapy", due that Wednesday 11:00, missing from a fragmented-day plan
+    entirely — not scheduled, not held back, nowhere). This is the guarantee underneath that:
+    called on every generation, either shape, so a real appointment always lands somewhere real
+    and checkoffable."""
+    out = []
+    for r in today_recurrings:
+        ft = r.get("fixed_time")
+        if not ft:
+            continue
+        out.append({
+            "id": r["id"],
+            "task": r["name"],
+            "time": ft.strftime("%H:%M"),
+            "duration_min": r.get("duration_min"),
+            "recurring": True,
+        })
+    return out
+
+
 PRIORITY_LIST_CAP = 6
 
 def format_priority_list(ordered_items, period=None):

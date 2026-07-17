@@ -211,7 +211,7 @@ def _stub_pipeline(monkeypatch, tmp_path):
     monkeypatch.setattr(pg, "build_context",
                         lambda capacity=None, start_time=None, end_time=None, extra=None, **kw:
                         ("ctx", fake_tasks, dt.datetime(2026, 6, 23, 9, 0), "clock",
-                         [], dt.datetime(2026, 6, 23, 18, 0), fake_tasks))
+                         [], dt.datetime(2026, 6, 23, 18, 0), fake_tasks, []))
     monkeypatch.setattr(pg, "generate", lambda prompt: _CANNED)
     surfaced, corrections = [], []
     monkeypatch.setattr(pg, "log_surfaced_batch", lambda items, **k: surfaced.append(items))
@@ -238,6 +238,48 @@ def test_reorder_logs_correction_with_kind_and_before_after(tmp_path, monkeypatc
     assert before["woven_frame"] == "old"          # before captured
     assert after["woven_frame"] == "a calm frame"  # after captured
     assert surfaced                                # renegotiated plan also re-surfaces
+
+
+# --- appointments survive a priority-shape day even when the model drops them ------
+# Live-caught 2026-07-16: "Therapy" (a real timed Recurring anchor, due that day) was entirely
+# absent from a fragmented/priority-shape plan — not scheduled, not in still_here, nowhere. Root
+# cause: format_priority_list never saw timed anchors at all (it only reads the task list), and
+# _retime_clock_plan's accounting net (_ensure_all_anchors_accounted) no-ops for priority shape.
+# plan["appointments"] is the fix: Python-owned, attached on every generation regardless of shape,
+# never dependent on the model mentioning it. This test's canned model output deliberately never
+# mentions "Therapy" anywhere — proving the guarantee holds even in the worst case (the model
+# drops it completely), not just the case where the model echoes it correctly.
+
+_CANNED_PRIORITY_NO_APPOINTMENT = """Here is your plan.
+
+```json
+{
+  "woven_frame": "a fragmented day",
+  "items": [{"project": "Build", "task": "do the thing", "why": "momentum", "ref": "T1"}],
+  "still_here": []
+}
+```
+"""
+
+
+def test_generate_plan_priority_shape_surfaces_appointment_model_never_mentioned(tmp_path, monkeypatch):
+    monkeypatch.setenv("CD_CONFIG_DIR", str(tmp_path))
+    monkeypatch.setenv("CD_DATA_DIR", str(tmp_path))
+    fake_tasks = [{"id": "t1", "name": "do the thing"}]
+    real_appointment = {"id": "r1", "task": "Therapy", "time": "11:00",
+                        "duration_min": 60, "recurring": True}
+    monkeypatch.setattr(pg, "build_context",
+                        lambda capacity=None, start_time=None, end_time=None, extra=None, **kw:
+                        ("ctx", fake_tasks, dt.datetime(2026, 7, 15, 9, 0), "priority",
+                         [], dt.datetime(2026, 7, 15, 18, 0), fake_tasks, [real_appointment]))
+    monkeypatch.setattr(pg, "generate", lambda prompt: _CANNED_PRIORITY_NO_APPOINTMENT)
+    monkeypatch.setattr(pg, "log_surfaced_batch", lambda items, **k: None)
+
+    saved = pg.generate_plan(source="morning")
+
+    assert saved["shape"] == "priority"
+    assert "Therapy" not in [it.get("task") for it in saved.get("items", [])]  # model never said it
+    assert saved["appointments"] == [real_appointment]                        # present regardless
 
 
 # --- the zero-ref validity guard (measured live 2026-07-11) -----------------
@@ -349,7 +391,7 @@ def test_generate_plan_no_gated_tasks_is_valid(tmp_path, monkeypatch):
     monkeypatch.setattr(pg, "build_context",
                         lambda capacity=None, start_time=None, end_time=None, extra=None, **kw:
                         ("ctx", [], dt.datetime(2026, 6, 23, 20, 0), "clock",
-                         [], dt.datetime(2026, 6, 23, 23, 0), []))
+                         [], dt.datetime(2026, 6, 23, 23, 0), [], []))
     monkeypatch.setattr(pg, "log_surfaced_batch", lambda items, **k: None)
     calls = {"n": 0}
     def once(prompt):

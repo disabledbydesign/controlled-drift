@@ -221,6 +221,44 @@ def test_mark_item_done_none_when_no_cache(tmp_path, monkeypatch):
     assert plan_store.mark_item_done("whatever") is None
 
 
+# --- appointments[] rides the same completion route as blocks/items (2026-07-17) ------
+# daily_plan.format_appointments gives a real timed anchor its own top-level plan field so it
+# survives regardless of shape. _iter_items must walk it too, or a checkoff would look like it
+# worked (is_recurring_item finds the real id) but the cache flip in mark_item_done would never
+# find the row — the item would un-check itself the instant the overlay re-rendered.
+
+def _seed_plan_with_appointment(tmp_path, monkeypatch):
+    monkeypatch.setenv("CD_CONFIG_DIR", str(tmp_path))
+    return plan_store.save_plan({
+        "woven_frame": "f",
+        "items": [{"project": "Build", "task": "do the thing", "id": "id-task"}],
+        "appointments": [{"id": "id-therapy", "task": "Therapy", "time": "11:00",
+                          "duration_min": 60, "recurring": True}],
+        "still_here": [],
+    }, source="morning")
+
+
+def test_is_recurring_item_true_for_an_appointment(tmp_path, monkeypatch):
+    _seed_plan_with_appointment(tmp_path, monkeypatch)
+    assert plan_store.is_recurring_item("id-therapy") is True
+
+
+def test_mark_item_done_flips_an_appointment(tmp_path, monkeypatch):
+    _seed_plan_with_appointment(tmp_path, monkeypatch)
+    plan_store.mark_item_done("id-therapy")
+    appts = plan_store.load_plan()["appointments"]
+    assert appts[0]["done"] is True
+    # the flat items[] list is untouched
+    assert "done" not in plan_store.load_plan()["items"][0]
+
+
+def test_mark_item_undone_flips_an_appointment_back(tmp_path, monkeypatch):
+    _seed_plan_with_appointment(tmp_path, monkeypatch)
+    plan_store.mark_item_done("id-therapy")
+    plan_store.mark_item_undone("id-therapy")
+    assert plan_store.load_plan()["appointments"][0]["done"] is False
+
+
 # --- complete_task: the Anytype close + read-back ---------------------------
 
 def test_complete_task_writes_done_and_confirms(monkeypatch):

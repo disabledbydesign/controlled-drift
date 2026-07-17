@@ -177,7 +177,8 @@ def _stub_generation(monkeypatch):
                         ("ctx", [{"id": "t1", "name": "do the thing"}],
                          dt.datetime(2026, 7, 12, 9, 0), "clock",
                          [], dt.datetime(2026, 7, 12, 18, 0),
-                         [{"id": "t1", "name": "do the thing"}]))   # 7th: all active tasks
+                         [{"id": "t1", "name": "do the thing"}],    # 7th: all active tasks
+                         []))                                      # 8th: today's appointments
     monkeypatch.setattr(pg, "generate", lambda prompt: _CANNED)
     monkeypatch.setattr(pg, "log_surfaced_batch", lambda items, **k: None)
 

@@ -124,3 +124,29 @@ def test_priority_list_caps_long_lists():
     out = daily_plan.format_priority_list(items)
     assert "Task 0" in out
     assert "more" in out.lower()                      # remainder noted
+
+
+# --- format_appointments: the shape-independent guarantee (2026-07-17 fix) --------
+# A real timed Recurring anchor (an appointment) used to only reach the plan through the
+# clock-shape scheduler. On a priority-shape (fragmented) day it had no path in at all and could
+# vanish with zero trace (live 2026-07-16: "Therapy", due Wed 11:00, missing entirely from a
+# fragmented-day plan). format_appointments is Python-owned and called on every generation
+# regardless of shape — these tests pin its output shape directly.
+
+def test_format_appointments_carries_real_id_time_and_duration():
+    recurrings = [{"id": "r1", "name": "Therapy",
+                   "fixed_time": dt.datetime(2026, 7, 15, 11, 0), "duration_min": 60}]
+    out = daily_plan.format_appointments(recurrings)
+    assert out == [{"id": "r1", "task": "Therapy", "time": "11:00",
+                    "duration_min": 60, "recurring": True}]
+
+
+def test_format_appointments_skips_untimed_recurrings():
+    # today_recurrings should already be timed-only post c67c2f0, but format_appointments
+    # doesn't trust that invariant blindly — an untimed item has no real appointment to show.
+    recurrings = [{"id": "r1", "name": "Do the dishes", "fixed_time": None, "duration_min": 15}]
+    assert daily_plan.format_appointments(recurrings) == []
+
+
+def test_format_appointments_empty_when_nothing_due():
+    assert daily_plan.format_appointments([]) == []

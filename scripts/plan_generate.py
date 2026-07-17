@@ -244,7 +244,7 @@ def backend_descriptor(backend):
 
 def build_prompt(capacity=None, extra=None):
     """Build the full generation prompt. Public for the compare script and manual testing."""
-    full_context, tasks, start_time, shape, _anchors, _end, _all = build_context(capacity=capacity)
+    full_context, tasks, start_time, shape, _anchors, _end, _all, _appts = build_context(capacity=capacity)
     ref_map, task_table = _build_task_refs(tasks)
     prompt = _assemble_prompt(full_context, start_time, capacity=capacity,
                               extra=extra, task_table=task_table, shape=shape)
@@ -656,6 +656,7 @@ def build_context(capacity=None, start_time=None, end_time=None, extra=None):
 
     meals = dp.default_meal_anchors(today_recurrings, start_time)
     all_anchors = today_recurrings + meals
+    appointments = dp.format_appointments(today_recurrings)
     # Task selection: foreground projects (period override) sort first; paused-project tasks
     # are dropped. With no period this is a calm, stable foreground-first order (no hash — the
     # old date-seeded shuffle was the drift; the LLM re-sequences from here).
@@ -771,7 +772,7 @@ def build_context(capacity=None, start_time=None, end_time=None, extra=None):
     # 7th value: the FULL active task list (not just the gated schedulable). _resolve_ids name-matches
     # against it so any real task the model names — from the full-hierarchy context — resolves to its
     # id instead of ghosting (display_grain_design REVISION, decision C).
-    return full_context, schedulable, start_time, shape, all_anchors, end_time, tasks
+    return full_context, schedulable, start_time, shape, all_anchors, end_time, tasks, appointments
 
 
 def _build_task_refs(tasks):
@@ -1340,7 +1341,7 @@ def generate_plan(capacity=None, source="generate", extra=None):
     framing below): a fresh generation still selects from the whole active list, but her words
     are the strongest signal for what to prioritize. Writes cache, logs what surfaced.
     """
-    full_context, tasks, start_time, shape, all_anchors, end_time, all_active_tasks = build_context(capacity=capacity, extra=extra)
+    full_context, tasks, start_time, shape, all_anchors, end_time, all_active_tasks, appointments = build_context(capacity=capacity, extra=extra)
     ref_map, task_table = _build_task_refs(tasks)
     prompt = _assemble_prompt(full_context, start_time, capacity=capacity, task_table=task_table,
                               extra=extra, request_kind="generate", shape=shape)
@@ -1401,6 +1402,10 @@ def generate_plan(capacity=None, source="generate", extra=None):
     _retime_clock_plan(plan, tasks, all_anchors, start_time, end_time)
     if plan.get("shape") == "priority":   # retime is a no-op for priority — group its flat items here
         plan["items"] = _group_block_project_items(plan.get("items", []))
+    # Today's real timed appointments, Python-owned and independent of shape (see
+    # daily_plan.format_appointments) — the guarantee that a fixed-time commitment always lands
+    # somewhere real regardless of whether today is a clock or priority day.
+    plan["appointments"] = appointments
     generation_log.log_generation(
         backend=backend_label, duration_s=time.monotonic() - t0,
         success=True, source=source,
@@ -1456,7 +1461,7 @@ def reorder(message, kind):
     re-surfaces (the renegotiated plan is what she's now working from).
     """
     before = plan_store.load_plan()
-    full_context, tasks, start_time, shape, all_anchors, end_time, all_active_tasks = build_context(extra=message)
+    full_context, tasks, start_time, shape, all_anchors, end_time, all_active_tasks, appointments = build_context(extra=message)
     ref_map, task_table = _build_task_refs(tasks)
     history = session_store.recent_entries("negotiate")
     current_plan_summary = _format_current_plan(before)
@@ -1477,6 +1482,8 @@ def reorder(message, kind):
         _retime_clock_plan(plan, tasks, all_anchors, start_time, end_time)
         if plan.get("shape") == "priority":   # retime is a no-op for priority — group flat items here
             plan["items"] = _group_block_project_items(plan.get("items", []))
+        # Same guarantee as generate_plan: today's real appointments, shape-independent.
+        plan["appointments"] = appointments
     except Exception as e:
         generation_log.log_generation(
             backend=backend_label, duration_s=time.monotonic() - t0,
@@ -1591,7 +1598,7 @@ if __name__ == "__main__":
     args = ap.parse_args()
 
     if args.dry_context:
-        ctx, tasks, st, _shape, _anchors, _end, _all = build_context(capacity=args.capacity)
+        ctx, tasks, st, _shape, _anchors, _end, _all, _appts = build_context(capacity=args.capacity)
         print(ctx)
         print(f"\n[{len(tasks)} tasks would be logged as surfaced]")
     elif args.reorder:
