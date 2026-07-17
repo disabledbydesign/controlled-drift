@@ -383,3 +383,24 @@ def test_capture_no_signals_writes_no_optional_props(monkeypatch, tmp_path):
     props = {name: p for (typ, name, p) in calls}["Email editor"]
     for k in ("Duration min", "Affective", "Blocked on", "Access conditions"):
         assert k not in props   # absent stays absent — flat-default behavior preserved
+
+
+def test_parse_weed_reads_project_engagement_and_notes():
+    raw = '''```json
+    {"opening":"o","capacity_read":null,"groups":[{"label":"g","through_line":"t","items":[
+      {"type":"Project","name":"Leatherworking","link":null,"status":null,"action":"create",
+       "reasoning":"r","engagement":"Steady","engagement_notes":"~30 min daily"}
+    ]}]}
+    ```'''
+    item = cg.parse_weed(raw)["groups"][0]["items"][0]
+    assert item["engagement"] == "Steady" and item["engagement_notes"] == "~30 min daily"
+
+
+def test_parse_weed_engagement_defaults_open_notes_blank():
+    raw = '''```json
+    {"opening":"o","capacity_read":null,"groups":[{"label":"g","through_line":"t","items":[
+      {"type":"Project","name":"X","link":null,"status":null,"action":"create","reasoning":"r"}
+    ]}]}
+    ```'''
+    item = cg.parse_weed(raw)["groups"][0]["items"][0]
+    assert item["engagement"] == "Open" and item["engagement_notes"] == ""

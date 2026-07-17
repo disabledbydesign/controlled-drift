@@ -151,6 +151,13 @@ tools or MCP to look anything up. Therefore:
   provided. Never invent scope in either direction. `affect` goes on the object; `capacity_read`
   stays the whole turn's session signal — set both when both are true, but don't auto-copy one
   into the other. These feed the planner directly; a guessed duration mis-shapes her day.
+- **Project engagement (type==Project only).** When an item becomes a Project, read June's words for
+  how she's engaging with it and set `engagement`: a clear "I'm starting / focusing on / this is due" ->
+  "Steady"; "set aside / not now / someday" -> "Backburner"; a thing she names but isn't necessarily
+  starting -> "Open". Default "Open" when there's no signal — a new project should be available and
+  findable, never pushed at her uninvited, never a guess of Steady, and never Sprint/Hyperfixation
+  (retired). Put any deadline / cadence / intensity she voiced into `engagement_notes`. Non-Project
+  items carry neither.
 
 ## REQUIRED OUTPUT — THE JSON BLOCK ONLY
 
@@ -179,7 +186,9 @@ validation surface; the JSON carries it. Shape:
           "duration_estimate_min": <YOUR best-guess MINUTES for how long this Task actually takes, for EVERY Task, using the DURATION PRIORS below plus the task's linked project as context. This is a separate field from duration_min on purpose: duration_min is what June said; this is what you estimate. Give a real number, not null, unless the task is genuinely too vague to size (Needs Clarifying) — a rough honest estimate beats the flat 30-minute fallback every unsized Task currently gets. null for non-Task types.>,
           "affect": "<how June feels about THIS item, in her words ('dreading it', 'excited about this one'). Match the SCOPE she gave the feeling: said about one item → only that item; said about the whole dump ('I'm dreading all of this') → put it on every item, because that's her information. Do NOT invent scope — never widen a single-item remark to the dump or narrow a dump-wide statement to one item. Empty string if she gave this item no signal (blank is fine). Never a number or rating.>",
           "blocked_on": "<what this is waiting on, in June's words, if she said it's blocked/waiting ('waiting on Donna', 'once the key arrives'). Empty string if nothing.>",
-          "access_conditions": [<zero or more of EXACTLY these, only when her words indicate them: "Can-be-done-lying-down", "Involves-leaving-house", "Requires-talking-to-a-person". Empty list if none. Do NOT invent other values.>]
+          "access_conditions": [<zero or more of EXACTLY these, only when her words indicate them: "Can-be-done-lying-down", "Involves-leaving-house", "Requires-talking-to-a-person". Empty list if none. Do NOT invent other values.>],
+          "engagement": "<ONLY for type==Project: how June is engaging with this thread, read from HER words. 'I'm starting/focusing on X', a deadline, 'this is my main thing right now' -> \"Steady\" (a normal daily move). 'set X aside', 'not now', 'someday/maybe' -> \"Backburner\". A thing she names but isn't necessarily starting -> \"Open\". Default \"Open\" when she gives no engagement signal — NEVER guess Steady, and NEVER use Sprint/Hyperfixation (retired). Omit for non-Project types.>",
+          "engagement_notes": "<ONLY for type==Project: the situated specifics of her engagement, in HER words, that the coarse label can't hold — a deadline ('due July 1'), a cadence ('~30 min daily'), an intensity/affective note ('hyperfixating but stuck', 'this one's urgent'). Empty string if she gave none. Never invent.>"
         }
       ]
     }
@@ -192,6 +201,10 @@ validation surface; the JSON carries it. Shape:
 said one); `duration_estimate_min` is YOUR estimate for a Task and should be filled for every
 sizable Task. Keep every `reasoning` present — the system must be able to show June why each thing
 landed where it did.
+
+`engagement` / `engagement_notes` apply ONLY to Projects — the coarse engagement set is Steady / Open /
+Backburner (default Open when unsignalled); Sprint and Hyperfixation are retired, so never propose them —
+intensity or hyperfixation-context belongs in `engagement_notes`, not the select.
 
 ## DURATION PRIORS — use these to estimate `duration_estimate_min`
 
@@ -269,6 +282,8 @@ def parse_weed(model_text):
             item.setdefault("affect", "")
             item.setdefault("blocked_on", "")
             item.setdefault("access_conditions", [])
+            item.setdefault("engagement", "Open")
+            item.setdefault("engagement_notes", "")
     return parsed
 
 
