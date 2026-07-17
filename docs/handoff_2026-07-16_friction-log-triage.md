@@ -3,6 +3,60 @@
 *For the next agent picking this up. Read this before touching anything called "friction log" —
 there are two different things with that name in this repo and confusing them wastes a round.*
 
+## STATUS — session 4 (2026-07-17): entire backend list CLOSED except infra
+
+Continued the backend triage with June, one item at a time, her OK before each build (same
+discipline as session 2/3). All landed on `feat/overlay-actionable`, 714 tests green.
+
+1. **NEW entry, not in the original triage — "created two tasks I'd already finished as
+   uncheckoffable items" (2026-07-17T09:17) — ✅ FIXED.** Traced via completion_log +
+   plan_snapshots: not a duplicate-creation bug — `undone_yesterday()`'s rollover-candidate check
+   only recognized a completion dated exactly the prior calendar day, so a task finished the
+   NEXT morning (after its original plan_date) still read as "not marked done" and kept getting
+   offered as a rollover candidate on every regeneration that day — the model would name it, but
+   it couldn't resolve to an id (correctly excluded from the active pool by then), producing a
+   same-day ghost row with no checkbox. `plan_generate._filter_rollover_to_active` checks the
+   CURRENT active pool instead of trusting a date window. `scripts/plan_generate.py`, commit
+   `6ca7ce6`.
+2. **A calendar event isn't loading for today (2026-07-16T09:31) — ✅ FIXED.** Traced to the real
+   incident: "Therapy" (a real timed Recurring anchor, due that Wednesday 11:00) was entirely
+   absent from a fragmented/priority-shape plan — not scheduled, not in still_here, nowhere. Root
+   cause: `format_priority_list` never looks at timed anchors at all, and the anchor-accounting
+   guard (`_ensure_all_anchors_accounted`, added session 3) no-ops for priority shape. Fix: a new
+   top-level `plan["appointments"]` field, Python-owned, built from today's timed recurrings
+   independent of shape — a real appointment always lands somewhere real and checkoffable
+   regardless of clock vs. priority day. `scripts/daily_plan.py` + `scripts/plan_generate.py`,
+   commit `33f81ce`. **Frontend companion still open** — logged as an Anytype task under Build
+   Controlled Drift ("Build the overlay's pinned Appointments section"), not built this session
+   (backend only).
+3. **Leatherworking scheduled twice — ✅ CONFIRMED already fixed, no code change needed.**
+   Checked all three of 07-17's real plan regenerations (09:00 morning, 09:02 and 10:36
+   refreshes) — leatherworking/cuff-order appears exactly once each time, correctly deferred with
+   a single still_here note. The 07-16 15:28 block-dedup commit (`25607f2`) has held on every real
+   regeneration since.
+4. **Plan text claims "low-EF first" while scheduling a high-EF task first (2026-07-16T09:32) —
+   ✅ FIXED.** Traced to the real incident: the 07-16 09:00 woven frame said "starts gently—low-EF
+   tasks first" while the first scheduled task carried the real `Involves-leaving-house` tag,
+   already visible to the model in its own prompt context. `prompts/daily_list.md` now tells the
+   model to check the real access tag before writing that kind of ordering claim. Commit
+   `5d01f4c`.
+5. **Leaving-the-house tasks aren't clustered (2026-07-16T12:25) — ✅ FIXED.** Builds
+   `AI_LAYER_SPEC.md`'s documented-but-never-shipped "errand-batching" (line 210) — the
+   `Involves-leaving-house` tag was only ever read at capture time. Two independent bugs, both
+   confirmed against the real 07-16T12:20:03 incident: (a) `_compute_break_anchors` is
+   duration-blind and wedged a break between two already-adjacent mail errands purely on
+   crossing `BREAK_WORK_MIN`; (b) nothing clustered same-tagged tasks adjacent in the first
+   place. Fixed both, scoped to exactly the one tag AI_LAYER_SPEC names — the deeper multi-tag
+   spoon-cost batching stays parked in `docs/open_thread_spoon_accounting.md` for its own
+   design session, per June's explicit call. Commit `5d01f4c`.
+6. **Server reachable only on WiFi — NOT addressed, infra not app logic.** Out of scope for a
+   backend code session; still open if June wants to pursue it.
+
+The only backend item from the original 07-16 triage left genuinely open is #6 (infra). Every
+other backend entry — including the pre-session-2 ones — is now closed. Frontend items remain
+untouched (June scoped every session in this triage to backend only); the Appointments-field
+render is the one new frontend follow-up this session generated.
+
 ## STATUS — session 2 (2026-07-16 evening): 4 backend items CLOSED, live-verified, tested
 
 Went through the backend list below with June, one item at a time, her OK before each build.
