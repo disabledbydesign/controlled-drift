@@ -134,6 +134,39 @@ def test_no_project_task_always_kept():
     assert [t["id"] for t in kept] == ["a"]
 
 
+# --- Rollover-vs-active filter (2026-07-17 fix) ------------------------------
+# undone_yesterday() only knows about completions dated exactly yesterday, so a task finished
+# THIS morning still reads as "not marked done" and gets offered as a rollover candidate again
+# -> the model names it, it can't resolve to an id (already excluded from the active pool), and
+# it renders as a same-day ghost row with no checkbox and no way to remove it (live: "Mail
+# contestation..." reappeared this way after being checked off). The fix checks against the
+# CURRENT active pool instead of trusting the date window.
+
+def test_rollover_drops_task_completed_since_yesterday():
+    # "t1" was undone as of yesterday's snapshot but has since been completed (whenever that
+    # happened) -> it's no longer in the active pool -> must not be re-offered as a rollover.
+    undone_yest = [{"id": "t1", "name": "Mail contestation", "plan_date": "2026-07-16"}]
+    tasks = [{"id": "t2", "name": "Something else still active"}]
+    assert pg._filter_rollover_to_active(undone_yest, tasks) == []
+
+
+def test_rollover_keeps_task_still_active():
+    undone_yest = [{"id": "t1", "name": "Still undone", "plan_date": "2026-07-16"}]
+    tasks = [{"id": "t1", "name": "Still undone"}]
+    kept = pg._filter_rollover_to_active(undone_yest, tasks)
+    assert [u["id"] for u in kept] == ["t1"]
+
+
+def test_rollover_filter_is_selective_not_all_or_nothing():
+    undone_yest = [
+        {"id": "done-since", "name": "Already finished", "plan_date": "2026-07-16"},
+        {"id": "still-open", "name": "Genuinely undone", "plan_date": "2026-07-16"},
+    ]
+    tasks = [{"id": "still-open", "name": "Genuinely undone"}]
+    kept = pg._filter_rollover_to_active(undone_yest, tasks)
+    assert [u["id"] for u in kept] == ["still-open"]
+
+
 def test_held_back_is_always_zero_now():
     tasks = [{"id": "a", "name": "a", "linked_projects": ["P"]},
              {"id": "b", "name": "b", "linked_projects": ["P"]}]

@@ -601,6 +601,20 @@ def _drop_deferred_from_plan(plan):
     return plan
 
 
+def _filter_rollover_to_active(undone_yest, tasks):
+    """undone_yesterday() only checks completion events dated exactly yesterday, so a task
+    finished THIS morning (after yesterday's plan_date, before today's) still reads as "not
+    marked done" and keeps getting offered as a rollover candidate on every regeneration today.
+    The model dutifully names it; _resolve_ids can't attach an id (it's correctly excluded from
+    the active pool by then) -> a same-day zombie row with no checkbox, no move/edit chip,
+    nothing to tap (observed live 2026-07-17: "Mail contestation..." reappeared twice this way
+    after being checked off). Ground truth for "still genuinely undone" is simpler than a date
+    window: is it still active right now. `tasks` is the just-fetched active pool, so this is
+    timing-proof regardless of which day the completion actually landed."""
+    active_ids = {t["id"] for t in tasks}
+    return [u for u in undone_yest if u["id"] in active_ids]
+
+
 def build_context(capacity=None, start_time=None, end_time=None, extra=None):
     """Load active items + compute the clock schedule, returning the full prompt context.
 
@@ -616,6 +630,7 @@ def build_context(capacity=None, start_time=None, end_time=None, extra=None):
     neglected = dp.load_neglected()
     import plan_snapshot_log
     undone_yest = plan_snapshot_log.undone_yesterday()   # rollover candidates: yesterday's uncompleted
+    undone_yest = _filter_rollover_to_active(undone_yest, tasks)
     rollover_ids = {u["id"] for u in undone_yest}
     period = period_ctx["period"]
     is_off, in_window = period_ctx["is_off"], period_ctx["in_window"]
