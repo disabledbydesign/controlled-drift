@@ -693,12 +693,29 @@ BREAK_DURATION_MIN = 15   # a short (<20 min) break block
 _REST_KEYWORDS = ("lunch", "dinner", "breakfast", "meal", "walk", "nap", "rest",
                   "break", "stretch", "meditat", "relax", "coffee")
 
+# Access tags whose adjacent items shouldn't be split by a break — an errand run (2026-07-17;
+# see _shares_batch_tag). Only Involves-leaving-house is batch-worthy today; AI_LAYER_SPEC's
+# access schema is open and growing (§2), so this is a tuple to extend, not a single hardcode.
+_BATCH_ACCESS_TAGS = ("Involves-leaving-house",)
+
 
 def _is_rest_item(item):
     if item.get("_break") or item.get("_default_anchor"):
         return True
     name = (item.get("name") or "").lower()
     return any(k in name for k in _REST_KEYWORDS)
+
+
+def _shares_batch_tag(a, b):
+    """True if two schedule items share a batch-worthy access tag (e.g. both involve leaving
+    the house) — an errand run a break must never split. Live-caught 2026-07-16: two short mail
+    errands, already adjacent in the LLM's own composed order, got a "stand, stretch, move"
+    break wedged between them purely because accumulated work duration crossed BREAK_WORK_MIN
+    at that exact point — _compute_break_anchors had no notion that the two neighbors were the
+    same errand run."""
+    a_tags = set(a.get("access") or [])
+    b_tags = set(b.get("access") or [])
+    return bool(a_tags & b_tags & set(_BATCH_ACCESS_TAGS))
 
 
 def _compute_break_anchors(scheduled, start_time, end_time=None,
@@ -709,6 +726,11 @@ def _compute_break_anchors(scheduled, start_time, end_time=None,
     (meals, walks, naps — see _is_rest_item) reset the counter, and if a rest is
     already coming up next it serves as the break — so breaks never pile onto lunch or
     a walk. Breaks become real time-blocks when the schedule is rebuilt with them.
+
+    Also never lands INSIDE an errand run: if the current item and the next one share a
+    batch-worthy access tag (_shares_batch_tag — e.g. both Involves-leaving-house), the break
+    is deferred, not dropped — the counter keeps accumulating, so it still lands once the
+    cluster ends, just not in its middle.
     """
     items = sorted(scheduled, key=lambda it: it["start_time"])
     anchors = []
@@ -725,6 +747,13 @@ def _compute_break_anchors(scheduled, start_time, end_time=None,
             continue                     # no real work left — don't end the day on a break
         if _is_rest_item(rest_of_day[0]):
             work_since_break = 0         # the next item is already a break — let it serve
+            continue
+        if _shares_batch_tag(it, rest_of_day[0]):
+            # Same errand run (e.g. both Involves-leaving-house) — defer, don't split it. The
+            # counter is NOT reset: the deferred stretch still counts toward the next real
+            # break, so a genuinely long cluster still gets one, just at its far edge instead
+            # of its middle (BREAK_WORK_MIN doubles as the "don't overcram" cap, no new number
+            # needed — AI_LAYER_SPEC:210).
             continue
         brk_time = it["end_time"]
         if end_time and brk_time >= end_time:

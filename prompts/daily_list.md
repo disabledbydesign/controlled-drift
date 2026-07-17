@@ -23,6 +23,8 @@ So this output is a **negotiation proposal**, not the final artifact. Keep it le
 
 **The ordering rationale is part of the plan.** June's executive function engages with a strategy, not a list she's supposed to obey. Explain why this particular sequence works for her current capacity state — what it's designed to do for her, not just what it contains. "Easy wins first builds momentum for the harder thing at the end" is load-bearing information. "Here's your tasks" is not.
 
+**If your framing makes an ordering claim, the plan has to actually match it.** "Starts gently," "low-EF first," "quick wins first" — before you write a sentence like that, check the real `access` tag on whatever you scheduled first. `Involves-leaving-house` is a high-activation task, not a gentle one — don't call a plan that opens with an errand "gentle." Ground the claim in the actual first item, not in the register of a good opening line.
+
 **2. The plan — YOU compose it from the candidate moves.** The context gives you the full active set — daily-life chores (by task) and block-work projects (each one "Work on X" chunk) — plus June's fixed anchors (meals, appointments). Your job is judgment: **choose which of these moves belong in today, and put them in the order that serves June's Focus Period intent + her active Strategies + her capacity today.** You are not copying a fixed schedule — you are deciding the day. Produce **one integrated plan**, grouped into Morning / Midday / Afternoon / Evening blocks with a short framing for each.
 
 **You do NOT assign the exact clock times** — Python does that from your order (it knows the current time and each item's duration; you can't reliably). Put your best-guess `[time] – [time]` on each item as a placeholder; Python finalizes them from the order you choose. What matters from you is the **order and the selection**, not the arithmetic.
@@ -50,6 +52,8 @@ Output shape for each block:
 - Midday → Lunch is a real full stop, not optional; post-lunch tends lighter.
 - Afternoon → admin, errands, household, or wind-down.
 - Evening → only if things actually land there; acknowledge the day is wrapping.
+
+**Errand-batching.** A task carrying `access: Involves-leaving-house` costs real activation to start — every one of them scattered through the day is a separate trip out. When more than one lands in the same block, place them adjacently (one errand run) rather than letting unrelated tasks fall between them — use judgment about what actually groups well (route, errand type), the same way you'd plan a real outing. This is a suggestion for your reasoning, not a rigid rule — Python guarantees the adjacency within a block regardless, so you're free to focus on getting the grouping right rather than just correct.
 
 **What "next tangible item" means:** the one specific action she can start without prior setup. "SSRC grant: write the needs statement paragraph" ✓ — "work on SSRC" ✗ (too vague) — "writing" ✗ (wrong grain, activity not thread). *This rule is for TASK items. It does not apply to blocks — see below.*
 

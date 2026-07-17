@@ -179,6 +179,144 @@ def test_retime_clock_plan_never_drops_an_overdue_anchor_at_end_time():
     assert "a1" in scheduled_ids or "Do the dishes" in still_here_labels
 
 
+# --- _cluster_by_access_tag: pure stable-partition (2026-07-17 errand-batching) --------------
+
+def _tagged(name, tag="Involves-leaving-house"):
+    return {"name": name, "access": [tag]}
+
+
+def _plain(name):
+    return {"name": name, "access": []}
+
+
+def test_cluster_pulls_two_nonadjacent_tagged_items_together():
+    items = [_plain("A"), _tagged("B"), _plain("C"), _tagged("D"), _plain("E")]
+    out = pg._cluster_by_access_tag(items)
+    assert [it["name"] for it in out] == ["A", "B", "D", "C", "E"]
+
+
+def test_cluster_already_adjacent_is_a_noop():
+    items = [_plain("A"), _tagged("B"), _tagged("C"), _plain("D")]
+    out = pg._cluster_by_access_tag(items)
+    assert [it["name"] for it in out] == ["A", "B", "C", "D"]
+
+
+def test_cluster_tagged_at_start():
+    items = [_tagged("A"), _plain("B"), _tagged("C")]
+    out = pg._cluster_by_access_tag(items)
+    assert [it["name"] for it in out] == ["A", "C", "B"]
+
+
+def test_cluster_tagged_at_end():
+    items = [_plain("A"), _tagged("B"), _plain("C"), _tagged("D")]
+    out = pg._cluster_by_access_tag(items)
+    assert [it["name"] for it in out] == ["A", "B", "D", "C"]
+
+
+def test_cluster_three_tagged_items_collapse_to_one_run():
+    # disjoint tag-runs merge into ONE contiguous batch, matching AI_LAYER_SPEC's "groups"
+    # language — not per-occurrence pairwise batching.
+    items = [_tagged("A"), _plain("B"), _tagged("C"), _tagged("D")]
+    out = pg._cluster_by_access_tag(items)
+    assert [it["name"] for it in out] == ["A", "C", "D", "B"]
+
+
+def test_cluster_fewer_than_two_tagged_is_a_noop():
+    items = [_plain("A"), _tagged("B"), _plain("C")]
+    out = pg._cluster_by_access_tag(items)
+    assert [it["name"] for it in out] == ["A", "B", "C"]
+    items2 = [_plain("A"), _plain("B")]
+    assert pg._cluster_by_access_tag(items2) == items2
+
+
+# --- errand-batching integration: clusters within a block, never across (2026-07-17) ---------
+# NOTE: blocks_from_scheduled reconstructs the OUTPUT block labels (Morning/Afternoon/...) from
+# each item's final clock hour (daily_plan.py:883, _block_label(start.hour)) — NOT from which
+# LLM-authored JSON block it came from — and its rows carry a formatted "HH:MM – HH:MM" `time`
+# string, not start_time/end_time datetimes (those live only on the intermediate `scheduled`
+# list, dropped before the row is built). So these tests parse `time` directly, which is what
+# clustering actually controls (via composed-list ORDER, upstream of scheduling).
+
+def _times(it):
+    a, b = it["time"].split(" – ")
+    return a, b
+
+def test_retime_clock_plan_clusters_leaving_house_tasks_within_a_block():
+    start = dt.datetime(2026, 7, 16, 14, 0)
+    end = dt.datetime(2026, 7, 16, 18, 0)
+    tasks = [
+        {"id": "t1", "name": "Mail contestation", "duration_min": 30,
+         "access": ["Involves-leaving-house"]},
+        {"id": "t2", "name": "Respond to Gabe's email", "duration_min": 30, "access": []},
+        {"id": "t3", "name": "Print at Kinkos", "duration_min": 45,
+         "access": ["Involves-leaving-house"]},
+    ]
+    plan = {
+        "shape": "clock",
+        "blocks": [{"label": "Afternoon", "time": "14:00 - 18:00", "framing": "",
+                    "items": [
+                        {"time": "", "task": "Mail contestation", "id": "t1",
+                         "project": None, "why": None, "interstitial": False},
+                        {"time": "", "task": "Respond to Gabe's email", "id": "t2",
+                         "project": None, "why": None, "interstitial": False},
+                        {"time": "", "task": "Print at Kinkos", "id": "t3",
+                         "project": None, "why": None, "interstitial": False},
+                    ]}],
+        "still_here": [],
+    }
+    pg._retime_clock_plan(plan, tasks, [], start, end)
+    by_id = {it["id"]: it for b in plan["blocks"] for it in b["items"] if it.get("id")}
+    _, t1_end = _times(by_id["t1"])
+    t3_start, _ = _times(by_id["t3"])
+    assert t1_end == t3_start, "t1 and t3 (both leaving-house) must end up scheduled adjacent"
+    t2_start, _ = _times(by_id["t2"])
+    assert t2_start != t1_end, "t2 (untagged) must not sit between t1 and t3"
+
+
+def test_retime_clock_plan_never_clusters_across_a_block_boundary():
+    """The composed list is built by flattening the LLM's own JSON blocks in order — clustering
+    must run PER SOURCE BLOCK, not on the fully-flattened list, or two tagged items separated by
+    unrelated work in a different LLM-authored block would get glued adjacent, jumping over
+    that unrelated work. This is the exact failure shape a naive (whole-list) implementation of
+    this fix would have; the block-scoped version must not do it. Three LLM-authored blocks:
+    tagged (t1), untagged (t_mid), tagged (t2) — t_mid's own block sits between them in the
+    model's chosen order and must stay there, not get skipped over."""
+    start = dt.datetime(2026, 7, 16, 9, 0)
+    end = dt.datetime(2026, 7, 16, 20, 0)
+    tasks = [
+        {"id": "t1", "name": "Mail contestation", "duration_min": 30,
+         "access": ["Involves-leaving-house"]},
+        {"id": "tmid", "name": "Work on the orientation map", "duration_min": 30, "access": []},
+        {"id": "t2", "name": "Print at Kinkos", "duration_min": 45,
+         "access": ["Involves-leaving-house"]},
+    ]
+    plan = {
+        "shape": "clock",
+        "blocks": [
+            {"label": "Morning", "time": "9:00 - 12:00", "framing": "",
+             "items": [{"time": "", "task": "Mail contestation", "id": "t1",
+                        "project": None, "why": None, "interstitial": False}]},
+            {"label": "Midday", "time": "12:00 - 15:00", "framing": "",
+             "items": [{"time": "", "task": "Work on the orientation map", "id": "tmid",
+                        "project": None, "why": None, "interstitial": False}]},
+            {"label": "Evening", "time": "17:00 - 20:00", "framing": "",
+             "items": [{"time": "", "task": "Print at Kinkos", "id": "t2",
+                        "project": None, "why": None, "interstitial": False}]},
+        ],
+        "still_here": [],
+    }
+    pg._retime_clock_plan(plan, tasks, [], start, end)
+    by_id = {it["id"]: it for b in plan["blocks"] for it in b["items"] if it.get("id")}
+    _, t1_end = _times(by_id["t1"])
+    t2_start, _ = _times(by_id["t2"])
+    tmid_start, _ = _times(by_id["tmid"])
+    # t1 and t2 must NOT be adjacent — tmid's own block still sits between them in the composed
+    # order, so tmid's duration (or later placement) keeps them apart.
+    assert t1_end != t2_start
+    assert tmid_start == t1_end, \
+        "tmid stays right after t1, exactly the model's original order — not skipped over"
+
+
 # --- the data-injection regression (tonight's bug) --------------------------
 
 def test_assemble_prompt_includes_the_real_data():

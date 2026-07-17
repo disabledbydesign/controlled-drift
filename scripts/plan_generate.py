@@ -1212,6 +1212,29 @@ def _group_block_project_items(items):
     return grouped
 
 
+def _cluster_by_access_tag(items, tag="Involves-leaving-house"):
+    """Stable-group items sharing `tag` (from each task's real Access-conditions) so they sit
+    adjacently — the deterministic half of AI_LAYER_SPEC:210's documented-but-never-built
+    "errand-batching" ("groups access = Involves-leaving-house"). The model may already compose
+    them well from context (prompts/daily_list.md now asks it to); this is the fallback
+    guarantee, since nothing enforced it before (2026-07-17 — the tag was only ever read at
+    capture time). Pulls every tagged item to the position of the FIRST tagged item, preserving
+    relative order within the tagged group and within everything else — a stable partition, not
+    a full reorder. Fewer than 2 tagged items is a no-op (nothing to cluster). Call PER SOURCE
+    BLOCK, never on a plan flattened across blocks — clustering across an explicit June split
+    (e.g. "mail in the morning, Kinkos in the evening" via reorder()) would silently override
+    her word, the same failure shape _honor_user_meal already guards against elsewhere."""
+    tagged_idx = [i for i, it in enumerate(items) if tag in (it.get("access") or [])]
+    if len(tagged_idx) < 2:
+        return items
+    anchor_pos = tagged_idx[0]
+    tagged_set = set(tagged_idx)
+    tagged_items = [items[i] for i in tagged_idx]
+    rest = [it for i, it in enumerate(items) if i not in tagged_set]
+    insert_at = sum(1 for i in range(anchor_pos) if i not in tagged_set)
+    return rest[:insert_at] + tagged_items + rest[insert_at:]
+
+
 def _retime_clock_plan(plan, tasks, all_anchors, start_time, end_time):
     """Python places the LLM's COMPOSED order in time — the '...Python places it in time
     (determinism)' half of AI_LAYER_SPEC:69, applied AFTER the model composes selection + order.
@@ -1250,8 +1273,10 @@ def _retime_clock_plan(plan, tasks, all_anchors, start_time, end_time):
         return any(k == a or a in k or k in a for a in anchor_keys)
 
     dur_by_id = {t["id"]: t.get("duration_min") for t in tasks}
+    access_by_id = {t["id"]: t.get("access") or [] for t in tasks}
     composed = []
     for block in plan.get("blocks", []):
+        block_items = []                        # accumulated per LLM-authored block, then clustered
         for it in block.get("items", []):
             name = it.get("task") or it.get("name") or ""
             # JSON rule 3 tells the model to flag ≤15-min REAL tasks interstitial too ("Bring
@@ -1269,8 +1294,13 @@ def _retime_clock_plan(plan, tasks, all_anchors, start_time, end_time):
             fi = dict(it)                       # carry task/project/why/id/held_back/description through
             fi["name"] = name                   # build_schedule keys on 'name'
             fi["duration_min"] = dur_by_id.get(it.get("id")) or it.get("duration_min")
+            fi["access"] = access_by_id.get(it.get("id")) or []
             fi["_composed"] = True              # tags real items so blocks_from_scheduled can tell them from anchors
-            composed.append(fi)
+            block_items.append(fi)
+        # Cluster errand-run items (Involves-leaving-house) adjacent WITHIN this block only —
+        # never across blocks, so an explicit June split ("mail in the morning, Kinkos in the
+        # evening") via reorder() is never silently glued back together (2026-07-17).
+        composed.extend(_cluster_by_access_tag(block_items))
     composed = _group_block_project_items(composed)   # one 'Work on X' per project, chunk_min once
     framing_by_label = {b.get("label"): b.get("framing", "") for b in plan.get("blocks", [])}
     scheduled = dp.build_schedule(composed, all_anchors, start_time, end_time=end_time)
