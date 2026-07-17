@@ -64,9 +64,14 @@ def _live_projects(data):
 
 
 def _read_engagement(sid, oid):
-    """Live, uncached read of one object's Engagement value, by display name."""
-    _, body = g.call("GET", f"/spaces/{sid}/objects/{oid}")
-    obj = body.get("object", {}) if isinstance(body, dict) else {}
+    """Live, uncached read of one object's Engagement value, by display name. Raises on a failed
+    GET — a blipped read must NOT silently return None, which apply_migration would misread as
+    'already off the retired values' and skip a real migration (no-silent-failures guard; mirrors
+    capture_generate._get_object / backfill_engagement._get_project)."""
+    st, body = g.call("GET", f"/spaces/{sid}/objects/{oid}")
+    if st != 200 or not isinstance(body, dict) or "object" not in body:
+        raise RuntimeError(f"_read_engagement: GET object {oid!r} failed: {st} {body}")
+    obj = body["object"]
     by_name = {p.get("name"): p for p in obj.get("properties", [])}
     eng = (by_name.get(ENGAGEMENT_PROPERTY_NAME) or {}).get("select") or {}
     return eng.get("name") if isinstance(eng, dict) else None
