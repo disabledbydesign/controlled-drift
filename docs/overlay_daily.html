@@ -996,6 +996,15 @@ textarea.add-field:focus { border-color: var(--gold); }
 .when-chip.parked { color: var(--text-dimmer); }
 .when-chip:hover { border-color: var(--gold); }
 .when-chip:disabled { opacity: 0.5; cursor: default; }
+
+/* the tappable "engagement" chip — Project receipt lines only. Mirrors .when-chip's shape;
+   distinct base class + rose (not gold) hover so the two affordances read as different actions. */
+.eng-chip { flex-shrink: 0; border-radius: 13px; font-size: 11px; padding: 2px 11px; cursor: pointer; font-family: inherit; background: var(--surface); border: 1px solid var(--border); color: var(--text-dim); transition: all .12s; }
+.eng-chip.steady { background: var(--gold-dim); border-color: var(--gold); color: var(--gold); }
+.eng-chip.backburner { color: var(--text-dimmer); }
+.eng-chip:hover { border-color: var(--rose); }
+.eng-chip:disabled { opacity: 0.5; cursor: default; }
+.eng-chip.error { background: var(--rose-bg); border-color: var(--rose-border); color: var(--rose); }
 /* tap-to-place move — chip on the task, "move here" targets while placing */
 .move-chip { flex-shrink: 0; margin-left: auto; border-radius: 13px; font-size: 11px;
   padding: 2px 11px; cursor: pointer; font-family: inherit; background: var(--surface);
@@ -2665,6 +2674,7 @@ function renderSession(entries) {
       lines.push({ id: c.id, name: c.name, project: c.project, time: t,
                    when_label: c.when_label, is_today: c.is_today,
                    is_parked: c.when_label === 'Parked',
+                   type: c.type, engagement: c.engagement,
                    undone: undone.has(c.id) });
     }
   }
@@ -2678,10 +2688,14 @@ function renderSession(entries) {
     // The when-chip only shows when the item carries a when AND is still live (an undone/archived
     // item can't be rescheduled). Undated items (no when_label) get no chip.
     const chip = (!l.undone && l.when_label) ? whenChipHtml(l) : '';
+    // The engagement chip only shows on Project receipt lines (Tasks etc. have no engagement) —
+    // and only while the line is live, same rule as the when-chip.
+    const engChip = (!l.undone && l.type === 'Project') ? engChipHtml(l) : '';
     return `
     <div class="receipt-item${l.undone ? ' receipt-undone' : ''}">
       <span class="receipt-check">✓</span>
       <span class="receipt-body">${esc(l.name)}${l.project ? `<span class="receipt-proj"> → ${esc(l.project)}</span>` : ''}</span>
+      ${engChip}
       ${chip}
       <span class="receipt-time">${esc(l.time)}</span>
       ${l.undone ? '' : `<button class="receipt-undo" onclick="undoCapture('${esc(l.id)}', this)">undo</button>`}
@@ -2720,6 +2734,48 @@ async function cycleWhen(chip) {
       setAddStatus("That change didn't save — tap the chip again.", true);
     }
   } catch (_) {
+    setAddStatus("That change didn't save — tap the chip again.", true);
+  }
+  chip.disabled = false;
+}
+
+// One receipt line's engagement chip — Project lines only. data-eng seeds the tap cycle
+// (Open → Steady → Backburner); missing engagement defaults to "Open".
+function engChipHtml(l) {
+  const eng = l.engagement || 'Open';
+  const cls = eng === 'Steady' ? ' steady' : (eng === 'Backburner' ? ' backburner' : '');
+  return `<button class="eng-chip${cls}" data-id="${esc(l.id)}" data-eng="${esc(eng)}" onclick="cycleEngagement(this)">${esc(eng)}</button>`;
+}
+
+// Tap-to-change engagement: cycle Open → Steady → Backburner → Open and POST immediately.
+// Same never-silent-on-failure rule as cycleWhen — on error the chip itself flips to "!" AND
+// the status line says so, so she's never left wondering whether it saved.
+async function cycleEngagement(chip) {
+  const order = ['Open', 'Steady', 'Backburner'];
+  const prev = chip.dataset.eng || 'Open';
+  const next = order[(order.indexOf(prev) + 1) % order.length];
+  chip.disabled = true;
+  chip.classList.remove('error');
+  chip.textContent = next;             // optimistic — flip immediately, before the POST resolves
+  chip.dataset.eng = next;
+  chip.className = 'eng-chip' + (next === 'Steady' ? ' steady' : (next === 'Backburner' ? ' backburner' : ''));
+  try {
+    const res = await fetch('/api/project/engagement', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ id: chip.dataset.id, old: prev, new: next }),
+    });
+    const data = await res.json();
+    if (!res.ok || !data.ok) {
+      chip.textContent = '!';
+      chip.dataset.eng = prev;         // roll back to last known-good so the next tap resumes there
+      chip.classList.add('error');
+      setAddStatus("That change didn't save — tap the chip again.", true);
+    }
+  } catch (_) {
+    chip.textContent = '!';
+    chip.dataset.eng = prev;
+    chip.classList.add('error');
     setAddStatus("That change didn't save — tap the chip again.", true);
   }
   chip.disabled = false;
