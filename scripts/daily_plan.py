@@ -263,7 +263,7 @@ def load_active_items(sid):
 def load_neglected(days=16):
     # 16 days — June's calibration 2026-07-12, aligned with the upkeep-strategy threshold;
     # per-priority calibration is the future Strategy-driven version.
-    """Active projects (Steady/Sprint/Hyperfixation) that aren't getting finished. Switched
+    """Active projects (Steady) that aren't getting finished. Switched
     2026-07-13 from the dormant/Backburner-by-last-surfaced query to the active-untouched-by-
     last-COMPLETION cohort: an active project resurfaces every day regardless, so "neglect"
     has to mean not-getting-worked-on, not not-surfaced; dormant resurfacing is a separate,
@@ -517,14 +517,14 @@ def format_context(goals, projects, tasks, strategies, today_recurrings, neglect
             lines.append(f"- {r['name']} at {r['fixed_time'].strftime('%H:%M')}")
         lines.append("")
 
-    # The "not getting to" section: ACTIVE projects (Steady/Sprint/Hyperfixation) June keeps
+    # The "not getting to" section: ACTIVE projects (Steady) June keeps
     # seeing but isn't FINISHING anything in. `neglected` is now the active-untouched cohort
     # (neglect.active_untouched: stale by last-COMPLETION, not last-surface — an active project
     # surfaces a move every day, so "not surfaced lately" could never catch it). The model can
     # gently offer to bring one back (prompt §3). Backburner/unset/Open going quiet is EXPECTED
     # and handled by the gate, not surfaced here. `last_completed` is the datetime the cohort
     # flagged on (None when the project has never had a completion).
-    active_engagement = {"Steady", "Sprint", "Hyperfixation"}
+    active_engagement = {"Steady"}   # Sprint/Hyperfixation retired 2026-07-16
     active_project_names = {p["name"] for p in projects
                             if p.get("engagement") in active_engagement}
     today_recurring_names = {r["name"] for r in today_recurrings}

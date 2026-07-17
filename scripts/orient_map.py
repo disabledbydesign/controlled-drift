@@ -27,7 +27,7 @@ Register rules for what gets stored (enforced at entry, see SKILL.md):
   no coded status words. Written so June reads it at a glance.
 
 Engagement drives the circle:
-  Steady / Sprint / Hyperfixation / unset  →  ● ACTIVE
+  Steady / unset                           →  ● ACTIVE
   Backburner                               →  ○ later
   Done                                     →  Finished section
 

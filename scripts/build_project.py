@@ -16,14 +16,16 @@ def build_project():
     p_barriers    = g.ensure_property("Barriers", "text")     # queryable struggle-blocks (§10 stuck-support storage)
     p_context     = g.ensure_property("Context", "text")     # reused
     # Engagement: how June is currently engaging with this project.
-    # Hyperfixation = current attention capture for the whole space — one project in Hyperfixation
-    # explains why other projects are neglected; agents should read it systemically, not project-locally.
     # Replaces the old "Project status" (Active/Parked/Inactive) — that field stays in the space
     # as legacy but is superseded. Learning loop target: system learns what each level means for
     # each project over time from June's corrections. Paired text field = canonical; select = filterable.
+    # Sprint/Hyperfixation RETIRED 2026-07-16 (docs/spec_reconciliation_selection_2026-07-11.md):
+    # Sprint routes through a Focus Period foreground action; Hyperfixation routes through the
+    # qualitative Engagement notes / Affective free-text. The reconciled set is Steady/Open/
+    # Needs Clarifying/Backburner/Done.
     p_engagement  = g.ensure_property("Engagement", "select",
-                                      ["Steady", "Open", "Sprint", "Hyperfixation",
-                                       "Needs Clarifying", "Backburner", "Done"])
+                                      ["Steady", "Open", "Needs Clarifying",
+                                       "Backburner", "Done"])
     p_eng_notes   = g.ensure_property("Engagement notes", "text")   # open: thresholds, cadence, conditions
     # Obligation vs wellbeing — set directly on the Project (June thinks of a project
     # AS obligation or hobby; not derived from the goal). The axis is income/survival-

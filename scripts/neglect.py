@@ -3,8 +3,8 @@
 
 TWO COHORTS (split 2026-07-13 — June ratified). The original code resurfaced Backburner/
 unset projects on a "not surfaced in N days" timer and called that "neglect." It ran
-backwards: a project June actually cares about and is actively pursuing (Engagement Steady/
-Sprint/Hyperfixation) surfaces a move EVERY DAY via one-move-per-thread selection, so
+backwards: a project June actually cares about and is actively pursuing (Engagement Steady)
+surfaces a move EVERY DAY via one-move-per-thread selection, so
 "hasn't been SURFACED in N days" can never catch it — it always looks fresh. The honest
 signal for "active but not getting worked on" is COMPLETION, not surfacing: a project June
 keeps seeing but isn't finishing anything in.
@@ -68,7 +68,7 @@ _NON_CANDIDATE_ENGAGEMENT = {"Done", "Open"}
 # The ACTIVE cohort's engagement filter — projects June is actually pursuing right now.
 # Distinct from _NON_CANDIDATE_ENGAGEMENT above (which is an EXCLUDE list for the dormant
 # cohort): this is an INCLUDE list, the opposite kind of filter, for the opposite cohort.
-_ACTIVE_ENGAGEMENT = {"Steady", "Sprint", "Hyperfixation"}
+_ACTIVE_ENGAGEMENT = {"Steady"}   # Sprint/Hyperfixation retired 2026-07-16 (see module docstring)
 
 def _parse_date(raw):
     """Anytype serializes dates as ISO-8601 with a trailing 'Z' (e.g. '2026-06-15T16:39:41Z')
@@ -192,8 +192,8 @@ query_neglected = dormant_neglected
 # ============================================================================
 
 def _active_project_task_ids(data):
-    """Pure. proj_id -> {"name":, "task_ids": set()} for ACTIVE-engagement projects (Steady/
-    Sprint/Hyperfixation) — the cohort neglect targets now: work June is actually pursuing.
+    """Pure. proj_id -> {"name":, "task_ids": set()} for ACTIVE-engagement projects (Steady)
+    — the cohort neglect targets now: work June is actually pursuing.
 
     Deliberately does NOT drop Done/Parked tasks the way neglect_candidates' candidate list
     does — a project's completion history lives ENTIRELY in its Done tasks, so excluding them
@@ -277,7 +277,7 @@ def active_untouched_from(data, completion_events, earliest_surfaced, now, days=
     task_id -> earliest-ever-surfaced datetime (from _earliest_surfaced_dates). now/days:
     the shared staleness window (see _cutoff).
 
-    A project (Engagement Steady/Sprint/Hyperfixation) is flagged when:
+    A project (Engagement Steady) is flagged when:
       - its newest task completion is more than `days` ago; OR
       - it has NO completion at all, AND its earliest-ever-surfaced task is more than `days`
         ago (this second clause is the guard against flagging a brand-new project that

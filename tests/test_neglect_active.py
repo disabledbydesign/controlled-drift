@@ -1,6 +1,6 @@
 # tests/test_neglect_active.py
-"""The ACTIVE neglect cohort (June ratified 2026-07-13): active projects (Steady/Sprint/
-Hyperfixation) whose tasks aren't getting COMPLETED — as opposed to the dormant cohort's
+"""The ACTIVE neglect cohort (June ratified 2026-07-13): active projects (Steady) whose
+tasks aren't getting COMPLETED — as opposed to the dormant cohort's
 original "not surfaced in N days" (which an active project can never trip, since it
 resurfaces every day via one-move-per-thread selection). See scripts/neglect.py's module
 docstring for the full split.
@@ -60,7 +60,7 @@ def test_active_project_recent_completion_is_not_flagged():
 # --- (c) brand-new active project: no completions, earliest surface recent -----
 
 def test_brand_new_active_project_is_not_flagged():
-    data = [_project("p1", "New proj", "Sprint"),
+    data = [_project("p1", "New proj", "Steady"),
             _task("t1", "Foo", linked=[{"id": "p1"}])]
     earliest = {"t1": dt.datetime(2026, 7, 10, 9, 0)}  # 3 days ago
     got = _by_name(active_untouched_from(data, [], earliest, NOW, days=16))
@@ -70,7 +70,7 @@ def test_brand_new_active_project_is_not_flagged():
 # --- (d) never-completed active project, earliest surface > 16 days -> flagged -
 
 def test_never_completed_project_with_old_earliest_surface_is_flagged():
-    data = [_project("p1", "Stale proj", "Hyperfixation"),
+    data = [_project("p1", "Stale proj", "Steady"),
             _task("t1", "Foo", linked=[{"id": "p1"}])]
     earliest = {"t1": dt.datetime(2026, 5, 1, 9, 0)}  # 73 days ago
     got = _by_name(active_untouched_from(data, [], earliest, NOW, days=16))
@@ -153,3 +153,10 @@ def test_project_completion_signal_is_newest_across_its_tasks():
 
 def test_dormant_neglected_alias_is_still_the_same_callable():
     assert neglect.query_neglected is neglect.dormant_neglected
+
+
+# --- retirement guard: the active cohort is Steady-only now (2026-07-16) --------
+
+def test_active_cohort_is_steady_only():
+    import neglect
+    assert neglect._ACTIVE_ENGAGEMENT == {"Steady"}   # Sprint/Hyperfixation retired

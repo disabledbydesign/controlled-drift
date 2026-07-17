@@ -93,7 +93,7 @@ def test_never_completed_active_item_renders_plainly():
 
 
 def test_project_type_neglected_item_belongs_when_project_is_active():
-    projects = [_proj("Baz", eng="Sprint")]
+    projects = [_proj("Baz", eng="Steady")]
     neglected = [_neg("Baz", ntype="project", linked=["Baz"])]
     ctx = daily_plan.format_context([], projects, [], [], [], neglected, None)
     assert "not getting to" in ctx
