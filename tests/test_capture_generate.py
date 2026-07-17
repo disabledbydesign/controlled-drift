@@ -81,6 +81,51 @@ def test_parse_weed_fills_defaults():
     assert parsed["groups"] == [] and parsed["capacity_read"] is None
 
 
+# --- dedup list enrichment (project + Context signal, June 2026-07-16) ------
+# Root case: bare names alone weren't enough for the model to recognize a same-subject item
+# worded differently — she forgot she'd already added a related task earlier that day, and a
+# near-duplicate got created instead of flagged/skipped. Project + Context give real signal.
+
+def test_dedup_list_includes_linked_project():
+    task = {"name": "Pay bills to Sutter and LabQuest",
+            "properties": [{"key": "linked_projects", "objects": ["p1"]}]}
+    out = cg._format_dedup_list([task], [], id2name={"p1": "Medical bills"})
+    assert "Pay bills to Sutter and LabQuest" in out
+    assert "under Medical bills" in out
+
+
+def test_dedup_list_includes_context_snippet():
+    task = {"name": "Pay bills to Sutter and LabQuest",
+            "properties": [{"key": "gsdo_context", "text": "billing dispute over CPT code 99213"}]}
+    out = cg._format_dedup_list([task], [], id2name={})
+    assert 'context: "billing dispute over CPT code 99213"' in out
+
+
+def test_dedup_list_bare_name_when_no_project_or_context():
+    # Real bare stub shape — no "properties" key at all — must not crash or invent anything.
+    task = {"name": "Water the plants"}
+    out = cg._format_dedup_list([task], [], id2name={})
+    assert out.strip() == "- Water the plants  (Task)"
+
+
+def test_dedup_list_truncates_long_context_snippet():
+    long_ctx = "x" * 150
+    task = {"name": "Follow up", "properties": [{"key": "gsdo_context", "text": long_ctx}]}
+    out = cg._format_dedup_list([task], [], id2name={})
+    assert ("x" * 97 + "...") in out
+    assert long_ctx not in out   # the untruncated 150-char version must not appear
+
+
+def test_dedup_list_recurring_reads_either_project_link_key():
+    # Recurring items were observed live with EITHER key (data-entry drift) — both must resolve.
+    rec_a = {"name": "Go on a walk",
+             "properties": [{"key": "linked_projects", "objects": ["p1"]}]}
+    rec_b = {"name": "Do the dishes",
+             "properties": [{"key": "gsdo_project_link", "objects": ["p1"]}]}
+    out = cg._format_dedup_list([], [rec_a, rec_b], id2name={"p1": "Household"})
+    assert out.count("under Household") == 2
+
+
 # --- the happy path ---------------------------------------------------------
 
 def test_capture_creates_links_and_skips(tmp_path, monkeypatch):

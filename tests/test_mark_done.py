@@ -63,6 +63,45 @@ def test_resolve_ids_no_match_leaves_item_without_id():
         assert "id" not in item
 
 
+# --- same task named twice -> one row, not two ------------------------------
+
+def test_dedup_resolved_items_drops_second_occurrence_across_blocks():
+    """Live 2026-07-15: 'Calling the insurance...' appeared twice in one plan — the model named
+    the same real task in two different blocks. _resolve_ids has no cross-item check (each item
+    resolves independently), so dedup must run as its own pass and keep only the first row."""
+    ref_map = {"T1": "id-ins"}
+    tasks = [{"id": "id-ins", "name": "Call insurance to check about outpatient maximum"}]
+    plan = {"blocks": [
+        {"items": [{"task": "Call insurance to check about outpatient maximum", "ref": "T1"}]},
+        {"items": [{"task": "Call insurance to check about outpatient maximum", "ref": "T1"}]},
+    ]}
+    pg._resolve_ids(plan, ref_map, tasks)
+    pg._dedup_resolved_items(plan)
+    all_items = [it for b in plan["blocks"] for it in b["items"]]
+    assert len(all_items) == 1
+    assert all_items[0]["id"] == "id-ins"
+
+
+def test_dedup_resolved_items_priority_shape():
+    ref_map = {"T1": "id-a"}
+    tasks = [{"id": "id-a", "name": "Draft the intro"}]
+    plan = {"items": [
+        {"task": "Draft the intro", "ref": "T1"},
+        {"task": "Draft the intro", "ref": "T1"},
+    ]}
+    pg._resolve_ids(plan, ref_map, tasks)
+    pg._dedup_resolved_items(plan)
+    assert len(plan["items"]) == 1
+
+
+def test_dedup_resolved_items_leaves_unresolved_items_alone():
+    """Two items with no id (e.g. two separate 'Lunch' breaks) are NOT duplicates of each
+    other — nothing to dedup against, both must survive."""
+    plan = {"items": [{"task": "Lunch"}, {"task": "Lunch"}]}
+    pg._dedup_resolved_items(plan)
+    assert len(plan["items"]) == 2
+
+
 # --- identity-field overwrite: the label must match the id it acts on -------
 
 def test_resolve_ids_overwrites_mislabeled_task_from_id():

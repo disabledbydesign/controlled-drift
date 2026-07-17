@@ -1036,6 +1036,35 @@ def _resolve_ids(plan, ref_map, tasks, all_tasks=None):
     return mislabels, resolved
 
 
+def _dedup_resolved_items(plan):
+    """Drop a second (or further) plan row that resolved to the SAME real task id — the model can
+    name one task twice (echoed in two blocks, or reached via two different phrasings that both
+    normalize-match the same task in _resolve_item's fallback path), and nothing upstream catches
+    that (b52c4a3's block dedup is project-id-keyed and explicitly skips plain, non-block items).
+    Observed live 2026-07-15: 'Calling the insurance...' appeared twice in one plan.
+
+    Keeps the FIRST occurrence; the id is already in the seen set by then, so
+    _ensure_all_tasks_accounted never mistakes the drop for a silent loss. Run AFTER _resolve_ids
+    (ids must exist to dedup on) and BEFORE _drop_deferred_from_plan / _ensure_all_tasks_accounted.
+    Does not touch arc steps — a project's step list is a different surface, not a duplicate row.
+    """
+    seen = set()
+
+    def _keep(item):
+        tid = item.get("id")
+        if not tid:
+            return True   # no id (interstitial/unresolved) — nothing to dedup against
+        if tid in seen:
+            return False
+        seen.add(tid)
+        return True
+
+    for block in plan.get("blocks", []):
+        block["items"] = [it for it in block.get("items", []) if _keep(it)]
+    if "items" in plan:
+        plan["items"] = [it for it in plan["items"] if _keep(it)]
+
+
 def _ensure_all_tasks_accounted(plan, tasks):
     """Force every active task to appear somewhere in the output — scheduled or in still_here.
 
@@ -1308,6 +1337,7 @@ def generate_plan(capacity=None, source="generate", extra=None):
             model_text = generate(prompt)
             plan = parse_plan(model_text)
             mislabels, resolved = _resolve_ids(plan, ref_map, tasks, all_tasks=all_active_tasks)
+            _dedup_resolved_items(plan)      # same task named twice -> one row, not two
             _drop_deferred_from_plan(plan)   # "not today" guarantee — drop anything re-added from context
             _ensure_all_tasks_accounted(plan, tasks)
         except Exception as e:
@@ -1415,6 +1445,7 @@ def reorder(message, kind):
         model_text = generate(prompt)
         plan = parse_plan(model_text)
         mislabels, _resolved = _resolve_ids(plan, ref_map, tasks, all_tasks=all_active_tasks)
+        _dedup_resolved_items(plan)      # same task named twice -> one row, not two
         _drop_deferred_from_plan(plan)   # "not today" guarantee — drop anything re-added from context
         _ensure_all_tasks_accounted(plan, tasks)
         # Python re-times June's newly composed order (AI_LAYER_SPEC:69), same as generate_plan.

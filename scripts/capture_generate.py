@@ -96,18 +96,51 @@ def _build_ref_table(goals, projects):
     return ref_map, id2name, "\n".join(lines)
 
 
-def _format_dedup_list(tasks, recurrings, strategies=()):
+def _dedup_extra(obj, id2name):
+    """'under <Project>' + a short Context snippet, appended to a dedup-list line so the model has
+    more than a bare name to recognize a same-subject item worded differently. Root case (June,
+    2026-07-16): she forgot she'd already added 'Pay bills to Sutter and LabQuest' that morning;
+    that evening's capture created 'Follow up on outstanding medical bills with Sutter and
+    LabQuest' as a flagged-but-distinct item because the bare name alone gave the model too little
+    to recognize the overlap — she had to undo it by hand. Forgetting is a real, expected use
+    case, not a mistake to design around; the dedup check exists exactly for this. Both fields
+    come from data already fetched for this call (no extra API cost). Silently absent when unset
+    — never invents a project or context that isn't there."""
+    props = {p.get("key"): p for p in obj.get("properties", [])}
+    proj_ids = ((props.get("linked_projects") or {}).get("objects")
+                or (props.get("gsdo_project_link") or {}).get("objects") or [])
+    proj_name = None
+    for pid in proj_ids:
+        pid = pid.get("id") if isinstance(pid, dict) else pid
+        if pid in id2name:
+            proj_name = id2name[pid]
+            break
+    ctx = (props.get("gsdo_context") or {}).get("text")
+    bits = []
+    if proj_name:
+        bits.append(f"under {proj_name}")
+    if ctx:
+        snippet = ctx.strip()
+        if len(snippet) > 100:
+            snippet = snippet[:97] + "..."
+        bits.append(f'context: "{snippet}"')
+    return f"  ({'; '.join(bits)})" if bits else ""
+
+
+def _format_dedup_list(tasks, recurrings, strategies=(), id2name=None):
     """Existing Task/Recurring/Strategy names so the LLM can spot a same-subject duplicate (the
     cross-type, different-name dupe the weeding gate warns about) and mark it skip rather than
     recreate it. Strategies were missing from this list entirely until 2026-07-02 — a same
     Strategy said across separate capture turns could never be recognized as a duplicate, since
     the LLM was never shown existing Strategies to check against (root cause of a same-text
-    Strategy created 3x)."""
+    Strategy created 3x). Tasks/Recurring also carry their project + Context (see _dedup_extra) —
+    bare names alone weren't enough signal to catch a same-subject item worded differently."""
+    id2name = id2name or {}
     lines = []
     for t in tasks:
-        lines.append(f"  - {t.get('name')}  (Task)")
+        lines.append(f"  - {t.get('name')}  (Task){_dedup_extra(t, id2name)}")
     for r in recurrings:
-        lines.append(f"  - {r.get('name')}  (Recurring)")
+        lines.append(f"  - {r.get('name')}  (Recurring){_dedup_extra(r, id2name)}")
     for s in strategies:
         lines.append(f"  - {s.get('name')}  (Strategy)")
     return "\n".join(lines) if lines else "  (none yet)"
@@ -426,7 +459,7 @@ def capture(text, today=None):
 
     sid, goals, projects, tasks, recurrings, strategies = _load_weed_context()
     ref_map, id2name, ref_table = _build_ref_table(goals, projects)
-    dedup_list = _format_dedup_list(tasks, recurrings, strategies)
+    dedup_list = _format_dedup_list(tasks, recurrings, strategies, id2name=id2name)
     history = session_store.recent_entries("capture")
     prompt = _assemble_prompt(text, ref_table, dedup_list, history)
 
@@ -519,7 +552,7 @@ if __name__ == "__main__":
         sid, goals, projects, tasks, recurrings, strategies = _load_weed_context()
         ref_map, id2name, ref_table = _build_ref_table(goals, projects)
         print(_assemble_prompt(args.text, ref_table,
-                               _format_dedup_list(tasks, recurrings, strategies),
+                               _format_dedup_list(tasks, recurrings, strategies, id2name=id2name),
                                session_store.recent_entries("capture")))
     else:
         print(json.dumps(capture(args.text), indent=2))
