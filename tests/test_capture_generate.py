@@ -404,3 +404,21 @@ def test_parse_weed_engagement_defaults_open_notes_blank():
     ```'''
     item = cg.parse_weed(raw)["groups"][0]["items"][0]
     assert item["engagement"] == "Open" and item["engagement_notes"] == ""
+
+
+# --- Task A3: capture writes the proposed engagement, retiring hardcoded Steady ----
+
+def test_capture_project_writes_proposed_engagement(monkeypatch, tmp_path):
+    canned = json.dumps({"opening":"o","capacity_read":None,"groups":[{"label":"g","through_line":"t","items":[
+        {"type":"Project","name":"Leatherworking","link":None,"status":None,"action":"create",
+         "reasoning":"r","engagement":"Steady","engagement_notes":"~30 min daily"},
+        {"type":"Project","name":"Maybe-someday garden","link":None,"status":None,"action":"create",
+         "reasoning":"r"},   # no signal -> parse_weed defaulted engagement to "Open"
+    ]}]})
+    calls = _stub(monkeypatch, tmp_path, canned=canned)
+    cg.capture("start leatherworking, ~30 min a day; maybe a garden someday")
+    props = {name: p for (typ, name, p) in calls}
+    assert props["Leatherworking"]["Engagement"] == "Steady"
+    assert props["Leatherworking"]["Engagement notes"] == "~30 min daily"
+    assert props["Maybe-someday garden"]["Engagement"] == "Open"   # NOT the old hardcoded Steady
+    assert "Engagement notes" not in props["Maybe-someday garden"]

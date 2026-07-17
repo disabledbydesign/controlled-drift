@@ -312,7 +312,14 @@ def _creation_props(type_name, item, link_id, scheduled=None, is_parked=False):
         if is_parked:
             props["Task status"] = "Parked"   # override "Ready" — someday drops off today via status
     elif type_name == "Project":
-        props["Engagement"] = "Steady"        # captured project is live by default (design)
+        # Born with the weeding LLM's proposed engagement (Open by default; Steady only when June's
+        # words said she's starting it; Backburner when she's setting it aside) + any situated notes.
+        # Replaces the old blind hardcoded Steady. The shared builder is the single validator/default,
+        # so this path and the memory pass cannot diverge. (June, 2026-07-16.)
+        props.update(capture_fields.build_project_engagement_props(
+            engagement=item.get("engagement"),
+            engagement_notes=item.get("engagement_notes"),
+        ))
     elif type_name == "Strategy":
         props["Strategy status"] = "Active"    # an adopted strategy is active
     # Goal, Recurring, Note: bare (June sets specifics later)

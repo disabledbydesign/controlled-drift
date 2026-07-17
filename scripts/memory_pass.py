@@ -432,6 +432,14 @@ def apply_candidate(candidate):
         props["Task status"] = "Ready"
     if link_id:
         props[link_prop] = [link_id]
+    if type_name == "Project":
+        # Same shared builder as the capture path (Task A1/A3) — a memory-pass Project is born with
+        # the model's proposed engagement (default Open), never the old hardcoded Steady, so the two
+        # write paths cannot diverge on the default or the coarse-set validation.
+        props.update(capture_fields.build_project_engagement_props(
+            engagement=candidate.get("engagement"),
+            engagement_notes=candidate.get("engagement_notes"),
+        ))
     # Per-item optional fields (duration / affect / blocked-on / access), through the SAME shared
     # builder as the capture path so the two write paths cannot diverge. Each candidate is one
     # entry, so its affect is already quoted from that entry's own words (DECISION 1 holds by
