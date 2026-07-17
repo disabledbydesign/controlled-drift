@@ -310,9 +310,7 @@ def format_context(goals, projects, tasks, strategies, today_recurrings, neglect
     if period:
         lines.append("## TODAY'S FOCUS PERIOD — June authored this in her own words. It is the "
                      "authoritative instruction for composing today's plan: follow it, and let it "
-                     "govern the order, the selection, and how much fits — over any generic default. "
-                     "A gentle/low-spoon intent means fewer items, lighter moves, and deferring "
-                     "demanding work to still_here.")
+                     "govern the order, the selection, and how much fits — over any generic default.")
         lines.append(f"- {period.get('name') or '(unnamed period)'}")
         if period.get("intent"):
             lines.append(f"- June's intent, in her words (honor this literally): {period['intent']}")
