@@ -150,6 +150,15 @@ def test_daily_life_task_kept():
     assert [t["id"] for t in kept] == ["a"]
 
 
+def test_multi_linked_task_kept_if_any_project_active():
+    # A task linked to BOTH a dormant and an active project stays — `any(pn in active_names)`.
+    # Only when EVERY linked project is dormant is it dropped (cross-family review gap-fill).
+    tasks = [{"id": "a", "name": "Shared move", "linked_projects": ["Old hobby", "Job search"]}]
+    projects = [_proj("Job search")]                     # "Old hobby" absent -> dormant
+    kept = pg._gate_and_collapse(tasks, projects, [], None, surface_dates={})
+    assert [t["id"] for t in kept] == ["a"]
+
+
 # --- Task 5: the held-back count reaches the LLM context --------------------
 
 def test_task_ref_line_carries_held_back():
