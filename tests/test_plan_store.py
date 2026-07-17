@@ -216,6 +216,30 @@ def test_move_raises_when_no_cache_or_no_blocks(tmp_path, monkeypatch):
         plan_store.move_item_later("T1", 1)   # priority shape has no blocks (see Task 2)
 
 
+# --- duration change reflows the clock schedule (2026-07-15 friction) --------
+
+def test_set_item_duration_reflows_its_block(tmp_path, monkeypatch):
+    _redirect(tmp_path, monkeypatch)
+    plan_store.save_plan(_clock_plan(), source="generate")
+    updated = plan_store.set_item_duration("T1", 60)   # was 90 min (09:00 – 10:30)
+    times = {i["id"]: i["time"] for i in updated["blocks"][0]["items"]}
+    # T1 shrinks to 60 min and every later item in the SAME block shifts earlier to match.
+    # T4, in the other block, is untouched — a duration edit only reflows its own block.
+    assert times == {"T1": "09:00 – 10:00", "T2": "10:00 – 10:45", "T3": "10:45 – 11:30"}
+    t4 = next(i for i in updated["blocks"][1]["items"] if i["id"] == "T4")
+    assert t4["time"] == "13:00 – 14:00"
+
+
+def test_set_item_duration_on_priority_shape_has_nothing_to_reflow(tmp_path, monkeypatch):
+    _redirect(tmp_path, monkeypatch)
+    plan_store.save_plan({"shape": "priority", "items": [{"task": "x", "id": "T1"}]},
+                         source="generate")
+    updated = plan_store.set_item_duration("T1", 45)
+    item = updated["items"][0]
+    assert item["duration_min"] == 45
+    assert "time" not in item   # no clock times on a fragmented day — nothing invented
+
+
 # --- tap-to-place on a fragmented (priority-shape) day — pure position change --
 
 def _priority_plan():

@@ -296,16 +296,30 @@ def set_block_chunk(project_id, minutes):
 
 def set_item_duration(item_id, minutes):
     """Update the cached duration_min on every plan row carrying this Anytype id (a real task or
-    recurring), so the overlay reflects June's new length immediately. The durable write is on
-    the object itself (task_actions.set_task_duration). Returns the updated plan or None."""
+    recurring), so the overlay reflects June's new length immediately, and re-flow the clock
+    times of any block(s) that carry it — otherwise the number changes but the displayed
+    schedule doesn't (2026-07-15 friction: a duration change had "no impact on the daily plan
+    schedule"). A fragmented/priority day has no clock times to reflow; updating duration_min
+    there is the whole fix. The durable write is on the object itself
+    (task_actions.set_task_duration). Returns the updated plan or None."""
     plan = load_plan()
     if plan is None:
         return None
     changed = False
-    for item in _iter_items(plan):
+    touched_blocks = []
+    for block in plan.get("blocks", []):
+        for item in block.get("items", []):
+            if item.get("id") == item_id:
+                item["duration_min"] = minutes
+                changed = True
+                if block not in touched_blocks:
+                    touched_blocks.append(block)
+    for item in plan.get("items", []):
         if item.get("id") == item_id:
             item["duration_min"] = minutes
             changed = True
+    for block in touched_blocks:
+        _reflow_block(block)
     if changed:
         _persist_plan(plan)
     return plan
@@ -350,10 +364,13 @@ def _range_bounds(s):
 
 def _reflow_block(block):
     """Recompute every item's clock time in this block, in order — the automatic time
-    recalculation June asked for. Each item KEEPS its existing duration (or 30 min if its
-    current time doesn't parse); item N starts where item N-1 ends; the walk starts at the
-    block's own start time (or the first item's, if the block has none). If nothing gives a
-    start time, the times are left exactly as they are — an honest no-op, never invented.
+    recalculation June asked for. Each item's slot length is its duration_min when the row
+    carries a positive one — that's the number she just set explicitly, and it must win
+    (2026-07-15 friction: reflow used to re-derive duration only from the OLD time range,
+    so a duration edit never showed up in the schedule); otherwise the existing time range's
+    span, or 30 min if neither parses. Item N starts where item N-1 ends; the walk starts at
+    the block's own start time (or the first item's, if the block has none). If nothing gives
+    a start time, the times are left exactly as they are — an honest no-op, never invented.
     If the durations run past the block's labelled end, the times run past it too: the
     arithmetic tells the truth rather than squeezing tasks to fit."""
     items = block.get("items", [])
@@ -365,8 +382,10 @@ def _reflow_block(block):
     if cursor is None:
         return
     for item in items:
-        s, e = _range_bounds(item.get("time"))
-        dur = (e - s) if (s is not None and e is not None and e > s) else _DEFAULT_ITEM_MIN
+        dur = item.get("duration_min")
+        if not isinstance(dur, (int, float)) or dur <= 0:
+            s, e = _range_bounds(item.get("time"))
+            dur = (e - s) if (s is not None and e is not None and e > s) else _DEFAULT_ITEM_MIN
         item["time"] = f"{_min_to_hhmm(cursor)} – {_min_to_hhmm(cursor + dur)}"
         cursor += dur
 
