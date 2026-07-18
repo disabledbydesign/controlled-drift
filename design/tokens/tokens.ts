@@ -169,7 +169,7 @@ export const selectedFillAlpha = { celestial: 0.16, hardware: 0.18 } as const;
 export function rgbTriplet(hex: string): string {
   const m = /^#([0-9a-f]{6})$/i.exec(hex.trim());
   if (!m) throw new Error(`rgbTriplet: expected #rrggbb, got ${hex}`);
-  const n = parseInt(m[1], 16);
+  const n = parseInt(m[1]!, 16);
   return `${(n >> 16) & 255},${(n >> 8) & 255},${n & 255}`;
 }
 
@@ -410,25 +410,64 @@ export function panelBackground(mode: ThemeName): string {
     : themes.celestial.c.panel;
 }
 
-/** Object-type accent ramp, as rendered in the gallery's "structure ramp" rows. */
+/**
+ * Object-type colors. AUTHORITATIVE — this is an explicit legend in the gallery, not
+ * an inference. Heading, celestial: `Object types · structure ramp + kinds` (L158);
+ * hardware mirror: `// object types · structure ramp + kinds` (L240).
+ *
+ * WHAT THE HEADING MEANS, and why it supersedes v4's TYPE map:
+ *
+ *   "structure ramp" — Goal ⊃ Project ⊃ Task is the containment hierarchy, and it gets a
+ *   CONTINUOUS pale-cyan → cyan → blue ramp. Depth reads off the hue directly.
+ *   "kinds"          — Recurring and Strategy sit OUTSIDE that hierarchy, so they get
+ *   distinct off-ramp hues rather than a position on it.
+ *
+ * v4's TYPE map (GOAL:amber, PROJECT:blue, TASK:green, RECURRING:orange) is superseded.
+ * It had no ramp, and — more seriously — it colored TASK green, which collides with the
+ * completion green used for done/steady/saved everywhere in the gallery (verified: every
+ * green occurrence in the trusted regions is a ✓, a checkbox, a "Steady" tag or a "Saved"
+ * toast; zero sit on a task row). The gallery deliberately keeps Recurring's green-teal a
+ * different hex from completion green for the same reason.
+ *
+ * Depth is expressed by INDENTATION, never by hue: the nested children in the phone
+ * mockups carry status glyph colors only, no type-ramp accent.
+ */
 export const typeRamp: Record<ThemeName, Record<string, string>> = {
-  // gallery L160-164 — NOTE: this ramp does NOT match v4's TYPE map (GOAL:amber,
-  // PROJECT:blue, TASK:green, RECURRING:orange, STRATEGY:strategy).
+  // gallery L160-164 (legend, verbatim)
   celestial: {
     GOAL: '#9fe0e8',
     PROJECT: '#5fc6d6',
+    SUBPROJECT: '#4faad3', // ⚠ INFERRED — no legend entry; midpoint of PROJECT→TASK on the ramp
+    WORKSTREAM: '#a98fee', // ⚠ INFERRED — no legend entry; observed in 4a L59, off-ramp purple
     TASK: '#3f8fd0',
     RECURRING: '#4fb8a6',
     STRATEGY: '#d58fd8',
   },
-  // gallery L242-246
+  // gallery L242-246 (legend, verbatim)
   hardware: {
     GOAL: '#9be2f0',
     PROJECT: '#58c4e6',
+    SUBPROJECT: '#53a1e6', // ⚠ INFERRED — midpoint of PROJECT→TASK
+    WORKSTREAM: '#a98fee', // ⚠ INFERRED — no hardware observation; celestial value carried over
     TASK: '#4f7fe6',
     RECURRING: '#45cfc0',
     STRATEGY: '#d071d8',
   },
 };
+
+/**
+ * ⚠ TWO OPEN ITEMS on the ramp above, both flagged rather than silently resolved:
+ *
+ * 1. SUBPROJECT and WORKSTREAM have NO legend entry — the gallery lists five types, the app
+ *    has seven. Subproject is interpolated on the ramp (it sits between Project and Task in
+ *    containment). Workstream is taken from an off-legend purple observed in the celestial
+ *    phone mockup; `docs/map_design.md:119` requires workstreams render structurally distinct
+ *    from projects, which an interpolated ramp value would NOT satisfy — hence off-ramp.
+ *
+ * 2. The phone mockups are legend-INCONSISTENT and must not be used to override the legend.
+ *    Celestial gives "Job search" the legend's Project cyan; hardware gives the same object an
+ *    off-legend `#3aa0da` and gives "Scholarly writing" the legend's Project cyan instead.
+ *    They agree only that depth is not colored. Treat 5a/5c as the legend, 4a/4c as decorative.
+ */
 
 export default themes;

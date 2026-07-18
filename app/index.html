@@ -1,0 +1,36 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+    <title>Controlled Drift</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link
+      href="https://fonts.googleapis.com/css2?family=Sora:wght@300;400;500;600;700&family=Space+Grotesk:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;600;700&display=swap"
+      rel="stylesheet"
+    />
+    <style>
+      /* Global resets only. Everything else is inline style objects reading from the
+         token module — deliberately, so the port stays a transcription of v4 rather
+         than a translation into a class system. That translation is where finetuned
+         detail leaks. CSS variables are a safe refactor AFTER fidelity is locked. */
+      * { box-sizing: border-box; }
+      body { margin: 0; background: #060512; }
+      ::-webkit-scrollbar { width: 0; height: 0; }
+
+      /* Navigation grammar from v4: forward enters from the right, back from the left. */
+      @keyframes navfwd  { from { opacity: .55; transform: translateX(100%); }  to { opacity: 1; transform: translateX(0); } }
+      @keyframes navback { from { opacity: .55; transform: translateX(-100%); } to { opacity: 1; transform: translateX(0); } }
+      @keyframes slidein { from { opacity: .55; transform: translateX(100%); }  to { opacity: 1; transform: translateX(0); } }
+      @keyframes slideout{ from { opacity: 1; transform: translateX(0); }       to { opacity: 0; transform: translateX(100%); } }
+      @keyframes panelin { from { opacity: 0; transform: translateY(-4px); }    to { opacity: 1; transform: translateY(0); } }
+      @keyframes savedpulse { 0% { opacity: 0; transform: translateY(4px); } 15% { opacity: 1; transform: translateY(0); } 80% { opacity: 1; } 100% { opacity: 0; } }
+      @keyframes ringpulse { 0% { opacity: .5; transform: scale(1); } 100% { opacity: 0; transform: scale(1.06); } }
+    </style>
+  </head>
+  <body>
+    <div id="root"></div>
+    <script type="module" src="/src/main.tsx"></script>
+  </body>
+</html>
