@@ -615,6 +615,38 @@ def _filter_rollover_to_active(undone_yest, tasks):
     return [u for u in undone_yest if u["id"] in active_ids]
 
 
+def _persisted_recurring_rows(undone_yest, tasks, projects):
+    """Rollover candidates that are recurrings whose cadence did NOT re-emit them today — re-inject
+    them so a missed non-appointment recurring keeps surfacing until done (the persistence rail).
+    SKIP a 'Fixed appointment' recurring (a missed appointment waits for its next cadence, it does
+    not nag daily); SKIP any already in today's pool (a daily chore is re-emitted by cadence —
+    don't double it); SKIP any completed today (same-day zombie guard, symmetric to
+    _filter_rollover_to_active). Returns synthetic task-shaped rows to append to the candidate pool."""
+    import daily_plan, recurring_active, completion_log
+    present = {t.get("id") for t in tasks}
+    done_today = completion_log.completed_ids_on(dt.date.today())
+    proj_id_to_name = {p["id"]: p["name"] for p in projects}
+    rows = []
+    for u in undone_yest:
+        rid = u["id"]
+        if rid in present or rid in done_today:
+            continue
+        try:
+            obj = recurring_active._get_object(rid)
+        except Exception:
+            continue
+        t = obj.get("type")
+        tk = t.get("key") if isinstance(t, dict) else t
+        if tk != "gsdo_recurring":
+            continue
+        by_name = {p.get("name"): p for p in obj.get("properties", [])}
+        if (by_name.get("Fixed appointment") or {}).get("checkbox"):
+            continue
+        rows.append(daily_plan.synthetic_recurring_row(
+            obj, proj_id_to_name, duration_min=None, as_needed=False))
+    return rows
+
+
 def build_context(capacity=None, start_time=None, end_time=None, extra=None):
     """Load active items + compute the clock schedule, returning the full prompt context.
 
@@ -629,9 +661,12 @@ def build_context(capacity=None, start_time=None, end_time=None, extra=None):
     goals, projects, tasks, strategies, today_recurrings, period_ctx = dp.load_active_items(sid)
     neglected = dp.load_neglected()
     import plan_snapshot_log
-    undone_yest = plan_snapshot_log.undone_yesterday()   # rollover candidates: yesterday's uncompleted
-    undone_yest = _filter_rollover_to_active(undone_yest, tasks)
-    rollover_ids = {u["id"] for u in undone_yest}
+    all_undone = plan_snapshot_log.undone_yesterday()          # rollover candidates: yesterday's uncompleted
+    task_roll = _filter_rollover_to_active(all_undone, tasks)  # tasks still active (zombie-proof, unchanged)
+    extra_rec = _persisted_recurring_rows(all_undone, tasks, projects)  # missed non-appointment recurrings
+    tasks = tasks + extra_rec
+    rollover_ids = {u["id"] for u in task_roll} | {r["id"] for r in extra_rec}
+    undone_yest = task_roll   # kept for the (about-to-be-removed) narration block; see Task 6
     period = period_ctx["period"]
     is_off, in_window = period_ctx["is_off"], period_ctx["in_window"]
 
