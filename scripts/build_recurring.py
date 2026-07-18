@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Ensure the Recurring type (Practices + Routines) exists. Idempotent."""
+"""Ensure the Recurring type exists. Idempotent."""
 import sys, os
 sys.path.insert(0, os.path.dirname(__file__))
 import gsdo_anytype as g
@@ -14,7 +14,9 @@ def build_recurring():
     p_dom     = g.ensure_property("Day of month", "number")   # 1-31 anchor for monthly items
     p_tod     = g.ensure_property("Time of day", "text")      # "HH:MM"
     p_dur     = g.ensure_property("Duration min", "number")   # reused from Task
-    # interval model {unit, count} is canonical; Frequency kept for display/legacy, not queried.
+    # interval model: {unit, count} replaces the coarse Frequency select as the canonical
+    # representation. unit=day/week/month/as_needed + count=N (e.g. day/3 = every 3 days).
+    # The datetime seam uses these; gsdo_frequency is kept for display/legacy but not queried.
     p_iunit   = g.ensure_property("Interval unit", "select", ["day", "week", "month", "as_needed"])
     p_icount  = g.ensure_property("Interval count", "number")
     # Recurring-mirrors-Task: reuse Task's exact keys (shared, NOT duplicated). Match build_task.py
@@ -38,11 +40,12 @@ def build_recurring():
     # Retire Has target/Target (Practice-vs-Routine distinction cut; no scheduling consumer reads
     # either). ensure_type/link_properties_to_type only ADD — they never drop a field a prior run
     # linked, so removal needs its own call. Property definitions + any stored values are untouched;
-    # this only unlinks them from Recurring's field list.
-    p_target_old  = g.ensure_property("Has target", "checkbox")
-    p_tgt_txt_old = g.ensure_property("Target", "text")
+    # this only unlinks them from Recurring's field list. find_property (not ensure_property) — a
+    # look-up, not a get-or-create: nothing to unlink on a space where they were never made.
+    retired_keys = [p["key"] for p in
+                    (g.find_property("Has target"), g.find_property("Target")) if p]
     type_obj = g.find_type("Recurring")
-    g.unlink_properties_from_type(type_obj["id"], [p_target_old, p_tgt_txt_old])
+    g.unlink_properties_from_type(type_obj["id"], retired_keys)
     print(f"[ok] Recurring type ready: key={key}")
     return key
 

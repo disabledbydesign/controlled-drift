@@ -48,3 +48,31 @@ def test_ensure_select_options_idempotent():
         assert _count_named(name) == 1
     finally:
         _delete_prop_by_name(name)
+
+def _type_property_keys(type_id):
+    sid = g.get_space_id()
+    t = call("GET", f"/spaces/{sid}/types/{type_id}")[1].get("type", {})
+    return {p.get("key") for p in t.get("properties", [])}
+
+def test_unlink_properties_from_type_removes_a_linked_property():
+    # Uses the real Recurring type (unlink_properties_from_type's actual production target) but
+    # only touches a throwaway scratch property, cleaned up in the finally block.
+    name = "Test Unlink (gsdo-test)"
+    recurring = g.find_type("Recurring")
+    try:
+        k = g.ensure_property(name, "text")
+        g.link_properties_to_type(recurring["id"], [k])
+        assert k in _type_property_keys(recurring["id"])
+
+        g.unlink_properties_from_type(recurring["id"], [k])
+        assert k not in _type_property_keys(recurring["id"])
+    finally:
+        _delete_prop_by_name(name)
+
+def test_unlink_properties_from_type_noop_when_not_linked():
+    # Unlinking a key that was never linked (or already removed) must not error or perturb
+    # the type's other properties — the removal is skip-if-absent, not assert-present.
+    recurring = g.find_type("Recurring")
+    before = _type_property_keys(recurring["id"])
+    g.unlink_properties_from_type(recurring["id"], ["gsdo_definitely_not_linked_key"])
+    assert _type_property_keys(recurring["id"]) == before
