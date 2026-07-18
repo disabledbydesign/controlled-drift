@@ -615,6 +615,11 @@ def create_child(level, title, parent_id=None):
     return {"ok": True, "object": node_for(new_id)}
 
 
+# Interval unit + its "no schedule at all" value. See the as_needed default in convert_type.
+INTERVAL_UNIT_PROP = "Interval unit"
+AS_NEEDED = "as_needed"
+
+
 def convert_type(object_id, target):
     """Reclassify a miscategorised object, KEEPING every value it already holds (spec §5).
 
@@ -708,6 +713,29 @@ def convert_type(object_id, target):
             props[prop] = want
     if want_ws is not None and bool(cur_ws) != want_ws:
         props[WORKSTREAM_PROP] = want_ws
+
+    # 4. Converting TO a Recurring: default the cadence to `as_needed` if it has none.
+    #
+    # ⚠ WITHOUT THIS THE CONVERTED OBJECT SILENTLY VANISHES FROM HER PLAN.
+    # datetime_seam.py:119 draws a hard line between two states that both look "unset":
+    #     unit == "as_needed"  -> surfaces when Active is on. A real, usable state.
+    #     unit missing/empty   -> `return False` unconditionally. "Never-configured stays off",
+    #                             i.e. permanently invisible, with nothing to explain why.
+    # A Task carries no interval, so a straight conversion lands in the SECOND branch.
+    #
+    # June's use case (2026-07-18) is precisely why this matters: "a recurring is essentially a
+    # task... conversion is important because if the LLM miscategorises the type, I need to be
+    # able to see and verify it in the UI as it is entered, so I can fix it then." She converts
+    # BECAUSE the thing should recur — so producing a recurring that can never surface is the one
+    # outcome the feature must not have.
+    #
+    # `as_needed` is the honest default rather than a guessed cadence: spec §3 defines it as a
+    # recurring with NO schedule, entering the plan only when she toggles it Active, when capture
+    # adds it, or when a focus period names it. So the object is visible in Routines, inert until
+    # asked for, and the cadence stays hers to set. Active is deliberately NOT set here — a
+    # conversion should not push work into today's plan on its own.
+    if new_level == "RECURRING" and not _stored_values(after_type).get(INTERVAL_UNIT_PROP):
+        props[INTERVAL_UNIT_PROP] = AS_NEEDED
     if props:
         gsdo_objects.update(object_id, properties=props)
 

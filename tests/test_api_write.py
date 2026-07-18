@@ -445,3 +445,48 @@ def test_every_mutation_returns_the_same_envelope(space):
 def test_a_missing_object_is_a_lookup_error_not_a_silent_success(space):
     with pytest.raises(LookupError):
         api_write.set_title("nope-1", "X")
+
+
+def test_converting_a_task_to_recurring_defaults_the_cadence_to_as_needed(space):
+    """A converted Recurring must NOT be able to vanish from her plan.
+
+    `datetime_seam.py` draws a hard line: `as_needed` surfaces when Active is on, but a MISSING
+    interval unit returns False unconditionally — "never configured stays off", i.e. permanently
+    invisible with nothing on screen to explain why. A Task carries no interval, so a straight
+    conversion lands in that second branch.
+
+    June's use case is exactly why it matters: she converts BECAUSE the type was miscategorised.
+    Producing a recurring that can never surface is the one outcome the feature must not have.
+    `as_needed` is the honest default — a recurring with no schedule, entering the plan when she
+    asks for it rather than on a clock.
+    """
+    api_write.convert_type("task-1", "Recurring")
+    stored = api_write._stored_values(api_write._get_object("task-1"))
+    assert stored.get(api_write.INTERVAL_UNIT_PROP) == api_write.AS_NEEDED, (
+        "a converted recurring with no cadence would be permanently invisible"
+    )
+    # And it does NOT switch itself on — a conversion must not push work into today's plan.
+    assert not stored.get("Active")
+
+
+def test_conversion_does_not_overwrite_a_cadence_that_is_already_set(space):
+    """The default only fills a GAP. An interval already on the object is hers and must survive."""
+    # Seeded on the Task directly. A Task cannot be GIVEN an interval through `set_vals` —
+    # the property is not valid at that level — but it can CARRY one, which is exactly the
+    # state a Recurring→Task conversion leaves behind (spec §5: unshown, still stored).
+    fake_space._set_prop(space.objects["task-1"], api_write.INTERVAL_UNIT_PROP, "month")
+    api_write.convert_type("task-1", "Recurring")
+    after = api_write._stored_values(api_write._get_object("task-1")).get(api_write.INTERVAL_UNIT_PROP)
+    assert after == "month"
+
+
+def test_converting_a_recurring_away_and_back_keeps_her_cadence_not_the_default(space):
+    """The round-trip case. Spec §5 keeps unshown fields stored, so a Recurring→Task→Recurring
+    trip must come back with what she set, not be flattened by the gap-filler. `rec-1` is
+    seeded `as_needed` already, so this pins the mechanism rather than the value: the filler
+    must not fire when the round trip carried a unit home."""
+    fake_space._set_prop(space.objects["rec-1"], api_write.INTERVAL_UNIT_PROP, "month")
+    api_write.convert_type("rec-1", "Task")
+    api_write.convert_type("rec-1", "Recurring")
+    stored = api_write._stored_values(api_write._get_object("rec-1"))
+    assert stored.get(api_write.INTERVAL_UNIT_PROP) == "month"

@@ -337,6 +337,31 @@ def _bind_breadth(host):
     return 1                          # one specific interface (e.g. the Tailscale address)
 
 
+def _bind_name(host):
+    """A PLAIN-LANGUAGE name for a bind address.
+
+    June, 2026-07-18: "make it clear that it's now available on the wifi, and mesh is down — I
+    won't remember those routing numbers." Correct: an IP is not a fact she should have to decode
+    at the moment something has gone wrong. The warning has to say what HAPPENED, not where.
+
+    100.64.0.0/10 is the CGNAT range Tailscale assigns; that is how the mesh address is
+    recognised without hardcoding her specific one.
+    """
+    if host in ("0.0.0.0", "::", ""):
+        return "your wifi (and any other network this machine is on)"
+    if host.startswith("127.") or host in ("localhost", "::1"):
+        return "this laptop only"
+    try:
+        first, second = int(host.split(".")[0]), int(host.split(".")[1])
+        if first == 100 and 64 <= second <= 127:
+            return "the mesh (Tailscale)"
+    except (ValueError, IndexError):
+        pass
+    if ":" in host and host.lower().startswith("fd7a"):
+        return "the mesh (Tailscale)"
+    return host
+
+
 def _bind(port, handler):
     """Bind the first address in the preference list that works. Never fall back silently."""
     errors = []
@@ -349,13 +374,31 @@ def _bind(port, handler):
         if i > 0:
             first = _BIND_PREFS[0]
             print("")
-            print("  " + "!" * 68)
-            print(f"  !! FELL BACK to {host} — could not bind {first}")
-            print(f"  !!   {errors[0]}")
+            print("  " + "!" * 70)
+            print(f"  !!  {_bind_name(first).upper()} IS NOT AVAILABLE.")
+            print(f"  !!  Controlled Drift is running on {_bind_name(host)} instead.")
             if _bind_breadth(host) > _bind_breadth(first):
-                print("  !! THIS IS A WIDER BIND THAN INTENDED. Anything on the local network can")
-                print("  !! now reach this server, and it has no authentication.")
-            print("  " + "!" * 68)
+                print("  !!")
+                print("  !!  That is WIDER than intended: anything on that network can reach this")
+                print("  !!  server, and it has no password. Your task data includes medical and")
+                print("  !!  financial notes.")
+            if _bind_name(first).startswith("the mesh"):
+                # Walk her through it rather than leaving her to remember the commands.
+                # (June, 2026-07-18: "even walking me through troubleshooting would be good.")
+                print("  !!")
+                print("  !!  TO FIX IT:")
+                print("  !!    1. Check it:      tailscale status")
+                print("  !!    2. If logged out: tailscale up")
+                print("  !!    3. If it is not running, open the Tailscale app from your menu bar.")
+                print("  !!    4. Then restart this server:")
+                print("  !!         launchctl unload ~/Library/LaunchAgents/"
+                      "com.june.controlled-drift.server.plist")
+                print("  !!         launchctl load   ~/Library/LaunchAgents/"
+                      "com.june.controlled-drift.server.plist")
+                print("  !!")
+                print("  !!  Until then it still works — just on a wider network than you chose.")
+            print(f"  !!  (technical: could not bind {first} — {errors[0].split(': ', 1)[-1]})")
+            print("  " + "!" * 70)
             print("")
         return srv, host
     raise SystemExit(
