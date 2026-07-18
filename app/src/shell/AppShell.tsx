@@ -5,6 +5,8 @@ import { DetailOverlay } from '../components/detail/index.ts';
 import type { DetailCtx } from '../components/detail/index.ts';
 import { PickerPage } from '../components/panels/index.ts';
 import type { PanelCtx } from '../components/panels/index.ts';
+import type { TodayCtx } from '../components/today/index.ts';
+import { seedPeriods } from '../fixtures/index.ts';
 import { starfield } from '../theme/starfield.ts';
 import {
   AddScreen,
@@ -121,9 +123,33 @@ export function AppShell({ T, name, setTheme }: AppShellProps) {
     up({ tab: next });
   };
 
+  /**
+   * v4's `this` as the Today methods read it (Task 7). `periods` comes straight from the
+   * fixture rather than through `useAppState`, because nothing in Track A writes a period —
+   * the Focus editor that does is Task 9, and it will move this into the state bag then.
+   *
+   * `openDetail` and `goTab` are callbacks rather than `up` fields on purpose: `detail`,
+   * `returnFrom` and `tab` are shell-wide routing state, and putting them in `TodayUi` would
+   * let any component in the tab write them. See `components/today/types.ts`.
+   */
+  const todayCtx: TodayCtx = {
+    T,
+    graph: st.graph,
+    idx: st.idx,
+    plan: st.plan,
+    periods: seedPeriods,
+    ui: st.ui,
+    up: st.up,
+    apply: st.apply,
+    applyPlan: st.applyPlan,
+    flash: (msg: string) => st.apply({ graph: st.graph, toast: msg, ui: null, node: null }),
+    openDetail: (id: string) => st.up({ detail: id, returnFrom: 'today' }),
+    goTab: (t) => goTab(t),
+  };
+
   const body =
     tab === 'today' ? (
-      <TodayScreen T={T} plan={st.plan} />
+      <TodayScreen ctx={todayCtx} />
     ) : tab === 'add' ? (
       <AddScreen T={T} />
     ) : tab === 'map' ? (

@@ -1,8 +1,10 @@
-import type { Theme } from '@tokens';
-import type { Plan } from '../fixtures/index.ts';
-import { Placeholder } from './Placeholder.tsx';
+import { TodayPanel } from '../components/today/index.ts';
+import type { TodayCtx } from '../components/today/index.ts';
 
-/** Placeholder until Task 7 ports `todayPanel()` (~977) and everything under it. */
-export function TodayScreen({ T, plan }: { T: Theme; plan: Plan }) {
-  return <Placeholder T={T} name="Today" note={`${plan.date} · ${plan.blocks.length} blocks`} />;
+/**
+ * v4's Today tab. The screen is a thin mount: `TodayPanel` (v4 `todayPanel` ~977) owns the
+ * whole surface, and the context is assembled in the shell, where the state actually lives.
+ */
+export function TodayScreen({ ctx }: { ctx: TodayCtx }) {
+  return <TodayPanel ctx={ctx} />;
 }

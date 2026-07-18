@@ -1,0 +1,87 @@
+import { alpha } from '@tokens';
+import type { PlanArcStep } from '../../fixtures/index.ts';
+import { toggleArcStep } from '../../model/index.ts';
+import { TaskCheck } from '../atoms/index.ts';
+import type { TodayCtx } from './types.ts';
+
+export interface ArcStepProps {
+  ctx: TodayCtx;
+  step: PlanArcStep;
+  /** Address of the step inside the plan — see `toggleArcStep`. */
+  bandIndex: number;
+  itemIndex: number;
+  stepIndex: number;
+}
+
+/**
+ * v4 `arcStep(s,key,arc,i)` (~1099) — one step of a work block's arc.
+ *
+ * Three visual states, all carried by `s.state`:
+ *   · `done`  — struck through, `dimmer`
+ *   · `here`  — the current step: rose text, a rose left rail (`inset 2px 0 0`), a rose
+ *               left-to-right wash, medium weight and a rose text glow
+ *   · `ahead` — plain `dim`
+ *
+ * The wrapper stops click propagation so tapping a step does not also collapse the block
+ * (the block header is the toggle; the arc sits inside it).
+ *
+ * v4 wrote `C.rose+'24'` / `'04'` / `'73'` — hex alpha suffixes, transcribed here as `alpha()`
+ * calls at the same values (0x24=.141, 0x04=.016, 0x73=.451).
+ *
+ * The state change itself — including spec §14's "here" advance — lives in the pure
+ * `toggleArcStep` in `model/plan.ts`, not in this component.
+ */
+export function ArcStep({ ctx, step, bandIndex, itemIndex, stepIndex }: ArcStepProps) {
+  const C = ctx.T.c;
+  const here = step.state === 'here';
+  const done = step.state === 'done';
+
+  return (
+    <div
+      onClick={(e) => e.stopPropagation()}
+      style={{
+        display: 'flex',
+        alignItems: 'center',
+        gap: '9px',
+        padding: '3px 6px',
+        borderRadius: ctx.T.r.ctl,
+        fontSize: '12.5px',
+        lineHeight: 1.4,
+        ...(here
+          ? {
+              background: `linear-gradient(90deg,${alpha(C.rose, 0.141)},${alpha(C.rose, 0.016)} 70%)`,
+              boxShadow: 'inset 2px 0 0 ' + C.rose,
+            }
+          : {}),
+      }}
+    >
+      <button
+        onClick={(e) => {
+          e.stopPropagation();
+          ctx.applyPlan(toggleArcStep(ctx.plan, bandIndex, itemIndex, stepIndex));
+        }}
+        aria-label="mark done"
+        style={{
+          flex: '0 0 auto',
+          border: 'none',
+          background: 'none',
+          cursor: 'pointer',
+          padding: 0,
+          display: 'flex',
+        }}
+      >
+        <TaskCheck T={ctx.T} done={done} col={C.rose} size={14} />
+      </button>
+      <span
+        style={{
+          color: done ? C.dimmer : here ? C.rose : C.dim,
+          textDecoration: done ? 'line-through' : 'none',
+          fontWeight: here ? 500 : 400,
+          ...(here ? { textShadow: `0 0 11px ${alpha(C.rose, 0.451)}` } : {}),
+        }}
+      >
+        {step.text}
+      </span>
+    </div>
+  );
+}

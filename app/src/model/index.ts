@@ -44,6 +44,9 @@ export {
   TYPE_LABEL_FOR_LEVEL,
 } from './fields.ts';
 
+export { workItems, nearestProject, isDone, toggleArcStep } from './plan.ts';
+export type { PlanResult, PlanWorkItem } from './plan.ts';
+
 export {
   setVal,
   toggleMulti,

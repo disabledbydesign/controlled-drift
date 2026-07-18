@@ -2,7 +2,13 @@ import { useCallback, useMemo, useState } from 'react';
 import { defaultSchema, seed, seedPlan, seedStrategies } from '../fixtures/index.ts';
 import type { Plan } from '../fixtures/index.ts';
 import { applySchema, index } from '../model/index.ts';
-import type { DerivedSchema, Graph, GraphIndex, MutationResult } from '../model/index.ts';
+import type {
+  DerivedSchema,
+  Graph,
+  GraphIndex,
+  MutationResult,
+  PlanResult,
+} from '../model/index.ts';
 import type { ChipEditTarget } from '../components/rows/index.ts';
 import type { AppTab } from './tabs.ts';
 
@@ -108,6 +114,33 @@ export interface UiState {
    * writers; every other route leaves it null and the label falls back to "Back".
    */
   returnFrom: 'today' | 'add' | null;
+
+  // ── Today tab (Task 7) ──────────────────────────────────────────────────────
+  // v4 declares `focusExpanded:false`, `todayShape:'schedule'`, `priOrder:null`,
+  // `blocksOpen:new Set()` in its initial bag (v4:79); `heldOpen`, `chunked` and `ask` appear
+  // only via `up()`/`tset()` and are read with `||new Set()` / `||''` fallbacks. All are
+  // declared here because the bag is strictly typed, with v4's own fallbacks as defaults.
+  //
+  // v4's three membership sets are `Set` objects mutated through `tset(name,key)`. They are
+  // readonly records here for the same reason `collapsed` and `pickerExpanded` already are:
+  // `up()` merges into immutable state, and a `Set` mutated in place would not change
+  // reference, so React would not re-render.
+  /** Whether the focus-period slot at the top of Today is expanded. v4's `st.focusExpanded`. */
+  focusExpanded: boolean;
+  /** Which plan rows have their held-back list expanded, keyed by plan-entry key. */
+  heldOpen: Readonly<Record<string, true>>;
+  /** Which work blocks are checked off. v4's `st.chunked` — see `WorkBlock` on the naming. */
+  chunked: Readonly<Record<string, true>>;
+  /** Which work blocks have their arc expanded. v4's `st.blocksOpen`. */
+  blocksOpen: Readonly<Record<string, true>>;
+  /**
+   * User-reordered Priority ranking, or null for generator order. v4's `st.priOrder`.
+   * ⚠ Spec §14 leaves the backend source-of-truth for this ordering OPEN; this is v4's
+   * client-local reorder, unchanged, and nothing persists it.
+   */
+  priOrder: string[] | null;
+  /** Free-text "tell me what you need" box under Today's action row. v4's `st.ask`. */
+  ask: string;
 }
 
 const INITIAL_UI: UiState = {
@@ -134,6 +167,12 @@ const INITIAL_UI: UiState = {
   stratFilterOpen: false,
   confirmDelete: null,
   returnFrom: null,
+  focusExpanded: false,
+  heldOpen: {},
+  chunked: {},
+  blocksOpen: {},
+  priOrder: null,
+  ask: '',
 };
 
 /** What a toast carries. `seq` makes two identical messages in a row distinguishable. */
@@ -157,6 +196,12 @@ export interface AppState {
    * patch. The index rebuild is implicit in the graph swap (see the note above).
    */
   apply: (result: MutationResult) => void;
+  /**
+   * Apply a PLAN mutation (Task 7). The plan is not part of the graph — it references graph
+   * nodes by id — so it gets its own seam rather than being forced through `apply`. Same
+   * shape: new value in, toast raised the same way. See `model/plan.ts`.
+   */
+  applyPlan: (result: PlanResult) => void;
   dismissToast: () => void;
 }
 
@@ -171,8 +216,18 @@ function initialGraph(): Graph {
   };
 }
 
+/**
+ * The plan is cloned for the same reason the graph is: Task 7 edits the plan document
+ * directly (advance an arc step), and holding the module-level `seedPlan` by reference would
+ * let the running app mutate the fixture other tests import.
+ */
+function initialPlan(): Plan {
+  return structuredClone(seedPlan) as Plan;
+}
+
 export function useAppState(): AppState {
   const [graph, setGraph] = useState<Graph>(initialGraph);
+  const [plan, setPlan] = useState<Plan>(initialPlan);
   const [ui, setUi] = useState<UiState>(INITIAL_UI);
   const [toast, setToast] = useState<Toast | null>(null);
 
@@ -193,12 +248,15 @@ export function useAppState(): AppState {
     }
   }, []);
 
+  const applyPlan = useCallback((result: PlanResult) => {
+    setPlan(result.plan);
+    if (result.toast) {
+      const msg = result.toast;
+      setToast((prev) => ({ msg, seq: (prev?.seq ?? 0) + 1 }));
+    }
+  }, []);
+
   const dismissToast = useCallback(() => setToast(null), []);
 
-  // `plan` is cloned for the same reason the graph is: Task 7 edits plan blocks directly
-  // (check off an item, advance an arc step), and returning the module-level `seedPlan` by
-  // reference would let the running app mutate the fixture other tests import.
-  const plan = useMemo(() => structuredClone(seedPlan) as Plan, []);
-
-  return { graph, idx, schema, plan, ui, toast, up, apply, dismissToast };
+  return { graph, idx, schema, plan, ui, toast, up, apply, applyPlan, dismissToast };
 }
