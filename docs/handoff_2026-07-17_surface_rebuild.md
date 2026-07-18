@@ -1,100 +1,98 @@
-# Handoff — surface rebuild (2026-07-17, end of session)
+# Handoff — surface rebuild (updated 2026-07-18, mid-build)
 
-You are continuing a UI rebuild. **Read this before touching anything.** Branch: `feat/overlay-actionable`.
+You are continuing a UI rebuild plus a data-model cleanup that grew out of it. **Read this before touching anything.** Branch: `feat/overlay-actionable`.
 
-## What is being built
+**Read in this order:** this file → `docs/BUILD_DOC.md` (the project build doc — protocol, autonomy line, definition of done, live hazards) → `docs/superpowers/plans/2026-07-18-track-a-component-port.md` (the Track A plan) → `docs/api_contract_v2.md` (**including its two APPENDED sections, which correct earlier errors in the same file**).
 
-The whole Controlled Drift surface is being rebuilt from a design mockup. It replaces **two** live
-surfaces at once: `docs/overlay_daily.html` (the daily overlay) **and** `scripts/surface_template.html`
-+ `scripts/surface_serve.py` (the review/reorganize tree). Two servers and two token sets become one app.
+---
 
-**The owner's top requirement is extremely high fidelity.** She finetuned the design over a long
-period and is — correctly — afraid of losing details. When in doubt, transcribe rather than improve.
+## 1. What is being built
 
-## Three-way source of truth (memorise this)
+The whole Controlled Drift surface, rebuilt from a Claude Design mockup. It replaces **two** live surfaces: `docs/overlay_daily.html` **and** `scripts/surface_template.html` + `scripts/surface_serve.py`.
 
+**June's top requirement is fidelity.** She finetuned this design over a long period. When in doubt, transcribe rather than improve.
+
+### The three-way source of truth — memorise this
 | Question | Authority |
 |---|---|
-| How does it **look**? | `design/mockups/color-system.html` — the gallery. She tuned against it. |
-| What **data** exists? | `docs/review_reorganize_backend_spec.md` + `docs/spec_deltas_2026-07-16.md` |
-| How does it **behave / lay out**? | `design/mockups/review-reorganize-mobile-v4.html` |
+| How does it **look**? | `design/mockups/color-system.html` (the gallery). Trusted regions ONLY: `4a`, `4c`, `5a`, `5c`. Sections `1a`–`3c` are superseded explorations. |
+| What **data** exists? | `docs/review_reorganize_backend_spec.md` + `docs/spec_deltas_2026-07-16.md` + `AI_LAYER_SPEC.md` |
+| How does it **behave / lay out**? | `design/mockups/review-reorganize-mobile-v4.html` (v2 and v3 are byte-identical to each other; **v4 is the single reference**) |
 
-Consequence: v4 still renders an excitement picker, but the spec cut that field — **do not port it.**
+Consequence: v4 still renders an excitement picker, but the field is cut — **do not port it**.
 
-## State: done and committed
+---
 
-- `design/mockups/` — v4 (the single reference; v2 and v3 are byte-identical), the gallery, the DC runtime.
-- `design/tokens/tokens.ts` — reconciled two-theme token module. Gallery-canonical: 63 corrections
-  taken from it, ~40 tokens added for values v4 left inline. `RECONCILIATION.md` has the audit trail
-  and 11 ambiguities (8 defaulted with reasoning, 3 resolved by the owner).
-- `docs/api_contract_v2.md` — 38 endpoints (15 EXISTS / 13 CHANGE / 10 NEW), payload shapes, write-path
-  contract, four known gaps. **Read the two appended sections at the end** — they correct earlier errors.
-- `app/` — React 19 + Vite 8 + TypeScript. Verified running in both themes.
-- `app/src/fixtures/` — v4's fixtures as typed TS, **verified byte-identical** (JSON.stringify, key
-  order included). 5 goals / 46 nodes / 6 strategies / 3 plan blocks / 2 periods / 12 vocabularies.
-- Read-back fixes: 790 tests passing.
+## 2. State
 
-## The load-bearing build decisions — do not quietly reverse these
+### Track A — the port (`app/`, React 19 + Vite 8 + TS, mounts at `/app/`)
+Tasks 1–6 **done, each through an independent review gate**: atoms · model layer · shell (the wire-in point) · `row()` · `detail()` · structure tabs + picker + Map drill-in. **Task 7 (Today tab) in flight.** Remaining: 8 Add/Settings · 9 Focus editor · 10 desktop panes · 11 toast + orphan buckets + cross-tab search · **12 integration and live-verify (REQUIRED, not a test)**.
 
-1. **Styles stay INLINE STYLE OBJECTS reading from the token module.** Do NOT convert v4's 494 inline
-   styles into CSS classes or CSS variables. That translation is exactly where finetuned detail leaks.
-   The owner already gets one-file theme editing because the tokens are centralised. A class refactor
-   is safe only AFTER fidelity is locked, and it is not this task.
-2. **The new app mounts at `/app/`.** `overlay_daily.html` stays live and untouched at `/`. She uses it
-   daily; it comes down only when she judges the new one better.
-3. **Themes differ in SHAPE, not just colour.** v4 branches on `isHW()` at ~30 sites — checkbox
-   geometry, radii, mono-vs-sans chrome, `//` vs `✦` glyph prefixes. Treat these as real forks.
-4. **Object-type colour comes from the gallery legend** (`typeRamp` in tokens.ts), not v4's `TYPE` map.
-   Goal→Project→Task get a continuous pale-cyan→cyan→blue ramp because that IS the containment
-   hierarchy; Recurring and Strategy sit outside it. v4's map coloured TASK **green**, which collides
-   with the completion green used for done/steady/saved. Do not reintroduce it.
+The acceptance/token page is preserved at `#/check`.
 
-## Do NOT port
+### Track B — backend
+⚠ **A parallel thread already built spec §2 and §3.** Audit table in `BUILD_DOC.md` §8 — **read it before dispatching, or you will rebuild live work.** Done today: the write-log provenance work (below). In flight: access tags + `Side` rename.
 
-- `renderApp()` (~697), `header()` (~344), `tab()` (~357) — dead legacy path, not called by `renderVals()`.
-- The excitement picker — the field is cut.
+### The data-model side thread (grew out of one question about `Affective`)
+- **Field semantics** (`scripts/field_semantics.py`) — 53 fields, every entry **extracted and cited** from the specs, never authored. Two layers: repo defaults + June's overrides, resolved override-if-present, with the default and its citation always surviving. Surfaced at `describe_model.py`, the MCP write tools, `gsdo_objects`, and the drift skill.
+- **Provenance** — the weeding gate's `reasoning` no longer lands in `Context`; LLM authorship is stamped in the write log (`corrections_log`, renamed today from `plan_corrections_log`).
+- **Focus Period** — design recovered from four sources and migrated into `AI_LAYER_SPEC.md` §2. Nothing was undocumented; it was orphaned.
+- **Migrations** — 14 `Affective` values re-filed (7 left alone as genuine affect). Context cleanup in flight.
 
-## DO build
+---
 
-- **`toast()` is stubbed in v4** (`return null`; `flash()` sets the state and nothing renders it).
-  It is not decoration — once writes go live it becomes the **read-back confirmation**, the UI half of
-  this repo's "a good answer is not a saved object" discipline. Make it say what actually persisted.
-- **Orphan buckets** (owner explicitly confirmed). Catch-all sections for unparented objects — tasks
-  and recurrings with no project, workstreams with no parent, projects with no goal
-  (`scripts/review_surface.py:234-247`). Capture and weeding produce unfiled objects, and in a pure
-  Goal→Project→Task tree an unfiled task renders **nowhere**. Render only when non-empty.
-- **Cross-tab search** spanning Map + Routines + Strategies, showing which tab each hit is in. v4 splits
-  one tree into three tabs; the filter itself is unchanged (`Filter by title…`).
+## 3. Load-bearing decisions — do not quietly reverse
 
-## Explicitly declined by the owner — do not add
+1. **Inline style objects stay inline.** Do NOT convert v4's 494 inline styles to CSS classes or variables. That translation is where tuned detail leaks. CSS vars are a safe refactor only AFTER fidelity is locked.
+2. **Themes fork on SHAPE, not just colour** (~30 `isHW()` sites).
+3. **Object-type colour comes from the gallery legend** (`typeRamp`), never v4's `TYPE` map — which coloured TASK green, colliding with the completion green used for done/steady/saved.
+4. **The new app mounts at a SECOND route.** `overlay_daily.html` stays live until June judges the new one better.
+5. **Do NOT port v4's dead paths.** Removed on this basis: `renderApp`/`header`/`tab`, `typeSection` (defined once, never called), `menuStrip` (all 18 `menuFor:` assignments are `null`). An unwired component is the built-but-dead shape `BUILD_DOC` §3 exists to prevent.
+6. **Provenance and history go in the WRITE LOG, never on objects.** Applies to authorship stamps and to the gate's filing rationale.
+7. **The inherit control is TWO states** — inherited, or set here. An empty value on a set field is a normal, valid shape (*"if leaving the house isn't checked, it doesn't involve leaving the house"*), and needs no explanation. v4 renders exactly two branches.
+8. **Never write your own reasoning into her fields.** Filing rationale is process output; it belongs in a log.
 
-- A **data-health count line**. Rejected as stressful, and genuinely redundant: the orphan buckets only
-  render when non-empty, so their presence IS the signal. A count restates it as a standing score.
-- Notes-to-Claude, expand/collapse-all, inline primary field (chips cover it).
-- A **global hotkey** for quick capture. She hits hotkeys by accident and forgets bindings.
+---
 
-## Already in v4 — do not rebuild
+## 4. The failure patterns this build actually hit
 
-`hideInactive` (level-aware, strictly better than the old Hide-done checkbox) and the per-tab title
-filter. An earlier list wrongly claimed these were missing; three of its seven entries were wrong.
+Read these; each cost real time and all recurred.
 
-## Needs the owner / a live machine — DO NOT attempt unattended
+1. **A wrong doc becomes wrong code.** A token docstring claimed `disabled` covered "empty checkbox". It didn't — the audit trail sourced it from a text glyph and a chip border. An implementer trusted the docstring and rendered the most-repeated control visibly fainter than the gallery. Two steps, each internally consistent, only caught by checking the gallery.
+2. **Confident false assertions in durable comments.** Twice: a cited function (`filterMoveTree`) that does not exist in v4, and a claim that a code path was unreachable when v4 reaches it at line 747. Neither is typechecked or tested. **If you cannot verify a claim about v4, write "unverified".**
+3. **Negative results from unverified queries are not evidence.** `POST /spaces/{sid}/search` **silently returns a broken subset** — 99 objects from a space of 296. It produced two false claims to June (that she had no Strategy objects; that Focus Period was not a type). **Always use `gsdo_anytype.fetch_all_objects(sid)`.**
+4. **A filtered view read as a complete one.** `describe_model.py` showed only five types, hiding Focus Period, Page, Note and Bookmark. Three errors from that one omission. **Now fixed** — it discovers types.
+5. **Stale docs relayed as current.** Four of eight "built-but-dead" field claims from 2026-07-11 were stale by 2026-07-18. Re-verify before repeating.
+6. **Machine formats handed to a human.** A migration log shipped as JSONL for June to review; she cannot read it. **If a human is the audience, write a human format** — see `scripts/migration_report.py` and `scripts/semantics_report.py`.
 
-1. **Schema writes against her live Anytype space are human-gated.** Edit `build_*.py`; never run it.
-2. **The archive marker.** `archive_object` now requires a truthy archived marker on re-fetch. What the
-   live API actually returns after DELETE could not be determined from code. If it returns an object
-   with no marker of any name, **undo will now raise where it used to succeed.** Needs one live undo.
-3. **A latent bug this surfaced:** `gsdo_objects.create` dedups by name and returns an existing id
-   *without writing properties*. So committing a Focus Period whose name matches an existing one will
-   now 500 with field mismatches. That is correct behaviour, but it is a live change on a path she uses.
-   The honest fix is the create-vs-update seam (`docs/create_vs_update_design.md`), not a patch here.
+**The rule that keeps paying out:** *make the wrong thing impossible rather than documenting a rule someone must remember.* The index is derived from the graph so no call site can use a stale one; nav direction is derived during render so nothing can bypass it.
 
-## Parallel work
+---
 
-Another agent thread works this same branch (persistence / completion rail, `scripts/server.py`,
-`scripts/daily_plan.py`). **Commit only your own files.** Do not revert or "clean up" theirs.
+## 5. Do NOT do these
 
-## Parked, not to be acted on
+- **Do not run anything that writes to her live Anytype space** without explicit authorisation for that specific change. Editing `build_*.py` is the agent's job; running it is not.
+- **Do not add a thirteenth log.** Route new signals through an existing one (`corrections_log` takes `kind, before, after`).
+- **Do not invent field rationale.** Undesigned stays undesigned — a fabricated rationale beside genuine cited ones is worse than an obvious gap.
+- **Do not over-explain absence.** A field awaiting design is not a defect.
+- **Do not use one concrete example in an LLM-facing field description** — June's observation: the model will replicate your example into her real data.
+- **Do not act on `docs/ux_consistency_review_2026-07-17.md`.** Parked candidates; every item is her call, after the port.
 
-`docs/ux_consistency_review_2026-07-17.md` — a candidate list of UI inconsistencies. Every item is the
-owner's call. Nothing there is decided. Do not implement from it.
+---
+
+## 6. Needs June
+
+- **Two review sheets await her notes:** `docs/field_semantics_review.md` (she has annotated it — **do not overwrite**) and `docs/affective_migration_2026-07-18_review.md`.
+- **Design-vs-practice divergences on Focus Period**, hers to judge: the "a period can be MORE, not just less" reframe she asked for has no live use (all 4 availability notes describe reductions; `Workday end` is empty on all 7); and the design assumes week-long stretches while 4 of 7 live periods span a single day, including one named "Week of Jul 14".
+- **Accessibility:** the round checkbox is a 15px target, the edit chip ~18px. Faithful to v4, well under the 44px guideline. She likes more accessibility but is wary of redesign scope — decide deliberately, after the port, on the running app.
+- **Hardware detail pane** sits at 96% opacity so Map text reads through faintly. The gallery's own token value.
+
+---
+
+## 7. Environment gotchas that cost real time
+
+- `agent-browser screenshot` **hangs indefinitely** — reproduced at the raw CDP layer on a blank page. Environmental. **Do not debug it.** Use `cd app && node scripts/shot.mjs "map,today" celestial,hardware`. agent-browser's DOM reads, clicks and computed-style reads all work.
+- A Vite dev server started as a **tracked** background command gets killed between turns. Start it detached: `cd app && nohup npx vite --port 5173 > /tmp/vite.log 2>&1 & disown`.
+- `vite.config` sets `globals: false`, so Testing Library's auto-cleanup never registers — call `afterEach(cleanup)` explicitly or renders accumulate and every `getByText` fails.
+- `~/.claude/skills/drift/SKILL.md` is **not version-controlled**; today's field-routing addition lives on one machine.
+- `import cd_mcp_server` fails (no `mcp` module) in agent environments — the MCP `field_meaning` tool is **unverified by execution**.
