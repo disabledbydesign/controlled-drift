@@ -2,6 +2,19 @@
 
 > **For agentic workers:** implement this plan task-by-task via our build-loop — fresh subagent per task, per-task review, final whole-branch review (the `subagent-driven-development` pattern). Steps use checkbox (`- [ ]`) syntax for tracking.
 
+> **STATUS: BUILT + REVIEWED + VERIFIED — 2026-07-18.** All 7 tasks committed (`fc06cc3`, `e4e29bd`,
+> `c6bdcf5`, `64789c9`, `1d3447c`, `d293785`; plan/design `6c82377`). Built by sonnet/haiku subagents in
+> ordered chains, each diff reviewed. Schema flag live-confirmed on the real Recurring type. Cross-family
+> review (GitHub Models gpt-4o/gpt-4o-mini) found no correctness bugs. Render-confirmed via June's REAL
+> morning plan (2026-07-18): recurrings surface as checkoffable rows (dishes / clean kitchen / laundry);
+> the persisted re-injection rows share that exact `synthetic_recurring_row` shape.
+> **Two known follow-ups (not blockers):** (1) `build_context`'s rollover-glue (`tasks += extra_rec`,
+> `rollover_ids` union) has no dedicated unit test — it's live-drive-verified and both helpers are
+> unit-tested; a real test needs heavy/brittle mocking, deferred. (2) No overlay UI yet to TOGGLE
+> `Fixed appointment` — schema + backend logic are ready; the control is the UI thread's (folded into the
+> backend spec §2). A separate parked thread: the daily-plan focus logic backgrounds some time-sensitive
+> admin + splits household-chore grain (observed 2026-07-18; June parked it).
+
 **Goal:** Make unfinished things keep surfacing until done — silently — and make a recurring "done" durable so a finished chore is never mislabeled "carried over."
 
 **Architecture:** There is ONE rail — `completion_log`, the durable per-day record of what June actually finished. Real-task completions already write to it; this plan routes recurring + as-needed completions through the same log, then reads that real state in rollover instead of guessing from cadence. Two behaviors ride the one rail: **persist** (an unfinished item stays on the plan until done — one-off tasks already do this via `rollover_ids`; missed non-appointment recurrings get re-injected daily) and **wait-for-cadence** (a `Fixed appointment` recurring, e.g. weekly therapy, that is missed returns on its own schedule, never nagging daily). Whether an item comes back tomorrow is decided by its *source* (the active pool for tasks, the recurrence cadence for recurrings) plus the completion log — not by a separate mechanism per type. The LLM's "decide what carries over" narration is removed; persistence becomes a plain deterministic rule.
