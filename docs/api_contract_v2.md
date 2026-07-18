@@ -1021,3 +1021,33 @@ isInactive(n){ const v=n.vals||{}; switch(n.level){
 
 3. **Data-health line.** `review_surface.py:263-268` — counts of orphan tasks, orphan recurrings,
    projects with no goal, workstream total. One line, pairs with the buckets.
+
+---
+
+# Fixture extraction notes — 2026-07-17 (Track A)
+
+v4's fixtures were extracted to `app/src/fixtures/` and verified byte-identical to the mockup
+(evaluated in Node, compared via `JSON.stringify`, key ordering included).
+
+**Important distinction for the backend track:** the fixtures are authoritative for **structure**
+(which keys exist, how objects nest, what the plan/period/tree shapes are). They are NOT
+authoritative where the mockup was hand-written loosely. Four such places — do not copy these
+into the API:
+
+1. **`access` is declared `multi` in the schema but stored as a bare string in the data**
+   (`access:'Involves-leaving-house'`, not an array). Same for `dow` on recurrings (`dow:'Sat'`).
+   Anytype multi_select returns **arrays** — the API must return arrays, and the UI must accept
+   both during the transition. Typed `string | string[]` in the fixtures for that reason.
+2. **`blockMin:'60'` is a string** while every other numeric value is a number (`count:1`,
+   `chunkMin:90`). The API should return a number.
+3. **`daysOn` is `''` (string) while `daysOff` is an array.** Per spec §17, `days_on` is stubbed
+   and not a committed field — leave OPEN, but do not model it as a string.
+4. **`r-therapy` carries `source:'calendar'`, which no schema control declares.** This is the
+   spec §15 calendar-sourced recurring appearing ahead of its schema entry — expected, not a bug.
+
+**Two structural notes:**
+- There are **12** relation vocabularies, not 13 (an earlier count was wrong).
+- The `controls` tuple's 4th slot is overloaded: for `select` it is a relation key
+  (`['select','Engagement','engagement','proj']`), for `recur` it is a second *value* key
+  (`['recur','Repeats','count','unit']`). Disambiguated by `kind`. Any schema endpoint must
+  preserve this exactly or every picker breaks.
