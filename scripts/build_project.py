@@ -10,7 +10,6 @@ def build_project():
     p_reaching    = g.ensure_property("Reaching for", "text")   # reused from Goal
     p_deadline    = g.ensure_property("Deadline", "date")
     p_parent      = g.ensure_property("Parent project", "objects")
-    p_excitement  = g.ensure_property("Excitement level", "number")
     p_docs        = g.ensure_property("Relevant docs", "text")
     p_affective   = g.ensure_property("Affective", "text")   # capacity signal, free text (guard #3: never a scalar)
     p_barriers    = g.ensure_property("Barriers", "text")     # queryable struggle-blocks (§10 stuck-support storage)
@@ -52,9 +51,17 @@ def build_project():
     p_arc_why     = g.ensure_property("Arc position rationale", "text")
     key = g.ensure_type("Project", "Projects",
                         [p_goal_link, p_description, p_reaching, p_deadline,
-                         p_parent, p_excitement, p_docs, p_affective, p_barriers,
+                         p_parent, p_docs, p_affective, p_barriers,
                          p_context, p_engagement, p_eng_notes, p_side, p_block_chunk,
                          p_depends, p_arc_why])
+    # Retire Excitement level (cut from the data structure; it was never wired into selection).
+    # ensure_type/link_properties_to_type only ADD — they never drop a field a prior run linked,
+    # so removal needs its own call. The property definition + any stored values are untouched;
+    # this only unlinks it from Project's field list. find_property (not ensure_property) — a
+    # look-up, not a get-or-create: nothing to unlink on a space where it was never made.
+    retired_keys = [p["key"] for p in (g.find_property("Excitement level"),) if p]
+    type_obj = g.find_type("Project")
+    g.unlink_properties_from_type(type_obj["id"], retired_keys)
     print(f"[ok] Project type ready: key={key}")
     return key
 

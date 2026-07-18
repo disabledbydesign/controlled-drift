@@ -36,9 +36,9 @@ SKIP_NAMES = {"Created by", "Creation date", "Last opened date", "Last modified 
 PRIORITY = ["Task status", "Project status", "Goal status", "Engagement", "Goal engagement",
             "Side", "Done", "Due date", "Scheduled", "Deadline", "Horizon",
             "Interval unit", "Interval count", "Day of week", "Time of day", "Day of month",
-            "Frequency", "Has target", "Target",
+            "Frequency",
             "Context", "Description", "Affective", "Reaching for", "Resolution condition",
-            "Barriers", "Blocked on", "Needs clarifying", "Excitement level", "Duration min",
+            "Barriers", "Blocked on", "Needs clarifying", "Duration min",
             "Duration source", "Access conditions", "Access notes", "AI autonomous",
             "Depends on", "Relevant docs", "Arc position rationale", "Engagement notes",
             "Last surfaced"]

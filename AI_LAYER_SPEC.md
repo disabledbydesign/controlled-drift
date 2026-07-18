@@ -123,7 +123,7 @@ A discrete body of work serving one or more Goals. Nestable via `parent_project`
 | `engagement_notes` | text | **Canonical, open-schema pair for `engagement`.** Holds the situated specifics the select can't: thresholds ("Backburner: revisit after surgery recovery"), cadence ("Steady: ~30min daily"), a deadline ("due July 1"), or the situated intensity/hyperfixation context that is no longer a select value (post-2026-07-16 retirement). The select is filterable; this field is authoritative about what it means *for this project right now*. |
 | `deadline` | date | Optional. Only when real. |
 | `parent_project` | objects-relation | Optional. Enables nesting / sub-routes. |
-| `excitement_level` | number 1–5 | Optional. Always displayed and confirmed as "X out of 5," never a bare number. ADHD motivation is interest-driven — excitement is a valid signal (§7). AI can read it from context rather than asking; shifts over time. |
+| ~~`excitement_level`~~ | ~~number 1–5~~ | ⛔ **RETIRED 2026-07-17.** Never wired into selection; June cut it rather than carry a dead field. The *signal* it was meant to carry is not lost — it lives in Project `engagement` (`Hyperfixation` / `Sprint` / `Steady` / `Open` / `Backburner`), which is read by the planner. §7's rationale still stands; only the stored scalar is gone. Provenance: `docs/review_reorganize_backend_spec.md` §10. |
 | `relevant_docs` | text | Filepaths, directory paths, or document locations relevant to this project. AI reads these before working on project tasks. Populated by the weeding gate when a project references files or external systems. |
 | `affective` | **capacity signal** (see below) | The emotional charge of this project. **Not a scalar** — modeled as a capacity signal: open text, marked unstable, may hold multiple signals at once. See "Affective weight is a constellation" below. |
 | `barriers` | text | Same as Goal's `barriers`: the strategic/decisional struggle blocking this project, held + queryable for pattern-finding. Optional; AI-proposed from articulated struggle. |
@@ -157,7 +157,10 @@ A step-trajectory from task breakdown (§8c) produces de facto sub-tasks without
 
 **Household tasks are real labor, woven in** by `access` (leaving-house tasks batch; lying-down tasks surface on low-capacity days alongside project work). Not a second-class list.
 
-#### Recurring *(custom Anytype type — covers Practices and Routines)*
+#### Recurring *(custom Anytype type — recurring actions on a cadence)*
+<!-- Heading was "covers Practices and Routines"; that distinction was retired 2026-07-16/17 — see the note under the field table. -->
+
+> **Not to be confused with Strategy.** A **Recurring** is a recurring *action you do* (water the plants, pay bills). A **Strategy** is a behavioral *rule for how the AI plans* ("when low energy, pick one small win"). Different types, different jobs — don't merge them.
 
 When recurring items mix into the Task list, the list looks enormous and nothing feels done. Julia Cordero found this was why her prior system failed (she was "literally thinking of practices and mindsets as tasks"). A separate type lets the AI surface them apart from actionable one-off Tasks.
 
@@ -166,13 +169,17 @@ When recurring items mix into the Task list, the list looks enormous and nothing
 | `name` | text | |
 | `interval_unit` | select | `day` / `week` / `month` / `as_needed` — replaces the old `frequency` (Daily/Weekly/As-needed). The general interval model subsumes all prior cases. |
 | `interval_count` | number | N in "every N days/weeks/months." Default 1. `day/1` = daily; `day/3` = every 3 days; `week/1 + day_of_week` = weekly on those days. |
-| `has_target` | bool | True = Practice (track against a target). False = Routine (just check off). |
-| `target` | text | Optional; only if `has_target`. "3x/week." |
+| ~~`has_target`~~ | ~~bool~~ | ⛔ **RETIRED 2026-07-16/17.** Was: True = Practice (track against a target), False = Routine. See the Practice/Routine note below the table. |
+| ~~`target`~~ | ~~text~~ | ⛔ **RETIRED 2026-07-16/17.** Was: optional target string, "3x/week." |
 | `day_of_week` | multi-select | Optional. Mon–Sun. Weekly anchor: set only for items pinned to specific day(s) — e.g. weekly therapy (Tuesday). Empty for un-anchored daily routines. |
 | `time_of_day` | text | Optional. Clock time "HH:MM". When set, the deterministic scheduler treats this as a **fixed anchor** the day's flexible tasks flow around. |
 | `duration_estimate` | number (min) | Optional. Reuses the Task duration property. Needed for a time-anchored item so the scheduler knows the block length. |
 | `project` | objects-relation | Optional. Links to the goal/project it serves. |
 | `context` | text | Free text. |
+
+> ⛔ **Practice vs. Routine RETIRED 2026-07-16, reaffirmed 2026-07-17.** `has_target` / `target` are deprecated. **A recurring item is defined by its interval (`{unit, count}`) alone** — no Practice-vs-Routine flag, no target string. The distinction was briefly reinstated when reframed in plain language, then cut again: it gives the user nothing actionable, because the interval already encodes frequency and **nothing ever read `target`** (no adherence or streak tracking exists or is planned). Ignore any legacy values in the space — they are harmless and no reader looks at them. If per-target adherence tracking is ever wanted, that is a *new* feature to spec, not a revival of this flag.
+> **The one axis that stays** is scheduled vs. `as_needed` (the `interval_unit`) — whether an item auto-populates on a cadence or only when invoked. That is a *scheduling* choice, unrelated to the retired practice/routine idea.
+> Provenance: `docs/spec_deltas_2026-07-16.md` §1; `docs/review_reorganize_backend_spec.md` §2.
 
 *Note: `frequency` (select: Daily/Weekly/As-needed) was the v1-prototype field; replaced by the interval model (`interval_unit` + `interval_count`) built in session 7. The old field may still exist in the Anytype space as a legacy property — ignore it when building. `build_recurring.py` creates the interval fields idempotently.*
 
@@ -294,9 +301,11 @@ The system will surface things we haven't thought of yet. Expected, not a failur
 
 ## 7. Excitement, hyperfixation, and the deference problem
 
+> ⚠ **Field retired, reasoning retained (2026-07-17).** The stored `excitement_level` scalar (1–5) is **cut** — it was never wired into selection. **This section is still live**: the design rationale below is not superseded, and the dynamics it describes still govern how the planner behaves. The signal is now carried by Project **`engagement`** (`Hyperfixation` / `Sprint` / `Steady` / `Open` / `Backburner`) plus `affective`, both of which the planner already reads. Read "excitement" below as *that* signal, not as a stored 1–5 number. Provenance: `docs/review_reorganize_backend_spec.md` §10.
+
 ADHD motivation is interest- and passion-driven, not importance-driven (the INCUP heuristic — Interest, Challenge, Urgency, Passion — validated in `EVAL_adopt_adapt_build.md`). Excitement is a valid signal. Hold two dynamics at once:
 
-- **Work with excitement.** High `excitement_level` on a Project → surface its tasks. Hyperfocus is leverage.
+- **Work with excitement.** A Project marked `Hyperfixation` or `Sprint` → surface its tasks. Hyperfocus is leverage.
 - **Surface neglected priorities** via the Goal→Project chain: if Job Search (`reaching_for` = "material survival") is untouched 3 days while GSDO is the hyperfixation, the AI offers awareness — "Job Search has a deadline and you said it's about survival; weave one task in?" An offer, not a scold.
 - **Continually deferred tasks** need specific strategies – for example, when household chores or life tasks continue to not get done day after day, or even week after week, June needs help finding ways to help overcome EF – but these strategies are not yet fully defined. 
 
@@ -325,7 +334,7 @@ AI proposes a step-trajectory so June needn't enumerate. (1) Living/re-runnable 
 A Goal served by multiple Projects: which avenue gets this week's energy? Depends on finances, recovery, apps-in-flight, energy — and June keeps forgetting/reinventing the decision. Arguably the most painful problem alongside the capacity picker; it's the goal-level "what do I do now," and what `reaching_for` on Goals exists to enable. **Approach:** AI reads the Goal's `reaching_for` + linked Projects' `context` + situational context, proposes a prioritization with reasoning, June redirects. Framed as a read, not a directive.
 
 ### 8e. Capacity picker — "what do I do right now?" *(design from what we have)*
-Assemble a day/week from parameters + current state + alignment + errand-batching + rest, without a single priority scalar. Julia re-sorts by *why she's procrastinating today* (the chosen axis = a diagnosis of today's friction). Julia's full axis spec probably isn't coming — design from: duration, embodiment, affective (the constellation signal), excitement, ai_autonomous, + the FeelingSignal composite (§4). **Audit `feeling_signal_processor.py` and `task_intensity_resolver.py` before porting (§4 caveat).** Include the §7 deference protocol and the learned capacity-surface amount (§4).
+Assemble a day/week from parameters + current state + alignment + errand-batching + rest, without a single priority scalar. Julia re-sorts by *why she's procrastinating today* (the chosen axis = a diagnosis of today's friction). Julia's full axis spec probably isn't coming — design from: duration, embodiment, affective (the constellation signal), engagement (which absorbed the retired `excitement_level` — see §7), ai_autonomous, + the FeelingSignal composite (§4). **Audit `feeling_signal_processor.py` and `task_intensity_resolver.py` before porting (§4 caveat).** Include the §7 deference protocol and the learned capacity-surface amount (§4).
 
 ### 8f. Spatial-time view *(confirmed cheap build; disc is v1, timeline is v2)*
 Time as space: proportional duration blocks; a shrinking-disc countdown. June: "I need that desperately." `vis-timeline` for the timeline; ~30 lines of SVG for the disc. The expensive part is the AI planning logic we own regardless. **Caution:** must feel like a tool June holds, not a clock watching her (guard #2). **v1 scope:** the shrinking-disc countdown only (dopamine affordance — see §9). Full vis-timeline is v2. **To design:** surface (embedded in Anytype dashboard vs. standalone); chat-stream integration.

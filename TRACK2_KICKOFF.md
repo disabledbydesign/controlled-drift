@@ -76,6 +76,8 @@ Read, in order: `AI_LAYER_SPEC.md` §0 (why) → §2 (data model) → §3 (the f
 - `gsdo_location_mode` (select) — test artifact, wrong format (spec wants multi-select `embodiment`), ignore
 
 **Properties still to create** (per `AI_LAYER_SPEC.md §2`):
+
+> 📌 *Historical record — this list is as-of the kickoff and is no longer current. Three properties below were later **retired**: `excitement_level` (2026-07-17), `has_target` and `target` (2026-07-16/17). Do not build them. `AI_LAYER_SPEC.md` §2 is the live schema; `docs/review_reorganize_backend_spec.md` carries the current deltas.*
 - **Goal:** `reaching_for` (text), `horizon` (select: Long-term / Medium-term / Short-term), `status` (select: Active / Parked / Achieved), `context` (text)
 - **Project:** `goal_link` (objects), `reaching_for` (text), `status` (select: Active / Parked / Inactive), `deadline` (date), `parent_project` (objects), `excitement_level` (number), `affective` (text), `relevant_docs` (text — added session 4), `context` (text)
 - **Task additions:** `blocked_on` (text), `affective` (text), `embodiment` (multi-select: Lying-down / Seated / Moving / Requires-leaving-house), `ai_autonomous` (checkbox), `relevant_docs` (text — filepaths/dirs the AI reads for this task; added session 4), `context` (text)

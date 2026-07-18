@@ -7,7 +7,7 @@ import gsdo_anytype as g
 EXPECTED = {
     "Goal":      ["Reaching for", "Horizon", "Goal status", "Barriers", "Context"],
     "Project":   ["Goal link", "Description", "Reaching for", "Project status",
-                  "Deadline", "Parent project", "Excitement level", "Relevant docs",
+                  "Deadline", "Parent project", "Relevant docs",
                   "Affective", "Barriers", "Context", "Depends on", "Arc position rationale"],
     "task":      ["Duration min", "Needs clarifying", "Task status", "Blocked on", "Affective",
                   "Access conditions", "Access notes", "AI autonomous", "Last surfaced", "Scheduled",
@@ -19,7 +19,7 @@ EXPECTED = {
 
 # Guard-critical formats (guard #3: capacity/affect signals must NEVER be scalars).
 # Linkage alone wouldn't catch a property accidentally created with the wrong format.
-GUARD_FORMATS = {"Affective": "text", "Excitement level": "number"}
+GUARD_FORMATS = {"Affective": "text"}
 
 def verify():
     sid = g.get_space_id()
