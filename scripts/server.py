@@ -7,7 +7,9 @@ appears the moment June opens it, and two slower writes (refresh, negotiate) tha
 LLM and re-cache — each routed through the learning logs so live negotiation data is kept.
 
 Routes:
-  GET  /                serve the overlay (docs/overlay_daily.html)
+  GET  /                serve the overlay (docs/overlay_daily.html) — June's daily surface, untouched
+  GET  /app/*           serve the NEW surface's built bundle (app/dist) — runs ALONGSIDE "/"
+  GET  /api/schema      relation vocabularies (live) + per-level controls/notes + field semantics
   GET  /api/plan        the cached daily plan (JSON) — instant, no LLM
   GET  /api/map         orient_map.render_map(...) verbatim (text) — deterministic, no LLM
   GET  /api/actions     the variable button schema (JSON)
@@ -27,7 +29,7 @@ Routes:
 Run:  python3 scripts/server.py   (then open http://localhost:5050)
 """
 import sys, os, json, threading
-from urllib.parse import urlparse, parse_qs
+from urllib.parse import urlparse, parse_qs, unquote
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 
 sys.path.insert(0, os.path.dirname(__file__))
@@ -53,6 +55,7 @@ import chunk_log
 import block_duration
 import gsdo_anytype as g
 import cd_paths
+import api_schema
 
 # The LLM backends the overlay can switch between live (mirrors plan_generate's accepted set).
 # June changes this from the gear panel without restarting; the choice persists in settings.json.
@@ -302,6 +305,20 @@ PORT = int(os.environ.get("CD_PORT", "5050"))   # override for a sandboxed/secon
 OVERLAY_HTML = os.path.join(os.path.dirname(__file__), "..", "docs", "overlay_daily.html")
 PROJECT_NAME = "Build Controlled Drift"  # the map's root project
 
+# The new surface's built bundle. Mounted at /app/ (Vite's `base` is '/app/') so it runs
+# ALONGSIDE the old overlay at "/" rather than replacing it.
+APP_DIST = os.path.join(os.path.dirname(__file__), "..", "app", "dist")
+APP_MIME = {
+    ".html": "text/html; charset=utf-8", ".js": "text/javascript; charset=utf-8",
+    ".mjs": "text/javascript; charset=utf-8", ".css": "text/css; charset=utf-8",
+    ".json": "application/json", ".map": "application/json",
+    ".svg": "image/svg+xml", ".png": "image/png", ".jpg": "image/jpeg",
+    ".jpeg": "image/jpeg", ".gif": "image/gif", ".ico": "image/x-icon",
+    ".webp": "image/webp", ".woff": "font/woff", ".woff2": "font/woff2",
+    ".ttf": "font/ttf", ".txt": "text/plain; charset=utf-8",
+    ".webmanifest": "application/manifest+json",
+}
+
 
 class Handler(BaseHTTPRequestHandler):
     # --- small response helpers ---------------------------------------------
@@ -471,7 +488,60 @@ class Handler(BaseHTTPRequestHandler):
             self._send(200, {"stream": stream, "entries": session_store.receipt_entries(stream)})
             return
 
+        if urlparse(self.path).path == "/api/schema":
+            # The whole form/picker/chip/dropdown layer of the new surface is generated from
+            # this. Option vocabularies are read LIVE from Anytype (backend spec §16), so a
+            # failure must be visible: a 500 lets the client fall back to its last-known
+            # vocabulary, while a stubbed 200 would render a silently-wrong form.
+            try:
+                self._send(200, api_schema.build_schema())
+            except Exception as e:
+                self._send(500, {"error": f"schema read failed: {e}"})
+            return
+
+        if self.path == "/app" or self.path.startswith("/app/"):
+            self._serve_app(urlparse(self.path).path)
+            return
+
         self._send(404, {"error": f"no route {self.path}"})
+
+    # --- the new surface's built bundle --------------------------------------
+
+    def _serve_app(self, path):
+        """Serve `app/dist/` at /app/. The OLD overlay stays at `/` — June uses it daily and
+        the new surface comes up alongside it, not in place of it (BUILD_DOC §2: retiring a
+        live surface is her judgement, not a build step)."""
+        # Percent-decode BEFORE the containment check, never after: `%2e%2e` must be resolved
+        # into `..` and then rejected, not silently treated as an odd filename.
+        rel = unquote(path[len("/app"):]).lstrip("/") or "index.html"
+        root = os.path.realpath(APP_DIST)
+        target = os.path.realpath(os.path.join(root, rel))
+        # Containment check: http.server's own translate_path is not in use here, so traversal
+        # is guarded explicitly. os.path.realpath resolves `..` AND symlinks before comparing.
+        if target != root and not target.startswith(root + os.sep):
+            self._send(403, {"error": "forbidden"})
+            return
+        if not os.path.isfile(target):
+            # SPA fallback: an unknown /app/... path serves index.html so client-side routing
+            # (and a hard reload on a sub-path) works. A missing BUILD is a different thing and
+            # must not masquerade as a route miss.
+            target = os.path.join(root, "index.html")
+            if not os.path.isfile(target):
+                self._send(404, {"error": "app bundle not built — run `cd app && npx vite build`"})
+                return
+        ctype = APP_MIME.get(os.path.splitext(target)[1].lower(), "application/octet-stream")
+        with open(target, "rb") as f:
+            body = f.read()
+        self.send_response(200)
+        self.send_header("Content-Type", ctype)
+        self.send_header("Content-Length", str(len(body)))
+        # Vite hashes asset filenames, so assets are immutable; index.html must never be cached
+        # or a rebuild would keep serving the old bundle.
+        self.send_header("Cache-Control",
+                         "no-store" if target.endswith("index.html")
+                         else "public, max-age=31536000, immutable")
+        self.end_headers()
+        self.wfile.write(body)
 
     # --- POST ---------------------------------------------------------------
 

@@ -121,6 +121,96 @@ def test_get_manifest(live_server):
     assert manifest["display"] == "standalone" and manifest["short_name"] == "Drift"
 
 
+def test_get_schema_route(live_server, monkeypatch):
+    base, _ = live_server
+    monkeypatch.setattr(server.api_schema, "build_schema",
+                        lambda: {"relations": {"side": {"label": "Side", "options": ["Work"]}},
+                                 "controls": {"TASK": []}, "notes": {"TASK": []},
+                                 "fields": {"TASK": {}}, "levelTypes": {"TASK": "Task"}})
+    status, body = _get(base, "/api/schema")
+    assert status == 200
+    payload = json.loads(body)
+    assert payload["relations"]["side"]["options"] == ["Work"]
+    assert set(payload) >= {"relations", "controls", "notes", "fields"}
+
+
+def test_get_schema_failure_is_a_visible_500_not_a_stub(live_server, monkeypatch):
+    base, _ = live_server
+
+    def boom():
+        raise RuntimeError("anytype unreachable")
+    monkeypatch.setattr(server.api_schema, "build_schema", boom)
+    try:
+        _get(base, "/api/schema")
+        assert False, "expected 500"
+    except urllib.error.HTTPError as e:
+        assert e.code == 500 and "anytype unreachable" in e.read().decode()
+
+
+# --- the new surface's bundle at /app/ --------------------------------------
+
+@pytest.fixture
+def app_dist(tmp_path, monkeypatch):
+    d = tmp_path / "dist"
+    (d / "assets").mkdir(parents=True)
+    (d / "index.html").write_text("<!DOCTYPE html><div id=root></div>")
+    (d / "assets" / "index-abc123.js").write_text("console.log('new surface')")
+    (d / "assets" / "index-abc123.css").write_text(":root{--x:1}")
+    (tmp_path / "secret.txt").write_text("June's health data")
+    monkeypatch.setattr(server, "APP_DIST", str(d))
+    return d
+
+
+def test_app_root_serves_index(live_server, app_dist):
+    base, _ = live_server
+    status, body = _get(base, "/app/")
+    assert status == 200 and "id=root" in body
+
+
+def test_app_serves_hashed_assets_with_correct_mime(live_server, app_dist):
+    base, _ = live_server
+    with urllib.request.urlopen(base + "/app/assets/index-abc123.js", timeout=5) as r:
+        assert r.status == 200
+        assert r.headers["Content-Type"] == "text/javascript; charset=utf-8"
+        assert "new surface" in r.read().decode()
+    with urllib.request.urlopen(base + "/app/assets/index-abc123.css", timeout=5) as r:
+        assert r.headers["Content-Type"] == "text/css; charset=utf-8"
+
+
+def test_app_unknown_path_falls_back_to_index(live_server, app_dist):
+    base, _ = live_server
+    status, body = _get(base, "/app/review/some-id")
+    assert status == 200 and "id=root" in body
+
+
+def test_app_refuses_path_traversal(live_server, app_dist):
+    base, _ = live_server
+    # urllib normalizes ".." in the path, so the traversal is sent url-encoded.
+    for path in ("/app/%2e%2e/secret.txt", "/app/..%2fsecret.txt", "/app/a/%2e%2e/%2e%2e/secret.txt"):
+        try:
+            with urllib.request.urlopen(base + path, timeout=5) as r:
+                assert False, f"{path} was served ({r.read()[:40]!r}) instead of refused"
+        except urllib.error.HTTPError as e:
+            assert e.code == 403, f"{path} -> {e.code}, expected 403"
+
+
+def test_old_overlay_still_served_at_root_alongside_the_app(live_server, app_dist):
+    # Load-bearing: June uses the old overlay daily. The new surface comes up beside it.
+    base, _ = live_server
+    status, body = _get(base, "/")
+    assert status == 200 and "<!DOCTYPE html>" in body and "id=root" not in body
+
+
+def test_app_reports_a_missing_build_rather_than_a_route_miss(live_server, tmp_path, monkeypatch):
+    base, _ = live_server
+    monkeypatch.setattr(server, "APP_DIST", str(tmp_path / "nope"))
+    try:
+        _get(base, "/app/")
+        assert False, "expected 404"
+    except urllib.error.HTTPError as e:
+        assert e.code == 404 and "not built" in e.read().decode()
+
+
 def test_get_settings_reports_backend_and_resolved_options(live_server):
     base, _ = live_server
     status, body = _get(base, "/api/settings")
