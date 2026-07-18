@@ -32,11 +32,14 @@ def build_recurring():
     p_docs       = g.ensure_property("Relevant docs", "text")          # build_task.py:27
     # as-needed on/off (THIS feature): an active as_needed item surfaces every day until completed.
     p_active     = g.ensure_property("Active", "checkbox")
+    # skip-if-missed (persistence rail): a missed occurrence waits for its next cadence instead of
+    # carrying forward daily. Default unset = persist. Read by display name "Fixed appointment".
+    p_fixed      = g.ensure_property("Fixed appointment", "checkbox")
     key = g.ensure_type("Recurring", "Recurring",
                         [p_freq, p_project, p_context,
                          p_dow, p_dom, p_tod, p_dur, p_iunit, p_icount,
                          p_clarify, p_blocked, p_affective, p_access, p_access_nts,
-                         p_autonomous, p_docs, p_active])
+                         p_autonomous, p_docs, p_active, p_fixed])
     # Retire Has target/Target (Practice-vs-Routine distinction cut; no scheduling consumer reads
     # either). ensure_type/link_properties_to_type only ADD — they never drop a field a prior run
     # linked, so removal needs its own call. Property definitions + any stored values are untouched;
