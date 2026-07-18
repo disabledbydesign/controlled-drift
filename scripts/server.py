@@ -27,6 +27,14 @@ Routes:
   POST /api/capture     {text} -> weed input into typed/linked Anytype objects (async, 202)
   POST /api/capture/undo {id}  -> archive a just-captured object + log the undo (sync)
 
+  The Review & Reorganize write layer (backend spec §1, contract §4). Every one of these returns
+  the SAME envelope — {ok, object} where `object` is the RE-FETCHED node, not a success boolean —
+  so the surface can render "Saved" from what actually persisted. `api_write` does the proving.
+  POST   /api/object              {level, title, parent_id?} -> create  {ok, object}
+  PATCH  /api/object/{id}         {title?} | {vals:{...}}    -> rename / set fields {ok, object}
+  POST   /api/object/{id}/move    {parent_id}                -> re-parent {ok, object}
+  DELETE /api/object/{id}                                    -> archive  {ok, id, archived}
+
 Run:  python3 scripts/server.py   (then open http://localhost:5050)
 """
 import sys, os, json, threading
@@ -58,6 +66,7 @@ import gsdo_anytype as g
 import cd_paths
 import api_schema
 import api_tree
+import api_write
 
 # The LLM backends the overlay can switch between live (mirrors plan_generate's accepted set).
 # June changes this from the gear panel without restarting; the choice persists in settings.json.
@@ -344,6 +353,46 @@ class Handler(BaseHTTPRequestHandler):
         except json.JSONDecodeError:
             return {}
 
+    # --- the Review & Reorganize write layer (spec §1, contract §4) ----------
+    # These are the server's ONLY path-parameter routes. The rest of the if-chain matches whole
+    # literal paths; `/api/object/{id}` cannot, so it gets a parser rather than 14 literal routes.
+
+    def _object_route(self):
+        """(object_id, suffix) for /api/object/{id}[/suffix], ('', '') for the collection, or None
+        when this is not an object route at all. Ids are URL-decoded — Anytype ids are opaque."""
+        path = urlparse(self.path).path
+        if path == "/api/object":
+            return "", ""
+        if not path.startswith("/api/object/"):
+            return None
+        rest = path[len("/api/object/"):].strip("/")
+        if not rest:
+            return None
+        parts = rest.split("/", 1)
+        return unquote(parts[0]), (parts[1] if len(parts) > 1 else "")
+
+    def _run_write(self, fn):
+        """Call one `api_write` action and answer in the contract's envelope.
+
+        The status codes carry meaning the client acts on: a guard refusal is 400 (understood and
+        not allowed), a name collision is 409 (the create-dedup hazard, surfaced instead of
+        silently no-oping), a missing object is 404. Anything else is a 500 with the real message
+        — including a read-back that failed to prove the write, which MUST reach the client as a
+        failure even though the HTTP call to Anytype succeeded. Never a silent success.
+        """
+        try:
+            self._send(200, fn())
+        except api_write.DuplicateName as e:
+            self._send(409, {"ok": False, "error": str(e), "existing_id": e.existing_id})
+        except api_write.WriteRefused as e:
+            self._send(400, {"ok": False, "error": str(e)})
+        except LookupError as e:
+            self._send(404, {"ok": False, "error": str(e)})
+        except ValueError as e:            # field_semantics guard #3, option/property resolution
+            self._send(400, {"ok": False, "error": str(e)})
+        except Exception as e:
+            self._send(500, {"ok": False, "error": str(e)})
+
     # --- GET ----------------------------------------------------------------
 
     def do_GET(self):
@@ -558,6 +607,29 @@ class Handler(BaseHTTPRequestHandler):
     # --- POST ---------------------------------------------------------------
 
     def do_POST(self):
+        route = self._object_route()
+        if route is not None:
+            oid, suffix = route
+            body = self._read_json_body()
+            if not oid and not suffix:
+                # Create. `level` is the UI level (TASK / RECURRING / SUBPROJECT / WORKSTREAM /
+                # PROJECT); `parent_id` is optional — an unparented create lands in an orphan
+                # bucket, which the tree surfaces honestly rather than losing.
+                self._run_write(lambda: api_write.create_child(
+                    (body.get("level") or "").strip().upper(),
+                    body.get("title"),
+                    (body.get("parent_id") or "").strip() or None))
+                return
+            if suffix == "move":
+                parent = (body.get("parent_id") or "").strip()
+                if not parent:
+                    self._send(400, {"ok": False, "error": "move needs a parent_id"})
+                    return
+                self._run_write(lambda: api_write.move_object(oid, parent))
+                return
+            self._send(404, {"ok": False, "error": f"no write action {suffix!r} on an object"})
+            return
+
         if self.path == "/api/refresh":
             # Async: kick off the generation, return immediately; the overlay polls /api/status.
             # Optional `capacity` in the request body (e.g. from the freetext toggle or a
@@ -702,7 +774,18 @@ class Handler(BaseHTTPRequestHandler):
             except Exception as e:
                 self._send(500, {"error": str(e)})
                 return
-            self._send(200, {"ok": True, "active": out})
+            # Converged onto contract §4's envelope by ADDING `object` — the re-fetched node — so
+            # the new surface can apply the persisted object like it does on every other mutation.
+            # `active` stays for the old overlay's undo receipt, which reads it. Additive, so this
+            # is not a fourth response tier. A node that cannot be assembled is reported as a
+            # warning, never as a failure: the toggle itself was already proven by read-back
+            # inside `set_recurring_active`.
+            resp = {"ok": True, "active": out}
+            try:
+                resp["object"] = api_write.node_for(rid)
+            except Exception as e:
+                resp["warning"] = f"saved, but the refreshed item could not be read back: {e}"
+            self._send(200, resp)
             return
 
         if self.path == "/api/task/not-today":
@@ -1078,6 +1161,39 @@ class Handler(BaseHTTPRequestHandler):
             return
 
         self._send(404, {"error": f"no route {self.path}"})
+
+    # --- PATCH / DELETE — only the object write layer uses these methods -----
+
+    def do_PATCH(self):
+        route = self._object_route()
+        if route is None or not route[0] or route[1]:
+            self._send(404, {"ok": False, "error": f"no route {self.path}"})
+            return
+        oid = route[0]
+        body = self._read_json_body()
+        # Rename and field-set are one endpoint per contract §4 but two writes with two proofs, so
+        # a request carrying both is refused rather than half-applied.
+        has_title, has_vals = "title" in body, "vals" in body
+        if has_title and has_vals:
+            self._send(400, {"ok": False, "error": "send a title or vals, not both"})
+            return
+        if has_title:
+            self._run_write(lambda: api_write.set_title(oid, body.get("title")))
+            return
+        if has_vals:
+            self._run_write(lambda: api_write.set_vals(oid, body.get("vals")))
+            return
+        self._send(400, {"ok": False, "error": "patch needs a title or a vals object"})
+
+    def do_DELETE(self):
+        route = self._object_route()
+        if route is None or not route[0] or route[1]:
+            self._send(404, {"ok": False, "error": f"no route {self.path}"})
+            return
+        # Archive, not hard delete — recoverable in Anytype's bin. The response is the contract's
+        # one deliberate exception to {ok, object}: there is no object left to return, so the proof
+        # is `archive_object`'s own read-back of the archived marker.
+        self._run_write(lambda: api_write.delete_object(route[0]))
 
     # quieter logging — one line per request, no client noise
     def log_message(self, fmt, *args):

@@ -404,8 +404,12 @@ def test_recurring_active_route_calls_the_primitive(live_server, monkeypatch):
                         lambda rid, active: calls.update({"c": (rid, active)}) or active)
     status, body = _post(live_server, "/api/recurring/active", {"id": "rid-fridge", "active": False})
     assert status == 200
-    assert body == {"ok": True, "active": False}
+    assert body["ok"] is True and body["active"] is False
     assert calls["c"] == ("rid-fridge", False)
+    # The route now also returns the re-fetched node (contract §4). Anytype is not mocked in this
+    # fixture, so the node cannot be assembled — and that is reported as a WARNING, never as a
+    # failure: the toggle itself was already proven by read-back inside the primitive.
+    assert "object" not in body and "could not be read back" in body["warning"]
 
 
 def test_recurring_active_route_needs_id_and_bool_active(live_server):

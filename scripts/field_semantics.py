@@ -1184,7 +1184,7 @@ DOES = {
     "Access notes": {
         "status": "planned",
         "written_by": "Nothing writes it today; the live space is empty of it. The intended "
-                      "writer is the AI at capture/weeding time, proposing from what June says.",
+                      "writer is the AI at capture/weeding time, proposing from what June says. ⚠ CORRECTED 2026-07-18 — that is no longer true: the Review & Reorganize write layer (api_write.py, behind PATCH /api/object/{id}) writes it from the surface's form, with read-back and a corrections_log record naming who authored the old value.",
         "read_by": "No code reads it yet. It is designed as the place unnamed barriers accumulate "
                    "so recurring ones can be promoted to real tags — AI_LAYER_SPEC.md §2 Task "
                    "`access` row + the §6 promotion loop. June, 2026-07-18: surfacing the field "
@@ -1241,7 +1241,7 @@ DOES = {
     },
     "Due date": {
         "status": "live",
-        "written_by": "Not written by any Python path — set by June in the app or in Anytype.",
+        "written_by": "Not written by any Python path — set by June in the app or in Anytype. ⚠ CORRECTED 2026-07-18 — that is no longer true: the Review & Reorganize write layer (api_write.py, behind PATCH /api/object/{id}) writes it from the surface's form, with read-back and a corrections_log record naming who authored the old value.",
         "read_by": "daily_plan.py and plan_generate.py: it drives urgency and ordering, and the "
                    "within-thread pick uses the nearest deadline to choose what surfaces.",
     },
@@ -1278,7 +1278,7 @@ DOES = {
     },
     "Goal engagement": {
         "status": "live",
-        "written_by": "Nothing writes it — June sets it in the app or in Anytype.",
+        "written_by": "Nothing writes it — June sets it in the app or in Anytype. ⚠ CORRECTED 2026-07-18 — that is no longer true: the Review & Reorganize write layer (api_write.py, behind PATCH /api/object/{id}) writes it from the surface's form, with read-back and a corrections_log record naming who authored the old value.",
         "read_by": "daily_plan.py:114 loads it and daily_plan.py:415 prints it on the goal's line "
                    "in the planning prompt, with the instruction that Steady reads as normal and "
                    "Backburner is noted but de-emphasised. ⚠ CORRECTION 2026-07-18: this entry "
@@ -1297,7 +1297,7 @@ DOES = {
     },
     "Goal status": {
         "status": "live",
-        "written_by": "Nothing writes it — set by June.",
+        "written_by": "Nothing writes it — set by June. ⚠ CORRECTED 2026-07-18 — that is no longer true: the Review & Reorganize write layer (api_write.py, behind PATCH /api/object/{id}) writes it from the surface's form, with read-back and a corrections_log record naming who authored the old value.",
         "read_by": "daily_plan.py:104-105, and only when the object's type key is `gsdo_goal`. "
                    "OPEN QUESTION, June's own, recorded as a question and not answered here: "
                    "\"im not sure what the goal status is either, other than perhaps a mechanism "
@@ -1306,7 +1306,7 @@ DOES = {
     },
     "Project status": {
         "status": "undesigned",
-        "written_by": "Nothing writes it.",
+        "written_by": "Nothing writes it. ⚠ CORRECTED 2026-07-18 — that is no longer true: the Review & Reorganize write layer (api_write.py, behind PATCH /api/object/{id}) writes it from the surface's form, with read-back and a corrections_log record naming who authored the old value.",
         "read_by": "Nothing in scripts/ reads it; the app's detail pane still displays it. "
                    "Superseded by Engagement, which is what the plan actually gates on.",
     },
@@ -1321,7 +1321,7 @@ DOES = {
     # ---- Strategy ---------------------------------------------------------
     "What for": {
         "status": "live",
-        "written_by": "Nothing writes it — June writes it, in the app or in Anytype.",
+        "written_by": "Nothing writes it — June writes it, in the app or in Anytype. ⚠ CORRECTED 2026-07-18 — that is no longer true: the Review & Reorganize write layer (api_write.py, behind PATCH /api/object/{id}) writes it from the surface's form, with read-back and a corrections_log record naming who authored the old value.",
         "read_by": "daily_plan.py:258 loads it and it is printed under 'Active strategies' in the "
                    "planning prompt, so it is read by the model on every plan.",
     },
@@ -1347,14 +1347,14 @@ DOES = {
     },
     "Barriers": {
         "status": "planned",
-        "written_by": "Nothing writes it in code; the weeding-gate example set references it.",
+        "written_by": "Nothing writes it in code; the weeding-gate example set references it. ⚠ CORRECTED 2026-07-18 — that is no longer true: the Review & Reorganize write layer (api_write.py, behind PATCH /api/object/{id}) writes it from the surface's form, with read-back and a corrections_log record naming who authored the old value.",
         "read_by": "No code reads it. June, 2026-07-18: \"Keep this — its pending further design.\" "
                    "docs/route_structure_assessment_2026-07-12.md §5 names 'barriers never "
                    "resurface' as the missing piece — the resurfacing, not the definition.",
     },
     "Horizon": {
         "status": "undesigned",
-        "written_by": "Nothing writes it.",
+        "written_by": "Nothing writes it. ⚠ CORRECTED 2026-07-18 — that is no longer true: the Review & Reorganize write layer (api_write.py, behind PATCH /api/object/{id}) writes it from the surface's form, with read-back and a corrections_log record naming who authored the old value.",
         "read_by": "Nothing reads it. ⚠ CORRECTION 2026-07-18: this entry previously said it "
                    "'feeds Goal ordering' and that the AI reads it to choose narration register. "
                    "That is the spec's intent (AI_LAYER_SPEC.md §2 Goal), not built behaviour — no "
@@ -1362,7 +1362,7 @@ DOES = {
     },
     "Resolution condition": {
         "status": "live",
-        "written_by": "Nothing writes it — June's, via the app or the weeding gate's proposal.",
+        "written_by": "Nothing writes it — June's, via the app or the weeding gate's proposal. ⚠ CORRECTED 2026-07-18 — that is no longer true: the Review & Reorganize write layer (api_write.py, behind PATCH /api/object/{id}) writes it from the surface's form, with read-back and a corrections_log record naming who authored the old value.",
         "read_by": "daily_plan.py:113 loads it and :420 prints it as 'resolved when: …' on the "
                    "goal's line in the planning prompt.",
     },
@@ -1419,7 +1419,7 @@ DOES = {
         "status": "planned",
         "written_by": "Nothing writes it. field_semantics previously said the weeding gate "
                       "populates it; no prompt in prompts/ mentions it, so that was not accurate. "
-                      "June can set it by hand in the review surface (review_surface.py:43).",
+                      "June can set it by hand in the review surface (review_surface.py:43). ⚠ CORRECTED 2026-07-18 — that is no longer true: the Review & Reorganize write layer (api_write.py, behind PATCH /api/object/{id}) writes it from the surface's form, with read-back and a corrections_log record naming who authored the old value.",
         "read_by": "Nothing reads it, and the plan path is the wrong place to look — its consumer "
                    "is an AGENT about to work the item. June, 2026-07-18: \"Need to be fixed.\" "
                    "Concretely, fixed means three things: (1) the MCP server exposes it — "
@@ -1431,7 +1431,7 @@ DOES = {
     },
     "AI autonomous": {
         "status": "planned",
-        "written_by": "Nothing writes it.",
+        "written_by": "Nothing writes it. ⚠ CORRECTED 2026-07-18 — that is no longer true: the Review & Reorganize write layer (api_write.py, behind PATCH /api/object/{id}) writes it from the surface's form, with read-back and a corrections_log record naming who authored the old value.",
         "read_by": "Nothing reads it, and again the plan path is the wrong test. June: it is "
                    "\"useful more in the agent-facing interface\" — an agent deciding whether it "
                    "can just do the task. Same missing seam as Relevant docs: not returned by any "
@@ -1474,7 +1474,7 @@ DOES = {
     },
     "Block chunk min": {
         "status": "live",
-        "written_by": "Nothing writes it — June's durable preference, set on the project.",
+        "written_by": "Nothing writes it — June's durable preference, set on the project. ⚠ CORRECTED 2026-07-18 — that is no longer true: the Review & Reorganize write layer (api_write.py, behind PATCH /api/object/{id}) writes it from the surface's form, with read-back and a corrections_log record naming who authored the old value.",
         "read_by": "block_duration.py and daily_plan.py, to size one work chunk on this project. "
                    "Read by DISPLAY NAME, because its Anytype key is auto-generated.",
     },
@@ -1489,7 +1489,7 @@ DOES = {
     },
     "Interval count": {
         "status": "live",
-        "written_by": "Nothing writes it.",
+        "written_by": "Nothing writes it. ⚠ CORRECTED 2026-07-18 — that is no longer true: the Review & Reorganize write layer (api_write.py, behind PATCH /api/object/{id}) writes it from the surface's form, with read-back and a corrections_log record naming who authored the old value.",
         "read_by": "datetime_seam.py, for day and week units. ⚠ It is IGNORED for `month`: "
                    "datetime_seam.py:22-24 records that v1 fires monthly regardless of N, because "
                    "every-N-months needs a stored start anchor the system does not keep. So "
@@ -1497,12 +1497,12 @@ DOES = {
     },
     "Day of week": {
         "status": "live",
-        "written_by": "Nothing writes it; the app's recurrence card edits it.",
+        "written_by": "Nothing writes it; the app's recurrence card edits it. ⚠ CORRECTED 2026-07-18 — that is no longer true: the Review & Reorganize write layer (api_write.py, behind PATCH /api/object/{id}) writes it from the surface's form, with read-back and a corrections_log record naming who authored the old value.",
         "read_by": "datetime_seam.py, for week-unit items. Empty means un-anchored.",
     },
     "Time of day": {
         "status": "live",
-        "written_by": "Nothing writes it; the app's recurrence card edits it.",
+        "written_by": "Nothing writes it; the app's recurrence card edits it. ⚠ CORRECTED 2026-07-18 — that is no longer true: the Review & Reorganize write layer (api_write.py, behind PATCH /api/object/{id}) writes it from the surface's form, with read-back and a corrections_log record naming who authored the old value.",
         "read_by": "datetime_seam.py and daily_plan.py — it makes the item a fixed anchor the "
                    "day's flexible work is arranged around, rather than something the scheduler "
                    "may move.",
@@ -1614,7 +1614,7 @@ DOES = {
     # rationale, it is reporting the code.
     "Needs clarifying": {
         "status": "undesigned",
-        "written_by": "Nothing writes the checkbox; the app's detail pane can toggle it.",
+        "written_by": "Nothing writes the checkbox; the app's detail pane can toggle it. ⚠ CORRECTED 2026-07-18 — that is no longer true: the Review & Reorganize write layer (api_write.py, behind PATCH /api/object/{id}) writes it from the surface's form, with read-back and a corrections_log record naming who authored the old value.",
         "read_by": "No code reads the checkbox. (`Needs Clarifying` the STATUS value is a "
                    "different thing and is read.) June, 2026-07-18, on what it is for — the "
                    "clearest statement anyone has written down: it belongs to the same family as "
@@ -1652,7 +1652,7 @@ DOES = {
     },
     "Day of month": {
         "status": "live",
-        "written_by": "Nothing writes it; the app's recurrence card and the review surface edit it.",
+        "written_by": "Nothing writes it; the app's recurrence card and the review surface edit it. ⚠ CORRECTED 2026-07-18 — that is no longer true: the Review & Reorganize write layer (api_write.py, behind PATCH /api/object/{id}) writes it from the surface's form, with read-back and a corrections_log record naming who authored the old value.",
         "read_by": "datetime_seam.py:131-140, the month branch: due when today's day number equals "
                    "it, clamped to the month's last day so 31 fires on Feb 28/29. Two "
                    "consequences worth knowing — a month-unit recurring with this UNSET is never "
@@ -1673,7 +1673,7 @@ DOES = {
     },
     "Applies when": {
         "status": "live",
-        "written_by": "Nothing in scripts/ writes it; June sets it in the app or in Anytype.",
+        "written_by": "Nothing in scripts/ writes it; June sets it in the app or in Anytype. ⚠ CORRECTED 2026-07-18 — that is no longer true: the Review & Reorganize write layer (api_write.py, behind PATCH /api/object/{id}) writes it from the surface's form, with read-back and a corrections_log record naming who authored the old value.",
         "read_by": "daily_plan.py:254-261 loads it by display name and :388-390 splits the "
                    "strategy set with it: `Always` strategies are listed every day, and a strategy "
                    "whose state matches today's capacity is injected as a FIRM directive on the "
