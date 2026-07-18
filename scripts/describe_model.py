@@ -19,11 +19,19 @@ FOR AGENTS working ON Controlled Drift: call this to learn the data structure
 before touching it, instead of re-deriving it from source. Field values printed
 below are read live. Design depth (why each field exists, the guards): AI_LAYER_SPEC.md §2.
 
+WHAT EACH FIELD MEANS is printed inline below, one line per field, from
+`scripts/field_semantics.py` (with June's own revisions applied). Read it before
+writing: the free-text fields are easy to mis-route, and a status note written into
+`Affective` is wrong data, not a small mistake. Run
+`python3 scripts/field_semantics.py` for the full rationale + spec citation per field,
+including the fields that have NO documented meaning and so should not be guessed at.
+
 Usage: python3 <REPO>/scripts/describe_model.py
 """
 import sys, os
 sys.path.insert(0, os.path.dirname(__file__))
 import gsdo_anytype as g
+import field_semantics
 
 # The five types, by the key/name find_type resolves. Task's type key is "task".
 TYPES = ["Goal", "Project", "task", "Recurring", "Strategy"]
@@ -55,6 +63,15 @@ def describe():
             nm = p.get("name", "?")
             fmt = p.get("format", "?")
             out.append(f"    · {nm}  [{fmt}]")
+            # One short line of meaning, resolved (June's revision wins over the repo default).
+            # A field with no documented meaning is marked as such rather than guessed at.
+            meaning = field_semantics.one_line(nm, type_name=display)
+            if meaning:
+                out.append(f"        {meaning}")
+            elif field_semantics.is_undefined(nm) or field_semantics.lookup(nm):
+                # Either no documented meaning at all, or documented only for a DIFFERENT type
+                # (so this type's use of it is undocumented). Both cases: don't infer one.
+                out.append("        (no documented meaning — do not infer one)")
         if hidden:
             out.append(f"    (+{len(hidden)} Anytype system fields hidden: {', '.join(hidden)})")
     return "\n".join(out)

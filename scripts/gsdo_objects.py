@@ -8,11 +8,21 @@ Value shapes confirmed empirically against the live API (2026-06-17):
   text->{"text":v} number->{"number":v} checkbox->{"checkbox":bool}
   date->{"date":"YYYY-MM-DD"|ISO} select->{"select":tag_id}
   multi_select->{"multi_select":[tag_id,...]} objects->{"objects":[obj_id,...]}
+
+⚠ WHAT GOES IN EACH FIELD — this layer accepts arbitrary {display_name: value} and makes almost
+no judgment about CONTENT. That is deliberate (a semantic judgment cannot be mechanized), but it
+means a caller writing free text has to know what each field means. Those rules used to live only
+inside the capture prompt, so direct writers through here — the MCP server, the `drift` skill —
+never saw them, and status notes ended up in `Affective` where affect belongs. The rules now live
+in `scripts/field_semantics.py`: read `field_semantics.describe("Affective")` (or run the module)
+before writing free text. The ONE content rule enforced here is guard #3 — see check_scalar_affect
+below; everything else is the caller's judgment, informed by that module.
 """
 import sys, os
 sys.path.insert(0, os.path.dirname(__file__))
 from anytype_test import call
 import gsdo_anytype as g
+import field_semantics
 
 def _tag_id(prop, option_name):
     sid = g.get_space_id()
@@ -129,6 +139,10 @@ def create_object(type_key, name, body=None, properties=None):
     This makes gsdo_objects.create the actual "one source of truth" dedup backstop the daily
     memory pass plan assumed already existed.
     """
+    # Guard #3, the one mechanical content check: an affect field is free text, never a scalar.
+    # Raises, never silently drops (repo constraint §5.1). Runs BEFORE the dedup return so a bad
+    # value is refused even when the create would have no-oped onto an existing object.
+    field_semantics.check_scalar_affect(properties)
     sid = g.get_space_id()
     existing_id = find_existing(type_key, name)
     if existing_id:
@@ -179,6 +193,7 @@ def update(object_id, name=None, properties=None, body=None):
       update(stream_id, properties={"Engagement": "Done"})   # resolves "Done" -> tag id
       update(note_id, body="# Today's plan\\n...")            # sent as `markdown` on PATCH
     """
+    field_semantics.check_scalar_affect(properties)   # guard #3, same rule as create
     sid = g.get_space_id()
     payload = {}
     if name is not None:
