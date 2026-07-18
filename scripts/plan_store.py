@@ -164,6 +164,20 @@ def mark_item_done(task_id):
     return plan
 
 
+def item_name(task_id):
+    """The display name of the cached plan row carrying this id (its 'task'/'name' field),
+    or None if there's no cache / no match. The completion route uses this to name a recurring
+    or as-needed 'done for today' for completion_log — a real task gets its name from the Anytype
+    read-back, but a recurring checkoff is cache-only, so the name comes from here."""
+    plan = load_plan()
+    if plan is None:
+        return None
+    for item in _iter_items(plan):
+        if item.get("id") == task_id:
+            return item.get("task") or item.get("name")
+    return None
+
+
 def is_recurring_item(task_id):
     """True if the cached plan carries this id on a RECURRING anchor row (a chore/appointment,
     flagged `recurring` by blocks_from_scheduled). The completion endpoint reads this to route a
