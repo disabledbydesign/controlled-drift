@@ -185,13 +185,26 @@ describe('cross-tab search — one box, three tabs', () => {
     expect(screen.getAllByText('Do the dishes')).toHaveLength(1);
   });
 
-  it('an unfiled object is searchable too, and points at the tab that actually lists it', () => {
+  it('an UNFILED recurring is listed by Routines itself, not punted to the Map', () => {
+    // CHANGED 2026-07-18 by June's correction. This previously asserted "In Map", because
+    // RoutinesScreen grouped strictly by parent and an orphan has none — so an unparented
+    // recurring appeared on NEITHER tab, and after Task 11 only in Map's bucket.
+    //
+    // Her point: "Don't recurring tasks show in both map and routines tabs?" They do — Map
+    // renders RECURRING as a leaf of its parent and this tab groups them by that same parent.
+    // A PARENTED routine was therefore on two tabs and an unparented one on one. That is an
+    // asymmetry, not a design decision, so Routines now carries the same bucket.
     render(<RoutinesScreen ctx={ctx({ search: 'shower' })} />);
-    // Shower is a RECURRING item, but it has no parent project, so `RoutinesScreen` — which
-    // groups by parent — does not list it. The Map is where the buckets render, so that is
-    // where she is sent.
-    expect(screen.getByText('In Map')).toBeTruthy();
     expect(screen.getByText('Shower')).toBeTruthy();
+    // It is in this tab's OWN list now, so the cross-tab block must not also advertise it.
+    expect(screen.queryByText('In Map')).toBeNull();
+  });
+
+  it('an unfiled recurring appears on the Routines tab with no search at all', () => {
+    render(<RoutinesScreen ctx={ctx()} />);
+    expect(screen.getByText('Shower')).toBeTruthy();
+    // Under the bucket's own label, which comes from the endpoint, not a string invented here.
+    expect(screen.getByText(/NO PROJECT/)).toBeTruthy();
   });
 
   it('renders nothing at all when the box is empty', () => {
