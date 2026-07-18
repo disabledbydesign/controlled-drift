@@ -997,6 +997,10 @@ def _resolve_ids(plan, ref_map, tasks, all_tasks=None):
     # never a real Anytype Task-status write. Same id space as any other task; no separate
     # ref-token handling needed.
     recurring_ids = {t["id"] for t in identity if t.get("is_recurring")}
+    # As-needed on/off (2026-07-17): flags on the pre-LLM dict do NOT survive composition — they
+    # must be re-attached here by id, exactly like is_recurring above, or the row silently loses
+    # the flag on the real plan even though every unit test (hand-built rows) passes.
+    as_needed_ids = {t["id"] for t in identity if t.get("as_needed")}
     mislabels = 0  # resolved items whose model text differed materially from the real name
     resolved = 0   # items that resolved to a real task id (the resolution-health signal)
 
@@ -1053,6 +1057,10 @@ def _resolve_ids(plan, ref_map, tasks, all_tasks=None):
             # never writes an Anytype Task-status field that doesn't exist on the object.
             if tid in recurring_ids:
                 item["recurring"] = True
+            # An active as-needed Recurring — flags completion to real-deactivate (Active=false)
+            # instead of the cache-only "done for today" flip a scheduled recurring gets.
+            if tid in as_needed_ids:
+                item["as_needed"] = True
 
     for block in plan.get("blocks", []):        # clock shape
         for item in block.get("items", []):

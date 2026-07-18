@@ -275,6 +275,7 @@ def load_active_items(sid):
                 "due_date": None,
                 "linked_projects": linked,
                 "is_recurring": True,
+                "as_needed": r.get("as_needed", False),
             })
 
     # Focus Period + resolved calendar facts — loaded HERE, the one seam both the terminal
@@ -917,6 +918,10 @@ def blocks_from_scheduled(scheduled, framing_by_label=None):
                     # completion through the SAME cache-only "done for today" flip a timed
                     # recurring anchor gets below, never a real Anytype Task-status write.
                     row["recurring"] = True
+                    # An active as-needed task among them routes completion to a REAL
+                    # deactivation instead (Task 4) — carried alongside recurring since a
+                    # doubly-flagged row must route as_needed first.
+                    row["as_needed"] = it.get("as_needed")
                 if it.get("block"):
                     # A synthetic CONTAINER block (task-less project): a bare "work on X" chunk. The
                     # check is a daily "worked on it today" (chunk_log), NOT a task done — cache-only.
@@ -945,6 +950,7 @@ def blocks_from_scheduled(scheduled, framing_by_label=None):
                 # Python-inserted breaks have no id / are breaks → stay un-checkable, as before.
                 row["id"] = it["id"]
                 row["recurring"] = True
+                row["as_needed"] = it.get("as_needed")
             out_items.append(row)
         blocks.append({
             "label": label,
@@ -979,6 +985,7 @@ def format_appointments(today_recurrings):
             "time": ft.strftime("%H:%M"),
             "duration_min": r.get("duration_min"),
             "recurring": True,
+            "as_needed": r.get("as_needed", False),
         })
     return out
 

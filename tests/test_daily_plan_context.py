@@ -138,7 +138,7 @@ def test_format_appointments_carries_real_id_time_and_duration():
                    "fixed_time": dt.datetime(2026, 7, 15, 11, 0), "duration_min": 60}]
     out = daily_plan.format_appointments(recurrings)
     assert out == [{"id": "r1", "task": "Therapy", "time": "11:00",
-                    "duration_min": 60, "recurring": True}]
+                    "duration_min": 60, "recurring": True, "as_needed": False}]
 
 
 def test_format_appointments_skips_untimed_recurrings():

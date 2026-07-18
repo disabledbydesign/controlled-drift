@@ -120,6 +120,76 @@ def set_project_engagement(pid, old, new):
     return new
 
 
+def complete_task_row(task_id):
+    """Route a checkoff by what the row IS, mirroring /api/complete's dispatch order — as-needed
+    checked BEFORE is_recurring_item, since an active as-needed row is flagged both. An active
+    as-needed task: "done" means done-until-asked-again — write Active=false (a REAL Anytype
+    change, read-back inside set_recurring_active), then flip the cache so it still shows checked
+    today. Returns (http_status, body_dict); the /api/complete route sends it as-is."""
+    if plan_store.is_as_needed_item(task_id):
+        try:
+            recurring_active.set_recurring_active(task_id, False)
+        except Exception as e:
+            return 500, {"error": str(e)}
+        plan = plan_store.mark_item_done(task_id)
+        return 200, {"completed": {"id": task_id, "done": True, "as_needed": True},
+                     "plan": plan or {"empty": True}}
+    # A recurring chore/appointment: "done for today" — flip the cache only, NO Anytype
+    # write (Recurring objects have no Task status, and they recur; done-forever is wrong).
+    # It comes back next cycle when the plan regenerates. This is what lets June finally
+    # check off the dishes (2026-07-13).
+    if plan_store.is_recurring_item(task_id):
+        plan = plan_store.mark_item_done(task_id)
+        return 200, {"completed": {"id": task_id, "done": True, "recurring": True},
+                     "plan": plan or {"empty": True}}
+    # A block check: "I worked on it today" — log locally + flip the cache, NEVER an
+    # Anytype done-write (a block must not finish the project; it returns tomorrow). The
+    # overlay sends the block's project_id in `id`. (display_grain_design.md decision 3.)
+    if plan_store.is_block_item(task_id):
+        chunk_log.log_chunk(task_id)
+        plan = plan_store.mark_block_chunked(task_id, True)
+        return 200, {"completed": {"id": task_id, "did_chunk_today": True, "block": True},
+                     "plan": plan or {"empty": True}}
+    # A real task: mark done in Anytype (with read-back), then flip the cache so the surface
+    # shows it checked without a regeneration. A failed close surfaces honestly.
+    try:
+        confirmed = task_actions.complete_task(task_id)
+    except Exception as e:
+        return 500, {"error": str(e)}
+    plan = plan_store.mark_item_done(task_id)
+    return 200, {"completed": confirmed, "plan": plan or {"empty": True}}
+
+
+def uncomplete_task_row(task_id):
+    """Symmetric undo for complete_task_row — same dispatch order, as-needed first."""
+    if plan_store.is_as_needed_item(task_id):
+        try:
+            recurring_active.set_recurring_active(task_id, True)
+        except Exception as e:
+            return 500, {"error": str(e)}
+        plan = plan_store.mark_item_undone(task_id)
+        return 200, {"uncompleted": {"id": task_id, "done": False, "as_needed": True},
+                     "plan": plan or {"empty": True}}
+    # A recurring chore: undo is a local cache un-flip only (nothing was written to Anytype).
+    if plan_store.is_recurring_item(task_id):
+        plan = plan_store.mark_item_undone(task_id)
+        return 200, {"uncompleted": {"id": task_id, "done": False, "recurring": True},
+                     "plan": plan or {"empty": True}}
+    # A block un-check (mis-tap): un-log today's chunk + un-flip the cache. Cache-only.
+    if plan_store.is_block_item(task_id):
+        chunk_log.unlog_chunk(task_id)
+        plan = plan_store.mark_block_chunked(task_id, False)
+        return 200, {"uncompleted": {"id": task_id, "did_chunk_today": False, "block": True},
+                     "plan": plan or {"empty": True}}
+    # A real task: status back to Ready in Anytype (read-back), then un-check the cache.
+    try:
+        confirmed = task_actions.uncomplete_task(task_id)
+    except Exception as e:
+        return 500, {"error": str(e)}
+    plan = plan_store.mark_item_undone(task_id)
+    return 200, {"uncompleted": confirmed, "plan": plan or {"empty": True}}
+
+
 # A generation (the LLM call) takes ~60-110s — far longer than a phone browser will hold a
 # connection open, so it must NOT block the HTTP request (that's the "build my plan from bed"
 # timeout: the phone gives up, the server finishes into a dead socket). Instead we kick the
@@ -440,33 +510,8 @@ class Handler(BaseHTTPRequestHandler):
             if not task_id:
                 self._send(400, {"error": "complete needs a task id"})
                 return
-            # A recurring chore/appointment: "done for today" — flip the cache only, NO Anytype
-            # write (Recurring objects have no Task status, and they recur; done-forever is wrong).
-            # It comes back next cycle when the plan regenerates. This is what lets June finally
-            # check off the dishes (2026-07-13).
-            if plan_store.is_recurring_item(task_id):
-                plan = plan_store.mark_item_done(task_id)
-                self._send(200, {"completed": {"id": task_id, "done": True, "recurring": True},
-                                 "plan": plan or {"empty": True}})
-                return
-            # A block check: "I worked on it today" — log locally + flip the cache, NEVER an
-            # Anytype done-write (a block must not finish the project; it returns tomorrow). The
-            # overlay sends the block's project_id in `id`. (display_grain_design.md decision 3.)
-            if plan_store.is_block_item(task_id):
-                chunk_log.log_chunk(task_id)
-                plan = plan_store.mark_block_chunked(task_id, True)
-                self._send(200, {"completed": {"id": task_id, "did_chunk_today": True, "block": True},
-                                 "plan": plan or {"empty": True}})
-                return
-            # A real task: mark done in Anytype (with read-back), then flip the cache so the surface
-            # shows it checked without a regeneration. A failed close surfaces honestly.
-            try:
-                confirmed = task_actions.complete_task(task_id)
-            except Exception as e:
-                self._send(500, {"error": str(e)})
-                return
-            plan = plan_store.mark_item_done(task_id)
-            self._send(200, {"completed": confirmed, "plan": plan or {"empty": True}})
+            code, resp = complete_task_row(task_id)
+            self._send(code, resp)
             return
 
         if self.path == "/api/task/reschedule":
@@ -601,27 +646,8 @@ class Handler(BaseHTTPRequestHandler):
             if not task_id:
                 self._send(400, {"error": "uncomplete needs a task id"})
                 return
-            # A recurring chore: undo is a local cache un-flip only (nothing was written to Anytype).
-            if plan_store.is_recurring_item(task_id):
-                plan = plan_store.mark_item_undone(task_id)
-                self._send(200, {"uncompleted": {"id": task_id, "done": False, "recurring": True},
-                                 "plan": plan or {"empty": True}})
-                return
-            # A block un-check (mis-tap): un-log today's chunk + un-flip the cache. Cache-only.
-            if plan_store.is_block_item(task_id):
-                chunk_log.unlog_chunk(task_id)
-                plan = plan_store.mark_block_chunked(task_id, False)
-                self._send(200, {"uncompleted": {"id": task_id, "did_chunk_today": False, "block": True},
-                                 "plan": plan or {"empty": True}})
-                return
-            # A real task: status back to Ready in Anytype (read-back), then un-check the cache.
-            try:
-                confirmed = task_actions.uncomplete_task(task_id)
-            except Exception as e:
-                self._send(500, {"error": str(e)})
-                return
-            plan = plan_store.mark_item_undone(task_id)
-            self._send(200, {"uncompleted": confirmed, "plan": plan or {"empty": True}})
+            code, resp = uncomplete_task_row(task_id)
+            self._send(code, resp)
             return
 
         if self.path == "/api/duration":

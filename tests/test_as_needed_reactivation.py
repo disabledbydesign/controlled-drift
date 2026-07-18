@@ -65,3 +65,27 @@ def test_set_recurring_active_raises_on_readback_mismatch(monkeypatch):
     monkeypatch.setattr(ra.gsdo_objects, "update", lambda rid, properties: None)
     with pytest.raises(RuntimeError):
         ra.set_recurring_active("rid1", True)
+
+
+def test_is_as_needed_item_reads_the_row_flag(monkeypatch):
+    import plan_store
+    monkeypatch.setattr(plan_store, "load_plan",
+                        lambda: {"items": [{"id": "r1", "recurring": True, "as_needed": True},
+                                           {"id": "r2", "recurring": True}]})
+    assert plan_store.is_as_needed_item("r1") is True
+    assert plan_store.is_as_needed_item("r2") is False   # scheduled recurring, not as-needed
+
+
+def test_complete_active_as_needed_deactivates_and_checks(monkeypatch):
+    import server
+    calls = {}
+    monkeypatch.setattr(server.plan_store, "is_as_needed_item", lambda tid: tid == "r1")
+    monkeypatch.setattr(server.recurring_active, "set_recurring_active",
+                        lambda rid, active: calls.update({"deact": (rid, active)}) or active)
+    monkeypatch.setattr(server.plan_store, "mark_item_done",
+                        lambda tid: calls.update({"cache_done": tid}) or {"items": []})
+    code, body = server.complete_task_row("r1")
+    assert code == 200
+    assert calls["deact"] == ("r1", False)      # real deactivation
+    assert calls["cache_done"] == "r1"          # still shows checked today
+    assert body["completed"]["as_needed"] is True

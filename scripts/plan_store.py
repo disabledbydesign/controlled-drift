@@ -178,6 +178,20 @@ def is_recurring_item(task_id):
     return False
 
 
+def is_as_needed_item(task_id):
+    """True if the cached plan carries this id on a row flagged `as_needed` (an active as-needed
+    task, marked in daily_plan). The completion endpoint reads this BEFORE is_recurring_item to
+    route a checkoff to a real Active=false write (done-until-asked-again) instead of the
+    cache-only 'done for today' a scheduled recurring gets."""
+    plan = load_plan()
+    if plan is None:
+        return False
+    for item in _iter_items(plan):
+        if item.get("id") == task_id and item.get("as_needed"):
+            return True
+    return False
+
+
 def mark_item_undone(task_id):
     """Undo a checkoff in the cache (the mis-tap fix): set done=False on every cached plan
     item with this task id, so reopening the overlay shows it un-checked again. Mirror of
