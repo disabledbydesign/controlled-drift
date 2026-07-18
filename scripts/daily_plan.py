@@ -920,7 +920,10 @@ def blocks_from_scheduled(scheduled, framing_by_label=None):
                     row["recurring"] = True
                     # An active as-needed task among them routes completion to a REAL
                     # deactivation instead (Task 4) — carried alongside recurring since a
-                    # doubly-flagged row must route as_needed first.
+                    # doubly-flagged row must route as_needed first. Only reached inside this
+                    # `if it.get("recurring")` branch because every as-needed item IS a Recurring
+                    # object (always co-stamped `recurring`); an as-needed item that somehow
+                    # wasn't `recurring` would silently lose this flag here.
                     row["as_needed"] = it.get("as_needed")
                 if it.get("block"):
                     # A synthetic CONTAINER block (task-less project): a bare "work on X" chunk. The

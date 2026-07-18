@@ -89,3 +89,23 @@ def test_complete_active_as_needed_deactivates_and_checks(monkeypatch):
     assert calls["deact"] == ("r1", False)      # real deactivation
     assert calls["cache_done"] == "r1"          # still shows checked today
     assert body["completed"]["as_needed"] is True
+
+
+def test_complete_doubly_flagged_row_routes_as_needed_not_recurring(monkeypatch):
+    # An active as-needed row IS a Recurring object, so it's flagged both `recurring` and
+    # `as_needed` in the cached plan. as_needed must win the routing (real deactivation), never
+    # falling through to the recurring branch's cache-only "done for today" flip — that would
+    # leave Active untouched and the task would resurface forever despite being "completed".
+    import server
+    calls = {}
+    monkeypatch.setattr(server.plan_store, "is_as_needed_item", lambda tid: True)
+    monkeypatch.setattr(server.plan_store, "is_recurring_item", lambda tid: True)  # BOTH True
+    monkeypatch.setattr(server.recurring_active, "set_recurring_active",
+                        lambda rid, active: calls.update({"deact": (rid, active)}) or active)
+    monkeypatch.setattr(server.plan_store, "mark_item_done",
+                        lambda tid: calls.update({"cache_done": tid}) or {"items": []})
+    code, body = server.complete_task_row("r1")
+    assert code == 200
+    assert "deact" in calls                     # took the real-deactivation path
+    assert body["completed"].get("as_needed") is True
+    assert body["completed"].get("recurring") is not True  # did NOT take the cache-only branch
