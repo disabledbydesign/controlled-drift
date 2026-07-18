@@ -13,6 +13,30 @@ sys.path.insert(0, os.path.dirname(__file__))
 import gsdo_anytype as g
 import gsdo_objects
 import signal_log
+import corrections_log
+
+#: `Intent` is June's own words and is NEVER reworded by the generator (backend spec §17), so on
+#: an otherwise model-authored period it is user-authored. Stamping it 'llm' would record a
+#: correction of the model every time she edits her own sentence — a false positive in exactly
+#: the signal this is built to measure. This one field is why provenance is per-FIELD and not
+#: per-object: a single Focus Period legitimately carries both at once.
+USER_AUTHORED_FIELDS = ("Intent",)
+
+FOCUS_SURFACE = "focus_period_authoring"
+
+
+def _stamp_period_authorship(object_id, name, properties, surface=FOCUS_SURFACE):
+    """Stamp who authored each structured field of a Focus Period. Best-effort: never lose a
+    period that already persisted over a logging failure, but print rather than swallow (§5.1)."""
+    try:
+        corrections_log.log_authorship(object_id, corrections_log.TITLE_FIELD, name,
+                                       object_type="Focus Period", surface=surface)
+        for field, value in (properties or {}).items():
+            by = "user" if field in USER_AUTHORED_FIELDS else "llm"
+            corrections_log.log_authorship(object_id, field, value, object_type="Focus Period",
+                                           authored_by=by, surface=surface)
+    except Exception as e:                                    # noqa: BLE001
+        print(f"[warn] authorship not stamped for focus period {object_id}: {e}", file=sys.stderr)
 
 
 def resolve_project_names_to_ids(names, objects=None):
@@ -49,6 +73,7 @@ def author_focus_period(raw_text, name, properties, source="config_authoring"):
     """Create a Focus Period and log June's raw words as signal. Returns the new object id.
     source='config_correction' when editing an existing period's framing."""
     oid = gsdo_objects.create("Focus Period", name, properties=properties)
+    _stamp_period_authorship(oid, name, properties)
     signal_log.log_signal(raw_text, source=source,
                           reference={"kind": "focus_period", "id": oid, "name": name})
     return oid
@@ -59,6 +84,9 @@ def update_focus_period(object_id, raw_text, name, properties, source="config_co
     archive-on-lapse is Phase 8) and log June's words as a correction signal. Returns object_id.
     The caller resolves project names -> ids first, same as the create path."""
     gsdo_objects.update(object_id, name=name, properties=properties)
+    # An edit pass re-authors these fields, so it re-stamps them. The fold is last-write-wins, so
+    # the newer stamp is what a later correction resolves against.
+    _stamp_period_authorship(object_id, name, properties, surface=source)
     signal_log.log_signal(raw_text, source=source,
                           reference={"kind": "focus_period", "id": object_id, "name": name})
     return object_id

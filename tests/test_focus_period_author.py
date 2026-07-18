@@ -26,6 +26,28 @@ def test_author_correction_uses_correction_source(tmp_path, monkeypatch):
     assert signal_log.read_signals()[0]["source"] == "config_correction"
 
 
+def test_authorship_stamps_llm_but_intent_stays_june(tmp_path, monkeypatch):
+    """A Focus Period legitimately carries both authorships at once: the model structures the
+    period, but `Intent` is June's own words and is never reworded (backend spec §17). Stamping
+    Intent 'llm' would record a correction of the model every time she edits her own sentence."""
+    import corrections_log
+    monkeypatch.setenv("CD_DATA_DIR", str(tmp_path))
+    monkeypatch.setattr(gsdo_objects, "create", lambda *a, **k: "fp3")
+    fpa.author_focus_period("my week", "Week of Jul 20",
+                            {"Intent": "recovery, gentle", "Workday end": "18:00",
+                             "Output format": "Auto"})
+
+    stamps = {r["field"]: r for r in corrections_log.read_records()
+              if r.get("kind") == "authorship" and r.get("object_id") == "fp3"}
+    assert stamps["Intent"]["authored_by"] == "user"
+    assert stamps["Workday end"]["authored_by"] == "llm"
+    assert stamps["Output format"]["authored_by"] == "llm"
+    assert stamps["__title__"]["authored_by"] == "llm"
+
+    assert corrections_log.resolve_authored_by("fp3", "Intent") == "user"
+    assert corrections_log.resolve_authored_by("fp3", "Workday end") == "llm"
+
+
 _FAKE_OBJS = [
     {"type": {"key": "gsdo_project"}, "id": "id-job", "name": "Job Search"},
     {"type": {"key": "gsdo_project"}, "id": "id-cuffs", "name": "Leather cuffs"},

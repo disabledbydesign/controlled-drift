@@ -30,6 +30,7 @@ import generation_log
 import when_resolve
 import capture_fields
 import recurring_active
+import corrections_log
 from anytype_test import call
 
 PROMPT_PATH = os.path.join(os.path.dirname(__file__), "..", "prompts", "weeding_gate.md")
@@ -393,13 +394,19 @@ def _creation_props(type_name, item, link_id, scheduled=None, is_parked=False):
     link_prop = _LINK_PROP.get(type_name)
     if link_prop and link_id:
         props[link_prop] = [link_id]
-    # The weeding-gate JSON contract emits "reasoning" (why this landed where it did), never a
-    # "context" key — writing from item.get("context") was dead code (always None) since the
-    # gate was built, so no captured item of any type ever got its Context field filled in and
-    # the model's stated reasoning vanished once it aged out of the session receipt. Reasoning
-    # IS the intended Context content (found 2026-07-02, alongside a Strategy created with none).
-    if item.get("reasoning"):
-        props["Context"] = item["reasoning"]
+    # NOTE (2026-07-18): the gate's `reasoning` deliberately does NOT go on the object.
+    #
+    # The 2026-07-02 decision that put it in `Context` was solving a real problem — the model's
+    # stated reasoning vanished once it aged out of the session receipt — but it routed the fix
+    # into the wrong place. `reasoning` is the gate's justification for WHERE it filed the item
+    # (dedup + routing); `Context` means findings/confirmations/origin about the item itself
+    # (scripts/field_semantics.py), and June reads it AND the planner re-reads it on every
+    # generation. Live damage: whole Context values reading "This is a concrete action tied to
+    # medical expenses (P11: medical). No existing task matches this exact action."
+    #
+    # The durability that motivated the original decision is KEPT — the reasoning is stamped into
+    # the corrections log in _create_one, once the write is read-back-proved. Provenance and
+    # history belong in the write log, never on the object.
     # Per-item optional fields (duration / affect / blocked-on / access), validated + shaped by the
     # shared builder so this path and the memory pass cannot diverge. Each value is read from THIS
     # item alone — a dump-wide feeling already arrives written on every item (the scope judgment is
@@ -413,6 +420,40 @@ def _creation_props(type_name, item, link_id, scheduled=None, is_parked=False):
         access_conditions=item.get("access_conditions"),
     ))
     return props
+
+
+CAPTURE_SURFACE = "capture_weeding_gate"
+
+
+def _stamp_authorship(oid, type_name, name, props, reasoning=None):
+    """Record that the weeding gate authored this object's title and fields, plus WHY it filed it
+    where it did. Field-level grain; called only after the write is read-back-proved.
+
+    Honesty rules, both load-bearing:
+      - `Duration min` is stamped 'user' when its companion `Duration source` says 'stated' —
+        June said the number, the model only relayed it. Stamping it 'llm' would manufacture a
+        model error every time she later adjusts her own figure.
+      - `Duration source` itself is the provenance label that lives ON the object (the scheduler
+        reads it), so it is not re-stamped as an authored value.
+
+    Best-effort: a logging failure must never lose a captured object that already persisted. It
+    prints instead of raising, so the failure is visible rather than silent (§5.1).
+    """
+    try:
+        stated = props.get("Duration source") == "stated"
+        corrections_log.log_authorship(oid, corrections_log.TITLE_FIELD, name,
+                                       object_type=type_name, surface=CAPTURE_SURFACE)
+        for field, value in props.items():
+            if field == "Duration source":
+                continue
+            by = "user" if (field == "Duration min" and stated) else "llm"
+            corrections_log.log_authorship(oid, field, value, object_type=type_name,
+                                           authored_by=by, surface=CAPTURE_SURFACE)
+        if reasoning:
+            corrections_log.log_authorship(oid, corrections_log.FILING_FIELD, reasoning,
+                                           object_type=type_name, surface=CAPTURE_SURFACE)
+    except Exception as e:                                    # noqa: BLE001 — never lose the object
+        print(f"[warn] authorship not stamped for {oid}: {e}", file=sys.stderr)
 
 
 def _when_label(scheduled, is_today, is_parked):
@@ -446,6 +487,9 @@ def _create_one(type_name, item, ref_map, id2name, scheduled=None, is_today=Fals
     obj = _get_object(oid)
     if obj.get("name") != name:
         raise RuntimeError(f"read-back mismatch for {name!r}: got {obj.get('name')!r}")
+    # Stamped only now, after read-back proved the write: a provenance record for an object that
+    # never persisted would be a phantom the learning loop could not resolve against anything.
+    _stamp_authorship(oid, type_name, name, props, reasoning=item.get("reasoning"))
     record = {
         "id": oid,
         "type": type_name,

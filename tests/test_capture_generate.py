@@ -177,16 +177,105 @@ def test_capture_creates_links_and_skips(tmp_path, monkeypatch):
     assert by_name["Call surgeon"]["Linked Projects"] == ["p1"]
     assert by_name["Meditate"]["Project link"] == ["p1"]
 
-    # The model's stated reasoning gets written to Context at creation time — it used to be
-    # silently dropped (item.get("context") checked a key the JSON contract never emits; the
-    # gate only ever produces "reasoning"), so June never saw why something landed where it did
-    # once the session receipt aged out (found 2026-07-02).
-    assert by_name["Call surgeon"]["Context"] == "concrete next step"
+    # REVERSED 2026-07-18. The gate's reasoning used to be written into Context here. It is the
+    # model's justification for WHERE it filed the item, not a finding about the item, and June
+    # reads Context (so does the planner, on every generation). It now goes to the write log —
+    # see test_reasoning_is_logged_not_written_to_context below for the durability half.
+    assert "Context" not in by_name["Call surgeon"]
 
     # The created record carries the resolved project NAME + the reasoning (guard #6).
     surgeon = next(c for c in result["created"] if c["name"] == "Call surgeon")
     assert surgeon["project"] == "Build Controlled Drift"
     assert surgeon["alignment_reasoning"] == "concrete next step"
+
+
+# --- provenance: reasoning routed to the log, authorship stamped --------------
+
+def _records(tmp_path):
+    import corrections_log
+    return corrections_log.read_records(path=str(tmp_path / "corrections.jsonl"))
+
+
+def _stamps(tmp_path, name_of_object):
+    """Authorship records for one created object, as {field: record}."""
+    oid = f"id-{name_of_object}"
+    return {r["field"]: r for r in _records(tmp_path)
+            if r.get("kind") == "authorship" and r.get("object_id") == oid}
+
+
+def test_reasoning_is_logged_not_written_to_context(tmp_path, monkeypatch):
+    """Part 1: the gate's filing rationale leaves the object but stays durable.
+
+    The 2026-07-02 decision that put it on the object was solving a real problem — the reasoning
+    vanished when the session receipt aged out. Removing the Context write must not reintroduce
+    that loss, so this asserts BOTH halves: gone from the field, present in the log.
+    """
+    calls = _stub(monkeypatch, tmp_path)
+    cg.capture("call surgeon, ssrc, meditate daily")
+
+    by_name = {name: props for (_t, name, props) in calls}
+    assert "Context" not in by_name["Call surgeon"]
+    assert "Context" not in by_name["Meditate"]
+
+    filing = _stamps(tmp_path, "Call surgeon")["__filing__"]
+    assert filing["after"] == "concrete next step"
+    assert filing["object_type"] == "Task"
+
+
+def test_llm_authored_fields_are_stamped(tmp_path, monkeypatch):
+    """Part 2: what the model authored is recorded per field, so a later edit is resolvable."""
+    import corrections_log
+    _stub(monkeypatch, tmp_path)   # redirects CD_DATA_DIR, which cd_paths reads at call time
+    cg.capture("call surgeon, ssrc, meditate daily")
+
+    stamps = _stamps(tmp_path, "Call surgeon")
+    assert stamps["__title__"]["after"] == "Call surgeon"
+    assert stamps["Task status"]["after"] == "Ready"
+    assert stamps["Linked Projects"]["after"] == ["p1"]
+    assert all(s["authored_by"] == "llm" for f, s in stamps.items() if f != "__filing__")
+    assert all(s["surface"] == "capture_weeding_gate" for s in stamps.values())
+
+    # And it is resolvable the way the loop will ask the question.
+    assert corrections_log.resolve_authored_by(
+        "id-Call surgeon", "Task status",
+        path=str(tmp_path / "corrections.jsonl")) == "llm"
+
+
+def test_june_stated_duration_is_stamped_user_not_llm(tmp_path, monkeypatch):
+    """A number June stated is hers even though the model relayed it — stamping it 'llm' would
+    manufacture a model error every time she later adjusts her own figure. Mirrors the
+    `Duration source` precedent in capture_fields."""
+    canned = json.dumps({"opening": "", "capacity_read": None, "groups": [
+        {"label": "g", "through_line": "t", "items": [
+            {"type": "Task", "name": "Stated", "link": None, "status": "Ready",
+             "action": "create", "duration_min": 20, "reasoning": "she said 20"},
+            {"type": "Task", "name": "Guessed", "link": None, "status": "Ready",
+             "action": "create", "duration_estimate_min": 90, "reasoning": "model guessed"},
+        ]}]})
+    _stub(monkeypatch, tmp_path, canned=canned)
+    cg.capture("two tasks")
+
+    assert _stamps(tmp_path, "Stated")["Duration min"]["authored_by"] == "user"
+    assert _stamps(tmp_path, "Guessed")["Duration min"]["authored_by"] == "llm"
+    # `Duration source` stays ON the object (the scheduler reads it) and is not re-stamped.
+    assert "Duration source" not in _stamps(tmp_path, "Stated")
+
+
+def test_preexisting_value_resolves_unknown_not_user(tmp_path):
+    """`unknown` must stay honest. Guessing 'user' for the objects written before this shipped
+    would poison the loop with false negatives that look like real data."""
+    import corrections_log
+    p = str(tmp_path / "corrections.jsonl")
+    corrections_log.log_authorship("obj-new", "Context", "v", path=p)
+
+    assert corrections_log.resolve_authored_by("obj-old", "Context", path=p) == "unknown"
+    assert corrections_log.resolve_authored_by("obj-new", "Affective", path=p) == "unknown"
+    assert corrections_log.resolve_authored_by("obj-new", "Context", path=p) == "llm"
+
+    # After June overwrites it, the value now on the object is hers.
+    corrections_log.log_correction("field_edit", "v", "hers", path=p,
+                                   object_id="obj-new", field="Context", authored_by="llm")
+    assert corrections_log.resolve_authored_by("obj-new", "Context", path=p) == "user"
 
 
 def test_capture_reactivates_instead_of_creating(tmp_path, monkeypatch):

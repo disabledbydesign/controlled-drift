@@ -1216,10 +1216,16 @@ def run():
         )
         for item in scheduled:
             if item.get("start_time") and item.get("id"):
+                # The scheduler placed this item, so the placement June may later move is
+                # machine-authored. Stamped on the record for the same reason as the plan
+                # correction above: a later move is a correction OF the system, not a change of
+                # her own mind, and the loop can only tell them apart if this says so.
                 log_correction("initial_placement", None,
                                {"name": item["name"],
                                 "start": item["start_time"].isoformat(),
-                                "end": item.get("end_time", "").isoformat() if item.get("end_time") else None})
+                                "end": item.get("end_time", "").isoformat() if item.get("end_time") else None},
+                               object_id=item["id"], field="__placement__",
+                               authored_by="llm", surface="daily_plan")
         print(f"✓ Updated last_surfaced on {len(surfaced_ids)} items. Schedule logged.")
 
 

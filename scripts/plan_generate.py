@@ -1585,7 +1585,13 @@ def reorder(message, kind):
         print(f"[warn] block schedule events not logged: {e}", file=sys.stderr)
 
     # Learning loop #1: the correction itself (the richest signal — live negotiation).
-    log_correction(kind, before=before, after=saved)
+    # `authored_by="llm"` says who authored the plan June is overwriting. Plan content — the woven
+    # frame, block framing, ordering, item text — is ALWAYS model-authored, so here it is a
+    # constant rather than a lookup (docs/api_contract_v2.md §7.5). That is also why the plan
+    # paths emit no per-field authorship stamps: a stamp exists to make `authored_by` resolvable
+    # later, and for plan content there is nothing to resolve — it is llm by construction.
+    log_correction(kind, before=before, after=saved, authored_by="llm",
+                   surface="plan_renegotiation")
     # Learning loop #2: what surfaced in the renegotiated plan.
     if tasks:
         log_surfaced_batch([{"id": t["id"], "name": t["name"], "type": "task"} for t in tasks])
