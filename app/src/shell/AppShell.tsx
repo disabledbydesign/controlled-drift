@@ -16,6 +16,7 @@ import {
   StrategiesScreen,
   TodayScreen,
 } from '../screens/index.ts';
+import type { AddCtx, SettingsCtx } from '../screens/index.ts';
 import { AppHeader } from './AppHeader.tsx';
 import { AppTabs } from './AppTabs.tsx';
 import { navAnimation, navDir, STRUCTURE_TABS } from './tabs.ts';
@@ -147,11 +148,35 @@ export function AppShell({ T, name, setTheme }: AppShellProps) {
     goTab: (t) => goTab(t),
   };
 
+  /**
+   * v4's `this` as `captureTab()` / `logTab()` read it (Task 8). `openDetail` mirrors Today's:
+   * v4 writes `up({detail:r.id,_returnFrom:'add'})` from the receipt's edit button (v4:1121),
+   * and `returnFrom` makes the detail pane's back button say "Add".
+   */
+  const addCtx: AddCtx = {
+    T,
+    graph: st.graph,
+    idx: st.idx,
+    ui: st.ui,
+    up: st.up,
+    apply: st.apply,
+    openDetail: (id: string) => st.up({ detail: id, returnFrom: 'add' }),
+    flash: (msg: string) => st.apply({ graph: st.graph, toast: msg, ui: null, node: null }),
+  };
+
+  /**
+   * Settings reads the UI bag for the backend choice and the plan-content toggle, and takes
+   * the THEME from this component's props — i.e. from the single `useTheme()` in `App.tsx`.
+   * Passing `setTheme` through rather than letting Settings call the hook is what keeps one
+   * theme for the whole surface; see `screens/SettingsScreen.tsx`.
+   */
+  const settingsCtx: SettingsCtx = { T, name, setTheme, ui: st.ui, up: st.up };
+
   const body =
     tab === 'today' ? (
       <TodayScreen ctx={todayCtx} />
     ) : tab === 'add' ? (
-      <AddScreen T={T} />
+      <AddScreen ctx={addCtx} />
     ) : tab === 'map' ? (
       // Task 6: all three structure tabs take the one panel context and each wraps itself in
       // `StructurePanel` (v4:959), which owns the controls, the filter block and the scroller.
@@ -161,7 +186,7 @@ export function AppShell({ T, name, setTheme }: AppShellProps) {
     ) : tab === 'strategies' ? (
       <StrategiesScreen ctx={panelCtx} />
     ) : (
-      <SettingsScreen T={T} />
+      <SettingsScreen ctx={settingsCtx} />
     );
 
   return (
@@ -211,53 +236,13 @@ export function AppShell({ T, name, setTheme }: AppShellProps) {
         </div>
       )}
 
-      {/* Temporary: the theme switch belongs in Settings (Task 8, `themeSection()` ~1144).
-          It sits here so both themes are drivable while Settings is still a placeholder. */}
-      <div
-        style={{
-          flex: '0 0 auto',
-          display: 'flex',
-          gap: '6px',
-          justifyContent: 'center',
-          padding: '8px 12px 12px',
-          borderTop: '1px solid ' + C.hair,
-          background: T.chrome,
-        }}
-      >
-        {(['celestial', 'hardware'] as const).map((n) => (
-          <button
-            key={n}
-            onClick={() => setTheme(n)}
-            style={{
-              cursor: 'pointer',
-              padding: '5px 12px',
-              fontFamily: T.mode === 'hardware' ? T.mono : T.font,
-              fontSize: '11px',
-              textTransform: T.mode === 'hardware' ? 'uppercase' : 'none',
-              letterSpacing: T.mode === 'hardware' ? '.08em' : 0,
-              color: n === name ? C.sig : C.dimmer,
-              background: 'none',
-              border: '1px solid ' + (n === name ? C.sig : C.border),
-              borderRadius: T.r.chip,
-            }}
-          >
-            {n}
-          </button>
-        ))}
-        <a
-          href="#/check"
-          style={{
-            alignSelf: 'center',
-            marginLeft: '6px',
-            fontFamily: T.mono,
-            fontSize: '10px',
-            color: C.dimmest,
-            textDecoration: 'none',
-          }}
-        >
-          tokens
-        </a>
-      </div>
+      {/* The temporary theme switcher that sat here is GONE (Task 8). It was explicitly marked
+          as belonging in `themeSection()` (v4:1144), and it now lives there — reached from the
+          header gear → Settings. v4 has no footer strip below the tab bar.
+
+          The `#/check` link went with it: the acceptance/token page is still served at that
+          route (see `App.tsx`), it just no longer has a permanent affordance in the phone
+          chrome, which v4 does not have either. */}
 
       {/* v4's overlay slot (renderShell 936-938): detail, then pickerPage, then toast — in
           that order, and the order is the z-order. `toast()` is Task 11.

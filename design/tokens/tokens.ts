@@ -380,8 +380,20 @@ export const themes: Record<ThemeName, Theme> = {
     r: {
       chip: '999px',
       card: '16px',                 // UNVERIFIED — gallery celestial cards are borderless; nearest evidence is 13px (L55) / 14px (L203)
-      field: '999px',               // was 13px — gallery L193,L194-196,L198 (celestial fields are pills)
-      ctl: '999px',                 // was 11px — gallery L146-154,L179-184
+      // ⚠ REVERTED to v4's 13px on 2026-07-18. This was changed to '999px' citing "gallery
+      // L193,L194-196,L198 (celestial fields are pills)" — but those lines are `<span>1</span>`,
+      // `<span>week</span>`, `<span>day</span>`, `<span>month</span>` (the RECURRENCE CHIPS) and
+      // `<span>✦ Send</span>` (a BUTTON). None is a field. The gallery contains ZERO <input> and
+      // ZERO <textarea> elements, so it carries no evidence about field radius at all — there was
+      // nothing to correct v4 with. The visible symptom: 150px-tall textareas on the Add tab
+      // rendered as lozenges.
+      field: '13px',
+      // ⚠ SAME MISATTRIBUTION RISK, left as-is pending a visual check. The cited lines
+      // (L146-154, L179-184) are status CHIPS — <span>Steady</span>, <span>Sprint</span>,
+      // <span>Open</span>, <span>Parked</span> — not controls. `ctl` drives the Inherit|Custom
+      // segments and similar small buttons. Not obviously wrong on screen, unlike `field`, so it
+      // is flagged rather than reverted; v4's value was 11px.
+      ctl: '999px',
       mod: '14px',                  // was 18px — gallery L203 (menu)
     },
     chrome: 'rgba(12,8,22,0.4)',    // UNVERIFIED — gallery L39-43 header is transparent over the starfield

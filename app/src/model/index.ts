@@ -58,5 +58,8 @@ export {
   toggleDone,
   toggleActive,
   addChild,
+  capture,
+  CAPTURE_PROJECT_ID,
   defaultNewId,
+  defaultCaptureId,
 } from './mutations.ts';

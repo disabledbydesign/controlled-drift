@@ -141,6 +141,54 @@ export interface UiState {
   priOrder: string[] | null;
   /** Free-text "tell me what you need" box under Today's action row. v4's `st.ask`. */
   ask: string;
+
+  // ── Add / Log tab + Settings (Task 8) ───────────────────────────────────────
+  // None of these six appear in v4's initial bag (v4:79). Every one is written only via
+  // `up()` and read with a `||` / `!==false` fallback, exactly like `stratWhen` above.
+  // Declared here with v4's own fallbacks as the defaults, because the bag is strictly typed.
+  /** The capture textarea. v4's `st.addText`, read by `capture()` (v4:1136). */
+  addText: string;
+  /** The log textarea. v4's `st.logText`. */
+  logText: string;
+  /**
+   * Which log tag is selected — v4's `st.logTag`, one of the two literal strings v4 hardcodes
+   * at 1130. Default 'The day' is v4's `st.logTag||'The day'`.
+   */
+  logTag: LogTag;
+  /** Which model backend writes plans. v4's `st.backend||'claude'` (v4:1152). */
+  backend: BackendId;
+  /**
+   * Whether the daily plan includes creative/hobby work. v4's `st.hobby!==false` (v4:1156) —
+   * i.e. ON unless explicitly set false, which is why the default here is `true`.
+   */
+  hobby: boolean;
+  /**
+   * "Added this session" — what capture has filed, newest first.
+   *
+   * ⚠ DIVERGENCE FROM v4, deliberate. v4 holds this on the instance (`this.receipt=[]`,
+   * v4:80) rather than in the `up()` bag, because it mutates instance fields freely and calls
+   * `bump()`. Immutable React state has no equivalent of that, and the receipt has to survive
+   * a tab switch, so it lives in the bag — the one piece of state here that is a LIST rather
+   * than a control value. Nothing else about it changes: same entry shape, same newest-first
+   * prepend (v4:1140).
+   */
+  receipt: readonly ReceiptEntry[];
+}
+
+/** v4's two literal log tags (v4:1130). Not schema-driven in v4 — hardcoded in the render. */
+export type LogTag = 'The day' | 'Friction';
+
+/** v4's three backend option ids (v4:1161-1163). */
+export type BackendId = 'claude' | 'local' | 'api';
+
+/** One "added this session" row — v4's `{id,text,project}` (v4:1140). */
+export interface ReceiptEntry {
+  /** id of the created task, so the row's "edit" button can open it in the detail editor. */
+  id: string;
+  /** The captured text, verbatim. */
+  text: string;
+  /** Title of the project it was filed under. */
+  project: string;
 }
 
 const INITIAL_UI: UiState = {
@@ -173,6 +221,12 @@ const INITIAL_UI: UiState = {
   blocksOpen: {},
   priOrder: null,
   ask: '',
+  addText: '',
+  logText: '',
+  logTag: 'The day',
+  backend: 'claude',
+  hobby: true,
+  receipt: [],
 };
 
 /** What a toast carries. `seq` makes two identical messages in a row distinguishable. */

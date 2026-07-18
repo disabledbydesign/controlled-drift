@@ -408,6 +408,72 @@ export function addChild(
   };
 }
 
+/** v4 capture(): `const id='cap'+Math.random().toString(36).slice(2,6);` */
+export function defaultCaptureId(): string {
+  return 'cap' + Math.random().toString(36).slice(2, 6);
+}
+
+/**
+ * v4 `capture()` (1136):
+ *   capture(){ const t=(this.st.addText||'').trim(); if(!t)return; const p=this.node('vyzxdu');
+ *     const id='cap'+Math.random().toString(36).slice(2,6);
+ *     const n={id,level:'TASK',type:'Task',title:t,vals:{status:'Ready'},children:[],parent:p,_new:true};
+ *     p.children.push(n); this.byId[id]=n;
+ *     this.receipt=[{id,text:t,project:p.title},...this.receipt];
+ *     this.up({addText:''}); this.flash('Sorted into '+p.title); this.bump(); }
+ *
+ * ⚠ FLAGGED, PORTED AS-IS: the destination project id `'vyzxdu'` ("Build Controlled Drift")
+ * is HARDCODED in v4. The Add tab's own copy says "It sorts what you write into the right
+ * places" — in the mockup nothing sorts, every captured line lands in the same project. The
+ * real sorter is the backend's capture path (out of scope for Track A, which makes no network
+ * calls), so the constant is transcribed rather than invented around. `projectId` is a
+ * parameter so the seam has somewhere to attach without a rewrite.
+ *
+ * ⚠ ALSO FLAGGED: v4 does not parse the text at all. `capture()` splits nothing, extracts no
+ * dates, reads no tags — the whole trimmed string becomes one task title, and `vals` gets
+ * exactly `{status:'Ready'}`. The placeholder ("call the surgeon's office, AND I keep meaning
+ * to meditate daily…") shows two items in one line, so the mockup's copy promises a split the
+ * mockup does not perform. Not fixed here.
+ *
+ * Deviation from v4, and the only one: an unknown/missing destination project no-ops instead
+ * of throwing on `p.children` of `undefined`. Same call made for `toggleMulti` above.
+ */
+export const CAPTURE_PROJECT_ID = 'vyzxdu';
+
+export function capture(
+  graph: Graph,
+  text: string,
+  projectId: string = CAPTURE_PROJECT_ID,
+  newId: () => string = defaultCaptureId,
+): MutationResult {
+  const t = text.trim();
+  if (!t) return noop(graph);
+
+  const p = nodeInGraph(graph, projectId);
+  if (!p) return noop(graph);
+
+  const id = newId();
+  const n: ModelNode = {
+    id,
+    level: 'TASK',
+    type: 'Task',
+    title: t,
+    vals: { status: 'Ready' },
+    children: [],
+    _new: true,
+  };
+
+  const inserted = appendChild(graph, p.id, n);
+  return {
+    graph: inserted.graph,
+    toast: 'Sorted into ' + p.title,
+    // v4's `up({addText:''})`. The receipt is NOT here: v4 keeps it on the instance
+    // (`this.receipt`), and the caller composes it from `node` + the destination title.
+    ui: { addText: '' },
+    node: n,
+  };
+}
+
 // ── internal ────────────────────────────────────────────────────────────────
 
 /**
