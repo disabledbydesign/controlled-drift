@@ -18,7 +18,13 @@ def live_server(tmp_path, monkeypatch):
     fake_objects = [
         {"id": "rid-fridge", "name": "Clean the fridge", "type": {"key": "gsdo_recurring"},
          "properties": [{"key": "interval_unit", "select": {"name": "as_needed"}}]},
-        {"id": "period-1", "name": "Focus period", "type": {"key": "focus_period"}},
+        # The period as it reads back AFTER a fully-successful write of _BASE_FIELDS. The routes
+        # verify every written field on read-back, so a stub with no properties would (correctly)
+        # look like a write that silently didn't land.
+        {"id": "period-1", "name": "Focus period", "type": {"key": "focus_period"},
+         "properties": [{"name": "Period start", "date": "2026-07-20T00:00:00Z"},
+                        {"name": "Period end", "date": "2026-07-27T00:00:00Z"},
+                        {"name": "Output format", "select": {"name": "Auto"}}]},
     ]
     monkeypatch.setattr(server.g, "fetch_all_objects", lambda sid: fake_objects)
     monkeypatch.setattr(server.g, "get_space_id", lambda: "sid")
@@ -121,3 +127,39 @@ def test_update_surfaces_unresolved_reactivate_name_without_blocking_the_edit(li
     assert status == 200 and body["ok"] is True
     assert "activated" not in calls
     assert body["reactivate_unresolved"] == ["Nonexistent task"]
+
+
+# --- read-back must cover EVERY written field, not just start/end ---------------------------
+
+def test_commit_rejects_a_partial_persist(live_server, monkeypatch):
+    """Start and end landed, the intent did not. This used to return {"ok": true} — the route
+    re-fetched and then only checked start/end, so every other field she authored was unverified.
+    A write we cannot prove must never present as saved."""
+    fields = dict(_BASE_FIELDS, intent="jobs first, everything else waits")
+    status, body = _post(live_server, "/api/focus/commit",
+                         {"fields": fields, "raw_text": "jobs first"})
+    assert status == 500
+    assert "did not persist" in body["error"] and "Intent" in body["error"]
+
+
+def test_update_rejects_a_partial_persist(live_server, monkeypatch):
+    """Same guard on the edit-confirm path."""
+    fields = dict(_BASE_FIELDS, intent="jobs first, everything else waits")
+    status, body = _post(live_server, "/api/focus/update",
+                         {"fields": fields, "raw_text": "jobs first", "id": "period-1"})
+    assert status == 500
+    assert "did not persist" in body["error"] and "Intent" in body["error"]
+
+
+def test_commit_accepts_a_fully_verified_write(live_server, monkeypatch):
+    """The positive counterpart: when the intent DOES read back, the commit succeeds — the guard
+    proves persistence, it doesn't just reject everything."""
+    intent = "jobs first, everything else waits"
+    obj = next(o for o in server.g.fetch_all_objects("sid") if o["id"] == "period-1")
+    obj["properties"].append({"name": "Intent", "text": intent})
+    try:
+        status, body = _post(live_server, "/api/focus/commit",
+                             {"fields": dict(_BASE_FIELDS, intent=intent), "raw_text": "x"})
+        assert status == 200 and body["ok"] is True
+    finally:
+        obj["properties"] = [p for p in obj["properties"] if p.get("name") != "Intent"]

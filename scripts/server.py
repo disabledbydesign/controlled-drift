@@ -891,6 +891,13 @@ class Handler(BaseHTTPRequestHandler):
                 if not parsed or not (parsed["start"] and parsed["end"]):
                     self._send(500, {"error": "period did not persist correctly on read-back"})
                     return
+                # ...and every OTHER field she authored, not just start/end — an unverified
+                # field is an unconfirmed write however good the answer looked.
+                mismatched = focus_period_adapter.verify_persisted(props, obj)
+                if mismatched:
+                    self._send(500, {"error": "period did not persist correctly on read-back: "
+                                              + "; ".join(mismatched)})
+                    return
             except Exception as e:
                 self._send(500, {"error": f"read-back failed: {e}"})
                 return
@@ -963,6 +970,12 @@ class Handler(BaseHTTPRequestHandler):
                 parsed = focus_period.parse_focus_period(obj) if obj else None
                 if not parsed or not (parsed["start"] and parsed["end"]):
                     self._send(500, {"error": "edit did not persist correctly on read-back"})
+                    return
+                # Same widening as /api/focus/commit: confirm every written field landed.
+                mismatched = focus_period_adapter.verify_persisted(props, obj)
+                if mismatched:
+                    self._send(500, {"error": "edit did not persist correctly on read-back: "
+                                              + "; ".join(mismatched)})
                     return
             except Exception as e:
                 self._send(500, {"error": f"read-back failed: {e}"})

@@ -19,6 +19,7 @@ deterministic.
 import sys, os, datetime as dt
 sys.path.insert(0, os.path.dirname(__file__))
 import gsdo_anytype as g
+import focus_period as fp
 import focus_period_author as author
 import recurring_active
 
@@ -99,6 +100,58 @@ def to_write_properties(fields, objects=None):
     if fg:                         props["Foreground projects"] = fg
     if paused:                     props["Paused projects"] = paused
     return name, props
+
+
+# How each written property must be compared on read-back. Anything not listed is plain text.
+_DATE_PROPS = ("Period start", "Period end", "Availability start", "Availability end")
+_DATELIST_PROPS = ("Days off", "Days on")
+_OBJECT_PROPS = ("Foreground projects", "Paused projects")
+
+
+def verify_persisted(props, obj):
+    """Prove EVERY property to_write_properties wrote actually landed on the re-fetched object.
+
+    Returns a list of plain mismatch descriptions — empty means the whole write is confirmed.
+    The commit/update routes read back and then checked only start and end, so any other field
+    (intent, availability, days off, output format, foreground/paused projects) could fail to
+    persist while the route still reported success. Comparison is by MEANING, not raw string:
+    dates are parsed (Anytype normalizes an ISO date to a datetime), date lists compare as sets,
+    and the objects relations compare as id sets (they read back as bare id strings).
+    """
+    if not isinstance(obj, dict):
+        return ["the period object could not be re-fetched"]
+    by_name = fp._by_name(obj)
+    out = []
+    for pname, want in (props or {}).items():
+        if pname in _DATE_PROPS:
+            got = fp._date(by_name, pname)
+            try:
+                intended = dt.date.fromisoformat(str(want)[:10])
+            except (ValueError, TypeError):
+                intended = None
+            if got != intended:
+                got_s = got.isoformat() if got else None
+                out.append(f"{pname}: wrote {want!r}, read back {got_s!r}")
+        elif pname in _DATELIST_PROPS:
+            got, _err = fp._parse_date_list(by_name, pname)
+            intended = [t.strip()[:10] for t in str(want).split(",") if t.strip()]
+            if set(got) != set(intended):
+                out.append(f"{pname}: wrote {intended!r}, read back {got!r}")
+        elif pname in _OBJECT_PROPS:
+            got = sorted({oid for oid, _n in fp._objects_pairs(by_name, pname)})
+            intended = sorted(set(want or []))
+            if got != intended:
+                out.append(f"{pname}: wrote {intended!r}, read back {got!r}")
+        elif pname == "Output format":
+            sel = (by_name.get(pname) or {}).get("select") or {}
+            got = sel.get("name") if isinstance(sel, dict) else sel
+            if got != want:
+                out.append(f"{pname}: wrote {want!r}, read back {got!r}")
+        else:
+            got = fp._text(by_name, pname)
+            if (got or "").strip() != str(want).strip():
+                out.append(f"{pname}: wrote {want!r}, read back {got!r}")
+    return out
 
 
 def resolve_reactivate_names(names, objects=None):

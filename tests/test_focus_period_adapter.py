@@ -252,3 +252,86 @@ def test_resolve_reactivate_names_excludes_scheduled_recurring_and_other_types()
 def test_resolve_reactivate_names_empty_list_is_a_noop():
     resolved, unresolved = resolve_reactivate_names([], objects=AS_NEEDED_OBJECTS)
     assert resolved == [] and unresolved == []
+
+
+# --- verify_persisted: EVERY written field must be proven, not just start/end ----------------
+# The commit/update routes re-fetched and then checked only Period start + Period end, so a
+# dropped intent / availability / days-off / foreground-projects write still reported success.
+
+from focus_period_adapter import verify_persisted  # noqa: E402
+
+
+def _obj(**props):
+    """A re-fetched Anytype object carrying the given display-name -> value-field properties."""
+    return {"id": "fp-1", "name": "Week of Jun 29",
+            "properties": [dict(name=k, **v) for k, v in props.items()]}
+
+
+def _written():
+    name, props = to_write_properties(_fields(), objects=PROJECTS)
+    return props
+
+
+def _persisted_obj(props, **override):
+    """Build the object a fully-successful write of `props` would read back as."""
+    fields = {}
+    for pname, want in props.items():
+        if pname in ("Period start", "Period end", "Availability start", "Availability end"):
+            fields[pname] = {"date": f"{want}T00:00:00Z"}      # Anytype's datetime normalization
+        elif pname in ("Foreground projects", "Paused projects"):
+            fields[pname] = {"objects": list(want)}            # read back as bare id strings
+        elif pname == "Output format":
+            fields[pname] = {"select": {"name": want}}
+        else:
+            fields[pname] = {"text": want}
+    fields.update(override)
+    return _obj(**fields)
+
+
+def test_verify_persisted_clean_when_everything_landed():
+    props = _written()
+    assert verify_persisted(props, _persisted_obj(props)) == []
+
+
+def test_verify_persisted_catches_a_dropped_intent():
+    props = _written()
+    obj = _persisted_obj(props, **{"Intent": {"text": ""}})
+    out = verify_persisted(props, obj)
+    assert len(out) == 1 and out[0].startswith("Intent:")
+
+
+def test_verify_persisted_catches_dropped_foreground_projects():
+    props = _written()
+    obj = _persisted_obj(props, **{"Foreground projects": {"objects": []}})
+    out = verify_persisted(props, obj)
+    assert len(out) == 1 and out[0].startswith("Foreground projects:")
+
+
+def test_verify_persisted_catches_a_wrong_output_format():
+    props = _written()
+    obj = _persisted_obj(props, **{"Output format": {"select": {"name": "Auto"}}})
+    out = verify_persisted(props, {**obj})
+    assert (out == []) == (props["Output format"] == "Auto")
+
+
+def test_verify_persisted_catches_dropped_days_off():
+    props = dict(_written())
+    props["Days off"] = "2026-07-01, 2026-07-02"
+    obj = _persisted_obj(props, **{"Days off": {"text": "2026-07-01"}})
+    out = verify_persisted(props, obj)
+    assert len(out) == 1 and out[0].startswith("Days off:")
+
+
+def test_verify_persisted_tolerates_datetime_normalized_dates():
+    """A format difference is not a mismatch — dates are compared parsed, both sides."""
+    props = {"Period start": "2026-06-29"}
+    assert verify_persisted(props, _obj(**{"Period start": {"date": "2026-06-29T00:00:00Z"}})) == []
+
+
+def test_verify_persisted_flags_an_absent_date():
+    props = {"Period start": "2026-06-29"}
+    assert len(verify_persisted(props, _obj())) == 1
+
+
+def test_verify_persisted_flags_an_unreadable_object():
+    assert verify_persisted({"Intent": "x"}, None) == ["the period object could not be re-fetched"]

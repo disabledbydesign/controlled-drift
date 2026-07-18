@@ -18,6 +18,21 @@ def test_reschedule_sets_scheduled(monkeypatch):
     assert out["when_label"] == "Thu Jul 16"
 
 
+def test_reschedule_raises_when_scheduled_absent_on_readback(monkeypatch):
+    """The write silently didn't land: the read-back carries NO Scheduled date at all. That used
+    to pass the guard (`persisted is not None and ...`) and report success — a saved-looking
+    nothing, exactly what read-back exists to prevent."""
+    import pytest
+    from importlib import import_module
+    ta = import_module("task_actions")
+    monkeypatch.setattr(ta.gsdo_objects, "update",
+                        lambda oid, name=None, properties=None: {"id": oid})
+    monkeypatch.setattr(ta, "_get_object", lambda oid: {"id": oid, "properties": []})
+    with pytest.raises(RuntimeError) as e:
+        ta.reschedule_task("abc", "thursday", today=dt.date(2026, 7, 13))
+    assert "Scheduled did not persist" in str(e.value)
+
+
 def test_reschedule_someday_parks(monkeypatch):
     from importlib import import_module
     ta = import_module("task_actions")

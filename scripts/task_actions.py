@@ -167,7 +167,9 @@ def reschedule_task(task_id, when_text, today=None):
         intended = when_resolve._as_date(scheduled)
         # Confirm the date landed. A present-but-different date is a genuine failure; a mere
         # format difference (T00:00:00Z vs date) is not — both sides are parsed to compare.
-        if persisted is not None and persisted != intended:
+        # An ABSENT date is a failure, not a pass: the write silently not landing is exactly
+        # what read-back exists to catch (a None here used to slip through this guard).
+        if persisted != intended:
             raise RuntimeError(
                 f"reschedule_task({task_id!r}): Scheduled did not persist "
                 f"(read-back={persisted!r}, intended={intended!r})")
@@ -179,15 +181,53 @@ def reschedule_task(task_id, when_text, today=None):
     return {"id": task_id, "when_label": _when_label(scheduled, is_today, is_parked)}
 
 
+def _archived_marker(obj):
+    """Is this re-fetched object marked archived? True / False / None (no marker field at all).
+
+    DELETE archives rather than hard-deletes, so the object may still be readable — the proof of
+    removal is therefore a marker on the object, not a 404. Anytype's Object schema carries this
+    as a top-level `archived` bool; the aliases are tolerated so a field rename doesn't turn a
+    real archive into a spurious failure. None means "this object exposes no archived marker",
+    which is undetermined, not success — the caller must NOT read it as confirmation.
+    """
+    for key in ("archived", "is_archived", "deleted", "is_deleted"):
+        if key in obj:
+            return bool(obj[key])
+    props = {p.get("key"): p for p in obj.get("properties", [])}
+    for key in ("archived", "is_archived"):
+        p = props.get(key)
+        if isinstance(p, dict) and "checkbox" in p:
+            return bool(p["checkbox"])
+    return None
+
+
 def archive_object(object_id):
     """Undo a just-made capture by moving the object to Anytype's bin (DELETE archives, it
     doesn't hard-delete — recoverable in the app). The honest undo of a *creation* is removal,
-    not a status flip. Confirms the API accepted it; raises otherwise. Returns {"id","archived"}.
+    not a status flip. Returns {"id","archived"}; raises on anything unproven.
+
+    A good answer is not a saved object — and an accepted DELETE is not an archived object. The
+    HTTP status only says the API took the request, so this re-fetches and confirms the removal
+    in the object's OWN state: either it is no longer readable (404/410) or it comes back carrying
+    an archived marker. An object that reads back live and unmarked is a failed undo and raises.
     """
     sid = g.get_space_id()
     st, b = call("DELETE", f"/spaces/{sid}/objects/{object_id}")
     if st not in (200, 204):
         raise RuntimeError(f"could not archive object {object_id!r}: {st} {b}")
+
+    # Read back and PROVE it — never confirm an undo on the API's acknowledgment alone.
+    st2, b2 = call("GET", f"/spaces/{sid}/objects/{object_id}")
+    if st2 in (404, 410):
+        return {"id": object_id, "archived": True}
+    if st2 != 200 or not isinstance(b2, dict) or "object" not in b2:
+        raise RuntimeError(
+            f"could not confirm archive of {object_id!r}: read-back {st2} {b2}")
+    marker = _archived_marker(b2["object"])
+    if marker is not True:
+        raise RuntimeError(
+            f"archive_object({object_id!r}): object still reads back unarchived "
+            f"(archived marker={marker!r})")
     return {"id": object_id, "archived": True}
 
 
