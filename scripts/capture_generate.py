@@ -536,7 +536,12 @@ def capture(text, today=None):
                 skipped.append({"name": item.get("name"), "note": item.get("dedup_note")})
                 continue
             if item.get("action") == "reactivate":
-                rid = ref_map.get(item.get("reactivate_ref"))
+                # Guard the token's KIND, mirroring _LINK_TOKEN_PREFIX for `link`: reactivate_ref
+                # shares ref_map with the G#/P# link tokens, so a wrong-kind token (a hallucinated
+                # or copy-pasted G#/P#) must resolve to NOTHING rather than silently reactivating
+                # a Goal/Project's Active checkbox under a mislabeled "Recurring" receipt.
+                ref = item.get("reactivate_ref") or ""
+                rid = ref_map.get(ref) if ref.startswith("R") else None
                 if not rid:
                     session_store.log_failure("capture", "reactivate_unresolved", {"item": item})
                     failed.append({"name": item.get("name"), "error": "reactivate_ref did not resolve"})

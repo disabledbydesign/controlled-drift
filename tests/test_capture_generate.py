@@ -246,6 +246,30 @@ def test_capture_reactivate_unresolved_ref_fails_without_creating(tmp_path, monk
     assert len(out["failed"]) == 1 and out["failed"][0]["name"] == "Clean the fridge"
 
 
+def test_capture_reactivate_wrong_kind_token_is_dropped_not_applied(tmp_path, monkeypatch):
+    # reactivate_ref shares ref_map with the G#/P# link tokens. A wrong-kind token (a hallucinated
+    # or copy-pasted G#/P#) must resolve to NOTHING — never silently reactivate a Goal/Project's
+    # Active checkbox under a mislabeled "Recurring" receipt. Mirrors
+    # test_wrong_kind_link_token_is_dropped_not_applied's guard for `link`.
+    canned = json.dumps({"opening": "x", "capacity_read": None, "groups": [
+        {"label": "g", "through_line": "t", "items": [
+            {"type": "Recurring", "name": "Clean the fridge", "link": None,
+             "action": "reactivate", "reactivate_ref": "G1", "reasoning": "r"},   # G1, not R#
+        ]},
+    ]})
+    calls = _stub(monkeypatch, tmp_path, canned=canned)
+    activated = {}
+    monkeypatch.setattr(cg.recurring_active, "set_recurring_active",
+                        lambda rid, active: activated.update({"c": rid}))
+
+    out = cg.capture("clean the fridge")
+
+    assert activated == {}                # G1 (a Goal token) must never reach the primitive
+    assert calls == []
+    assert out["created"] == []
+    assert len(out["failed"]) == 1 and out["failed"][0]["name"] == "Clean the fridge"
+
+
 def test_capture_writes_estimated_duration_labeled(tmp_path, monkeypatch):
     # June stated no duration; the model estimated one. It lands labeled 'estimated'.
     canned = json.dumps({"opening": "x", "capacity_read": None, "groups": [
