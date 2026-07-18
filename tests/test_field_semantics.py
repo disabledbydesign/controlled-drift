@@ -41,6 +41,90 @@ def test_hint_is_one_short_line_for_every_field():
         assert len(hint) <= 110, (name, len(hint))
 
 
+# --- what the field DOES -----------------------------------------------------
+# These make drift structurally hard rather than a rule someone has to remember: a new field
+# cannot be added without stating its runtime consequence, and a free-text field cannot ship a
+# single example the model would copy.
+
+def test_every_field_records_what_it_does():
+    """A field an agent can write must say what happens when it is set, not only what it means."""
+    for name in list(fs.FIELDS) + list(fs.UNDEFINED):
+        d = fs.does(name)
+        assert d, f"{name} has no DOES entry — say what reads/writes it, or that nothing does"
+        assert d["status"] in fs.DOES_STATUSES, (name, d.get("status"))
+        assert d.get("read_by", "").strip(), name
+        assert d.get("written_by", "").strip(), name
+
+
+def test_does_covers_undefined_fields_too():
+    """No documented MEANING and no runtime FUNCTION are different gaps; both get reported."""
+    assert fs.does("Last surfaced")["status"] in fs.DOES_STATUSES
+    # June asked specifically: an LLM must not write this one.
+    assert "never an LLM" in fs.does("Last surfaced")["written_by"]
+
+
+def test_does_line_is_one_short_line():
+    for name in fs.FIELDS:
+        line = fs.does_line(name)
+        assert line and "\n" not in line, name
+        assert len(line) <= 180, (name, len(line))
+
+
+def test_does_line_never_lends_one_type_s_story_to_another():
+    """Caught by driving describe_model on the live space, not by any test that existed.
+
+    `Foreground projects` drives real selection on a Focus Period and does nothing at all on a
+    Goal. Printing the Focus Period story under the Goal's field would tell an agent that writing
+    there changes the plan.
+    """
+    fp = fs.does_line("Foreground projects", type_name="Focus Period")
+    goal = fs.does_line("Foreground projects", type_name="Goal")
+    assert fp and fp.startswith("[live]")
+    assert goal and goal.startswith("[undesigned]")
+    assert fp != goal
+
+    assert fs.does_line("Goal status", type_name="Goal").startswith("[live]")
+    assert fs.does_line("Goal status", type_name="Project").startswith("[undesigned]")
+
+
+def test_no_does_entry_is_invented_for_an_unknown_field():
+    assert fs.does("Nonexistent field") is None
+
+
+# --- examples: several, varied, never a template -----------------------------
+# June, 2026-07-18: "if you give one specific example, the model may replicate your example in
+# its output for the text fields." One example IS a template; several dissimilar ones are a range.
+
+def test_free_text_fields_carry_several_varied_examples():
+    for name in fs.FREE_TEXT_FIELDS:
+        ex = fs.examples(name)
+        assert len(ex) >= 3, f"{name}: {len(ex)} example(s) — one example gets copied verbatim"
+        assert len(set(ex)) == len(ex), name
+        # Varied, not one sentence rephrased: at least three distinct openings across the set.
+        # (Not ALL distinct — a field whose natural form is "when X" legitimately repeats "when".)
+        openings = {" ".join(x.lower().split()[:2]) for x in ex}
+        assert len(openings) >= 3, (name, sorted(openings))
+
+
+def test_no_definition_smuggles_a_specimen():
+    """Specimens belong in EXAMPLES, under the banner — never inside the definition an LLM reads.
+
+    Checked by containment rather than by hunting quote marks: the failure mode that matters is a
+    example sitting in `means` where it reads as part of the definition and gets copied.
+    """
+    for name in fs.FREE_TEXT_FIELDS:
+        e = fs.lookup(name)
+        blob = " ".join([e["means"], e.get("not_this") or ""] + list(e.get("usage") or []))
+        for ex in fs.examples(name):
+            assert ex not in blob, f"{name}: example {ex!r} is duplicated into the definition"
+
+
+def test_examples_are_rendered_with_the_do_not_copy_banner():
+    text = fs.describe("Affective")
+    assert fs.EXAMPLES_BANNER in text
+    assert "NOT a template" in fs.EXAMPLES_BANNER
+
+
 def test_affective_entry_routes_the_content_that_leaked():
     e = fs.lookup("Affective")
     assert "Blocked on" in e["instead"].values()
@@ -156,7 +240,8 @@ def test_a_revision_is_logged_through_the_existing_corrections_log(tmp_path):
 def test_schema_payload_is_json_serialisable_and_carries_both_grains(tmp_path):
     payload = fs.schema_payload(path=str(tmp_path / "ov.json"))
     json.dumps(payload)                                  # raises if anything is not JSON-ready
-    assert set(payload) == {"fields", "undefined", "routing_brief"}
+    assert set(payload) == {"fields", "undefined", "routing_brief",
+                            "examples_banner", "does_statuses"}
     aff = payload["fields"]["Affective"]
     assert aff["hint"] and aff["means"] and aff["source"]
     assert aff["field"] == "Affective"

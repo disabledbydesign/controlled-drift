@@ -25,11 +25,39 @@ TYPE_ORDER = ["Goal", "Project", "Task", "Recurring", "Strategy", "Focus Period"
 
 
 def fields_for(type_name):
+    """Fields on this type, as RESOLVED entries.
+
+    Resolved, not the raw FIELDS dict: June's overrides have to win in the sheet she checks, and
+    the `does`/`examples` grains are merged in by `resolved()`. Reading FIELDS directly here once
+    meant both silently rendered as absent.
+    """
     out = []
     for name, e in fs.FIELDS.items():
         if type_name in (e.get("types") or []):
-            out.append((name, e))
-    return sorted(out)
+            out.append((name, fs.resolved(name)))
+    return sorted(out, key=lambda kv: kv[0])
+
+
+# Plain words for the three states a field can be in, so the sheet never reads as a defect list.
+# A field waiting on design is a normal state for a system still being built.
+STATUS_WORDS = {
+    "live": "Working now",
+    "planned": "Designed, not built yet",
+    "undesigned": "Nothing uses it yet, and no design was found",
+}
+
+
+def does_block(d):
+    """The 'what it does' section for one field. Empty when nothing was recorded — never guessed."""
+    if not d:
+        return []
+    L = [f"**What it does — {STATUS_WORDS.get(d.get('status'), d.get('status'))}**", ""]
+    if d.get("written_by"):
+        L.append(f"- *What writes it:* {d['written_by']}")
+    if d.get("read_by"):
+        L.append(f"- *What reads it, and what changes:* {d['read_by']}")
+    L.append("")
+    return L
 
 
 def block(name, e):
@@ -49,6 +77,16 @@ def block(name, e):
         L.append("")
         for what, where in instead.items():
             L.append(f"- {what} → `{where}`")
+        L.append("")
+
+    L += does_block(e.get("does"))
+
+    ex = e.get("examples") or []
+    if ex:
+        L.append(f"**Examples — {fs.EXAMPLES_BANNER}**")
+        L.append("")
+        for x in ex:
+            L.append(f"- {x}")
         L.append("")
 
     usage = e.get("usage") or []
@@ -117,6 +155,11 @@ def render():
         items = und.items() if hasattr(und, "items") else [(u, "") for u in und]
         for n, why in sorted(items):
             L.append(f"- **{n}** — {why}" if why else f"- **{n}**")
+            # No documented meaning and no runtime function are separate gaps. Several of these
+            # do something quite specific; saying so is reporting the code, not inventing a reason.
+            db = does_block(fs.does(n))
+            if db:
+                L += [""] + ["  " + x if x else x for x in db]
         L += ["", "---", ""]
 
     covered = set()
@@ -134,7 +177,7 @@ def render():
     if leftover:
         L += ["## Fields not attached to any type above", ""]
         for name in leftover:
-            L += block(name, fs.FIELDS[name])
+            L += block(name, fs.resolved(name))
 
     return "\n".join(L) + "\n"
 

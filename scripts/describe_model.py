@@ -115,10 +115,20 @@ def describe():
             meaning = field_semantics.one_line(nm, type_name=display)
             if meaning:
                 out.append(f"        {meaning}")
+                # A second line: what the field DOES — what reads it, and whether that is live,
+                # planned but unbuilt, or nothing at all. Knowing a field's MEANING is not enough
+                # to write it well; the consequence is what makes a wrong value expensive, and a
+                # field waiting on design must not be mistaken for a broken one.
+                did = field_semantics.does_line(nm, type_name=display)
+                if did:
+                    out.append(f"        {did}")
             elif field_semantics.is_undefined(nm) or field_semantics.lookup(nm):
                 # Either no documented meaning at all, or documented only for a DIFFERENT type
                 # (so this type's use of it is undocumented). Both cases: don't infer one.
                 out.append("        (no documented meaning — do not infer one)")
+                did = field_semantics.does_line(nm, type_name=display)
+                if did:
+                    out.append(f"        {did}")
         if hidden:
             out.append(f"    (+{len(hidden)} Anytype system fields hidden: {', '.join(hidden)})")
     out += _empty_types_note(empty_types)

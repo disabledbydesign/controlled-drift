@@ -79,6 +79,9 @@ This repo's most expensive recurring failure, diagnosed 2026-07-11:
    a spec, pass 599 tests, and still break the function — that has happened here and cost a rebuild.
 4. **Read-back where a write is involved** — write → re-fetch → confirm the change is actually present
    → only then report success. "The API returned 200" is not confirmation.
+5. **If the change altered what reads or writes an Anytype field, that field's entry in
+   `scripts/field_semantics.py` is updated in the SAME commit.** See "Keeping field semantics from
+   drifting" below for why this clause and not a rule somewhere else.
 
 **Every plan's final task is an integration-and-live-verify task. REQUIRED, non-negotiable, not a test.**
 
@@ -288,7 +291,7 @@ touches before writing:
 
 | Seam | How |
 |---|---|
-| `describe_model.py` | one line of meaning inline per field |
+| `describe_model.py` | one line of meaning **and one line of what the field DOES** inline per field, both scoped to the type being described |
 | `cd_mcp_server.py` | routing brief appended to all three write tools + a `field_meaning` tool |
 | `gsdo_objects.py` | docstring pointer; raises on the one objectively-invalid case |
 | **`~/.claude/skills/drift/SKILL.md`** | routing table + "never write your own reasoning into her fields" |
@@ -304,6 +307,47 @@ ever restored from elsewhere.
 worked from `describe_model.py`, which filters to the five core types. Same blind spot that
 produced two false claims to June. Note `Workday end` exists but `Workday start` does not,
 confirming backend spec §17.
+
+### Keeping field semantics from drifting — the mechanism (2026-07-18)
+
+June asked how to make it "intuitive and logical to update these fields as those backend/ui
+mechanics change, to avoid drift going forward — not sure what that means: updates to our skills,
+our building instructions, or perhaps the spec?"
+
+**Answer: the definition of done, §3 above, clause 5.** A build that changes what reads or writes
+a field updates that field's `DOES` entry in `scripts/field_semantics.py`, in the same commit.
+
+**Why there and not the other two candidates.**
+
+- **Not the spec.** The specs (`AI_LAYER_SPEC.md`, the backend spec) describe what a field is
+  *for*. The drift being prevented is between a field's *documented function* and *what the
+  running code does with it* — and the spec is on the wrong side of exactly that gap. Recording
+  runtime behaviour in a document about intent re-creates the problem one level up. Concretely,
+  this pass found three entries that had drifted precisely because they carried spec intent as if
+  it were behaviour: `Horizon` claimed to feed goal ordering (nothing reads it), `Goal engagement`
+  claimed not to be consumed (it is, as prompt framing), and `Relevant docs` claimed the weeding
+  gate populates it (no prompt mentions it).
+- **Not the skills.** `~/.claude/skills/drift/SKILL.md` is **not version-controlled** — the gap
+  flagged above. A rule that lives only there cannot be relied on, cannot be reviewed in a diff,
+  and is invisible to anyone working from the repo.
+- **The definition of done, because the update lands where the knowledge is.** §3 clause 2 already
+  requires a change to be WIRED IN, and wiring something in *is* the moment a read/write
+  relationship changes. The author is looking straight at the call site. Asking them to write one
+  sentence about it then is nearly free; asking anyone to reconstruct it six weeks later is not.
+  And it is the pattern this repo already uses — the anti-"built-but-dead" rule works because it
+  is a gate on the same commit, not a habit someone has to remember.
+
+**Two mechanical backstops, so this is not purely a rule.** `tests/test_field_semantics.py`
+asserts that (a) every field in `FIELDS` and `UNDEFINED` has a `DOES` entry with a valid status
+and both a `written_by` and a `read_by`, and (b) every free-text field carries three or more
+varied illustrations. A new field therefore cannot be added without stating its runtime
+consequence — the test fails. That catches *additions* structurally; clause 5 catches *changes*,
+which no test can detect on its own.
+
+**What this does not solve, stated plainly:** nothing detects that an existing entry has gone
+stale when a build changes a read path and skips clause 5. The honest mitigation is the one that
+already caught things here — running `describe_model.py` against the live space and reading it,
+which is §3 clause 3 anyway.
 
 ### Strategy `What for` — DECIDED 2026-07-18: do NOT split
 

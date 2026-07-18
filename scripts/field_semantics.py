@@ -67,7 +67,8 @@ FIELDS = {
     "Affective": {
         "types": ("Task", "Project", "Recurring"),
         "means": "The emotional charge of THIS item, in June's words — affective conditions only. "
-                 "'I'm stressed about this', 'I'm putting it off', 'I'm hyperfixated', 'dreading it'.",
+                 "The KIND of thing that belongs here: stress, avoidance, dread, hyperfixation, "
+                 "flatness, relief, unexpected enthusiasm.",
         "not_this": "Status. Findings. Confirmations. Blockers. Progress notes. Anything about the "
                     "state of the WORK rather than how June feels about it. Never a number or rating.",
         "instead": {"a blocker": "Blocked on", "a finding, confirmation, or origin note": "Context",
@@ -86,10 +87,22 @@ FIELDS = {
                   "scripts/capture_fields.py docstring",
         "observed": "The leak lives here. Of 14 populated Affective values in the live space, the "
                     "agent-written ones are status/findings, not affect. Spec and observed use "
-                    "disagree; the spec is the rule and the data is what needs fixing. Separately, "
-                    "docs/structural_diagnosis_2026-07-11.md noted Affective drove no selection as of that "
-                    "date; RE-VERIFIED 2026-07-18, it IS read in the plan path now (2 refs). "
-                    "That half of the claim is STALE; the leak above is current.",
+                    "disagree; the spec is the rule and the data is what needs fixing. "
+                    "PARTLY ADDRESSED 2026-07-18, commit e39dd5b — but read the boundary "
+                    "carefully, because June's note and the commit are about adjacent things. "
+                    "e39dd5b removed `props[\"Context\"] = item[\"reasoning\"]` from "
+                    "capture_generate._creation_props, so the gate's own filing rationale no "
+                    "longer lands in `Context`; it is now stamped in the write log "
+                    "(corrections_log.log_authorship → scripts/data/corrections.jsonl) after "
+                    "read-back. That closes the CONTEXT misroute on the capture path. It does NOT "
+                    "touch Affective: nothing in that commit changes what goes into this field, "
+                    "and the 14 polluted Context values were deliberately left alone (clearing "
+                    "them is a data edit on real objects and stays June's call). So the "
+                    "status-notes-in-Affective leak is still current, and prose guidance — this "
+                    "module, the MCP routing brief, the drift skill — is the whole of what "
+                    "prevents it. Separately, docs/structural_diagnosis_2026-07-11.md said "
+                    "Affective drove no selection; RE-VERIFIED 2026-07-18, it IS read in the plan "
+                    "path now. That half is STALE.",
     },
 
     "Access notes": {
@@ -125,9 +138,9 @@ FIELDS = {
         "instead": {"a strategic 'I don't know how to…' struggle": "Barriers",
                     "a feeling about the block": "Affective"},
         "usage": [
-            "When set, this IS the displayed next item, surfaced positively: 'Waiting: Julia's spec. "
-            "Job Search is healthy — nothing to do here right now is the right answer.' Relief, not "
-            "anxiety.",
+            "When set, this IS the displayed next item, and it is surfaced positively — the plan "
+            "reports what is being waited on and treats 'nothing to do here right now' as the "
+            "right answer, not as a gap. Relief, not anxiety.",
             "Free text, not a traversable link (noted as a gap, not a rule).",
         ],
         "source": "AI_LAYER_SPEC.md §2 Task table, `blocked_on` row; "
@@ -154,7 +167,7 @@ FIELDS = {
     },
 
     "Access conditions": {
-        "types": ("Task", "Recurring"),
+        "types": ("Task", "Recurring", "Project"),
         "means": "Fixed multi-select for the access barriers that are QUERYABLE and load-bearing.",
         "not_this": "Any barrier without a live tag — those go in `Access notes` as open text.",
         "instead": {"a barrier with no matching tag": "Access notes"},
@@ -166,9 +179,20 @@ FIELDS = {
             "The AI infers and proposes; June never sets it cold; ambiguous → leave empty.",
         ],
         "source": "AI_LAYER_SPEC.md §2 Task table `access` row; scripts/capture_fields.py ALLOWED_ACCESS",
-        "observed": "Live tags are only the original three. docs/BUILD_DOC.md Track B records "
-                    "backend-spec §6's Requires-deep-thinking / Involves-bureaucracy / Induces-pain "
-                    "as NOT DONE. Also: `Access conditions` is missing on Project.",
+        "observed": "Live tags are only the original three. The three additions in backend spec §6 "
+                    "(Requires-deep-thinking / Involves-bureaucracy / Induces-pain) are AGREED AND "
+                    "PLANNED — June, 2026-07-18: \"We want to build the new tags\" — and are being "
+                    "built by another thread. Until they are live, writing them does nothing: an "
+                    "unknown tag is dropped. §6 gives behaviour for only one of the three "
+                    "(Induces-pain, a capacity signal to weigh on low-capacity days and pair with "
+                    "rest); the other two are specified as names with no stated behaviour yet. "
+                    "⚠ CORRECTION 2026-07-18, found by running describe_model.py against the live "
+                    "space: `Access conditions` IS on the Project type now — another thread added "
+                    "it read-back-confirmed the same day, and docs/BUILD_DOC.md Track B §4 already "
+                    "records that. This module was the stale one: its type list said "
+                    "Task/Recurring, so the field read as having no documented meaning wherever a "
+                    "Project was described. Project added. Note per Track B that nothing yet READS "
+                    "Project-level access conditions; the reader below is the Task-level one.",
     },
 
     # ---- duration + provenance --------------------------------------------
@@ -261,9 +285,9 @@ FIELDS = {
 
     "Engagement notes": {
         "types": ("Project",),
-        "means": "The situated specifics the Engagement select cannot hold: thresholds ('Backburner: "
-                 "revisit after surgery recovery'), cadence ('Steady: ~30min daily'), a deadline "
-                 "('due July 1'), or hyperfixation/intensity context.",
+        "means": "The situated specifics the Engagement select cannot hold: the threshold that "
+                 "would change it, the cadence it implies, a date it turns on, or "
+                 "hyperfixation/intensity context.",
         "not_this": None,
         "instead": {},
         "usage": [
@@ -312,8 +336,14 @@ FIELDS = {
         "instead": {},
         "usage": [],
         "source": "AI_LAYER_SPEC.md §2 Goal table; docs/review_reorganize_backend_spec.md §12",
-        "observed": "Also appears on the live Project type. The specs define it only for Goal; no "
-                    "documented meaning for a Project's Goal status was found. See UNDEFINED.",
+        "observed": "Also appears on the live Project type, where it is a leak — see "
+                    "`Goal status (on Project)` in UNDEFINED. On Goal itself the option list is "
+                    "documented but its PURPOSE is not. June's own open question, 2026-07-18, "
+                    "recorded as a question and deliberately not promoted into a definition: "
+                    "\"im not sure what the goal status is either, other than perhaps a mechanism "
+                    "for allowing us to retire goals?\" If that is what it is for, it overlaps "
+                    "`Horizon` + `Resolution condition`, which already describe how a goal ends. "
+                    "Unresolved; do not write a rationale for it.",
     },
 
     "Project status": {
@@ -360,7 +390,11 @@ FIELDS = {
         "usage": ["A learning loop targets this field so the strategy improves instead of silently "
                   "failing — and so June is reminded the system is revisable, not stuck."],
         "source": "AI_LAYER_SPEC.md §2 Strategy table",
-        "observed": "Appears unused across her 12 live Strategy objects (docs/BUILD_DOC.md §8).",
+        "observed": "Designed, defined, and unused — not undefined. Unused across her 12 live "
+                    "Strategy objects (docs/BUILD_DOC.md §8). June, 2026-07-18: \"useful to build "
+                    "on later, although im not sure what the original plan for it was.\" The plan "
+                    "IS written down, in AI_LAYER_SPEC.md §2 Strategy, and is quoted in full under "
+                    "what-it-does above so it does not have to be hunted for.",
     },
 
     # ---- the why-fields ---------------------------------------------------
@@ -382,7 +416,8 @@ FIELDS = {
     "Barriers": {
         "types": ("Goal", "Project"),
         "means": "The strategic/decisional 'I don't know how to…' struggle — genuine open QUESTIONS, "
-                 "not undone chores. 'As a PhD I'm overqualified — never know how to handle it.'",
+                 "not undone chores. The KIND of thing that belongs here: an unresolved framing "
+                 "question, an unknown norm or convention, an audience or format she can't settle.",
         "not_this": "A concrete thing being waited for (that is `Blocked on`) and an access barrier "
                     "(that is `Access conditions` / `Access notes`).",
         "instead": {"something concrete being waited for": "Blocked on",
@@ -395,9 +430,11 @@ FIELDS = {
             "The AI proposes it from what June articulates as struggle; optional.",
         ],
         "source": "AI_LAYER_SPEC.md §2 Goal table; docs/route_structure_assessment_2026-07-12.md §5",
-        "observed": "docs/structural_diagnosis_2026-07-11.md lists Barriers among fields nothing "
-                    "reads; the route assessment names 'barriers never resurface' as the missing "
-                    "piece — the field, not the definition.",
+        "observed": "Nothing reads it yet, and that is a pending design rather than a dead field — "
+                    "June, 2026-07-18: \"Keep this — its pending further design.\" "
+                    "docs/route_structure_assessment_2026-07-12.md §5 names 'barriers never "
+                    "resurface' as the missing piece: what is unbuilt is the resurfacing, not the "
+                    "definition. Keep writing it; the content is what the later design needs.",
     },
 
     "Horizon": {
@@ -416,8 +453,8 @@ FIELDS = {
 
     "Resolution condition": {
         "types": ("Goal",),
-        "means": "For Chapter goals: what this goal looks like when it stops claiming attention. "
-                 "'Until income covers basic needs and the GA decision is made.'",
+        "means": "For Chapter goals: what this goal looks like when it stops claiming attention — "
+                 "the condition that ends it, stated so it can be recognised when it arrives.",
         "not_this": None,
         "instead": {},
         "usage": ["Optional on Ongoing/Milestone goals, but useful when the done-state needs "
@@ -498,14 +535,21 @@ FIELDS = {
     # ---- misc Task/Project ------------------------------------------------
     "Relevant docs": {
         "types": ("Project", "Task", "Recurring"),
-        "means": "Filepaths, directory paths, or document locations the AI should read when working "
-                 "on this item. E.g. /Users/june/Documents/papers/anthro-article/.",
+        "means": "Filepaths, directory paths, or document locations an agent should read before "
+                 "working on this item — a repo path, a folder, a named doc, an external system.",
         "not_this": None,
         "instead": {},
         "usage": ["Populated by the weeding gate when an item references a file or external system; "
                   "the AI reads them before working on the item."],
         "source": "AI_LAYER_SPEC.md §2 Project + Task tables",
-        "observed": "RE-VERIFIED 2026-07-18: still not read by the plan path — but that is the WRONG TEST, same as AI autonomous. June: agent-facing. An agent working the task should read these paths first. Checked: not exposed by cd_mcp_server.py, not mentioned in the drift skill. Never connected to its consumer.",
+        "observed": "RE-VERIFIED 2026-07-18: not read by the plan path — but that is the WRONG "
+                    "TEST, same as AI autonomous. Its consumer is agent-facing: an agent working "
+                    "the task should open these paths first. June, 2026-07-18: \"Need to be "
+                    "fixed.\" What fixed means mechanically is stated under what-it-does above "
+                    "(expose it through the MCP read surface, add a read-side rule to the drift "
+                    "skill, and populate it at capture). Correction: the usage rule above says the "
+                    "weeding gate populates it — no prompt in prompts/ mentions it, so nothing "
+                    "does. That rule is intent, not built behaviour.",
     },
 
     "AI autonomous": {
@@ -548,8 +592,11 @@ FIELDS = {
             "Descendants inherit from the nearest ancestor that has it set.",
         ],
         "source": "AI_LAYER_SPEC.md §2 selection-reconciliation note (2026-07-11 / 2026-07-13)",
-        "observed": "docs/review_reorganize_backend_spec.md §12 proposes renaming Obligation → Work; "
-                    "not applied live as of 2026-07-18.",
+        "observed": "The rename Obligation → Work (backend spec §12) is DECIDED — June, "
+                    "2026-07-18: \"lets rename to work\" — and is another thread's to apply. Not "
+                    "live as of 2026-07-18, so `Obligation` is still the only writable name. "
+                    "Wellbeing and Obligation are distinguished in the docs but not in any "
+                    "selection code; the difference is currently semantic only.",
     },
 
     "Block chunk min": {
@@ -618,6 +665,49 @@ FIELDS = {
         "instead": {},
         "usage": ["Checkbox on Recurring; default unset."],
         "source": "docs/task_persistence_design.md",
+    },
+
+    "Active": {
+        "types": ("Recurring",),
+        "means": "The on/off switch for whether this recurring item is currently part of June's "
+                 "daily plan. Backend spec §3: \"it is not 'done' (that's per-occurrence); it is "
+                 "an on/off 'in my daily plan' toggle.\" Default on. PROMOTED out of UNDEFINED "
+                 "2026-07-18: this module previously said no doc defined it, which was wrong — "
+                 "§3 defines it and datetime_seam.py reads it.",
+        "not_this": "A completion state (a recurring item is never 'done', only done for today), "
+                    "and not the legacy `Active` value of Task status, which is a different field.",
+        "instead": {"whether today's occurrence is finished": "the per-day completion path, not "
+                                                              "this flag"},
+        "usage": ["Write it through recurring_active.set_recurring_active, the single writer — "
+                  "never by hand. It reads back and logs.",
+                  "⚠ It only takes effect on `as_needed` items. On day/week/month items nothing "
+                  "consults it, so unticking a weekly recurring does not currently remove it from "
+                  "the plan. The scheduler-level skip backend spec §3 asks for is unbuilt."],
+        "source": "docs/review_reorganize_backend_spec.md §3; scripts/datetime_seam.py:105-116; "
+                  "scripts/recurring_active.py",
+        "observed": "June, 2026-07-18, before this was traced: \"probably a tick we use to "
+                    "determine whether or not it surfaces in the daily plan.\" That matches §3 "
+                    "exactly. The gap is in the build, not in her reading of it.",
+    },
+
+    "Day of month": {
+        "types": ("Recurring",),
+        "means": "The day-of-month anchor for a month-unit recurrence: the day number, 1-31, this "
+                 "item is due on. Defined 2026-07-18 from the code that reads it — no spec "
+                 "document defines this field.",
+        "not_this": "A weekly anchor (that is `Day of week`) and a one-off date (that is `Due "
+                    "date` on a Task).",
+        "instead": {"a weekly anchor": "Day of week", "a one-off date": "Due date"},
+        "usage": ["Required for any Recurring whose `Interval unit` is `month`. ⚠ Leaving it unset "
+                  "makes a monthly item NEVER due, and nothing reports that — so an unset value is "
+                  "a silent disappearance, not a harmless default.",
+                  "A value larger than the current month allows is clamped to that month's last "
+                  "day, so 31 fires on Feb 28 or 29.",
+                  "⚠ `Interval count` is ignored for month units, so 'every 3 months' currently "
+                  "runs every month (datetime_seam.py:22-24 — every-N-months needs a stored start "
+                  "anchor the system does not keep yet)."],
+        "source": "scripts/datetime_seam.py:131-140 (the only reader); "
+                  "scripts/build_recurring.py:14 (schema)",
     },
 
     "Frequency": {
@@ -731,9 +821,9 @@ FIELDS = {
 
     "Availability note": {
         "types": ("Focus Period",),
-        "means": "What the availability window MEANS — 'caregiving; fragmented time; survival-first "
-                 "in whatever windows exist; no deep-focus blocks.' The dates say when; this says "
-                 "what to do about it, and this is what the planner actually reads.",
+        "means": "What the availability window MEANS for planning — how fragmented the time is, "
+                 "what kind of work fits it, whether it is wider or narrower than usual. The dates "
+                 "say when; this says what to do about it, and this is what the planner reads.",
         "not_this": "A number, a rating, or anything compressed. Never a restatement of the dates.",
         "instead": {},
         "usage": [
@@ -943,6 +1033,8 @@ HINTS = {
     "Day of week": "Only for items pinned to specific days. Empty for un-anchored routines.",
     "Time of day": "HH:MM. When set, this is a fixed anchor the day flows around.",
     "Fixed appointment": "A missed one returns on its own schedule instead of persisting.",
+    "Active": "On/off for whether this recurring item is in the daily plan. Only takes effect on as-needed.",
+    "Day of month": "The day number a monthly item is due on. Unset means it is never due.",
     "Frequency": "Legacy — use Interval unit and Interval count.",
     "Period start": "The day this stretch of time begins.",
     "Period end": "The day it lapses. Lapsing is what prompts June to write the next one.",
@@ -959,35 +1051,690 @@ HINTS = {
 }
 
 
+# --- illustrations, deliberately plural --------------------------------------
+# WHY THIS SHAPE (June, 2026-07-18): "if you give one specific example, the model may replicate
+# your example in its output for the text fields. which is tricky because your example is
+# clarifying." She is right, and it is a real hazard: a single quoted specimen sitting inside a
+# definition an LLM reads right before writing teaches the SHAPE and hands over a PHRASE, and the
+# phrase is what ends up in her data.
+#
+# The fix, applied to every free-text field with no exceptions:
+#   1. `means` names the KIND of thing, never a specimen. Specimens are out of the definition.
+#   2. Illustrations live HERE, always THREE OR MORE, deliberately varied in length, register and
+#      grammar so there is no single dominant pattern to copy.
+#   3. They are rendered under an explicit do-not-reuse banner wherever they are shown.
+# One example is a template. Several dissimilar ones can only be read as a range.
+
+EXAMPLES_BANNER = ("Illustrations of the KIND of content only — NOT a template and NOT a "
+                   "vocabulary. Write what is actually true of this item, in June's words. Do "
+                   "not reuse, adapt, or echo the wording below.")
+
+# Every field here is free text an agent might compose. The list is the test's subject too:
+# a free-text field with fewer than three illustrations fails `tests/test_field_semantics.py`.
+FREE_TEXT_FIELDS = (
+    "Affective", "Access notes", "Blocked on", "Context", "Barriers", "Engagement notes",
+    "Reaching for", "Resolution condition", "Description", "Arc position rationale",
+    "Learning notes", "What for", "Relevant docs", "Intent", "Availability note",
+)
+
+EXAMPLES = {
+    "Affective": ("dreading it", "keeps sliding — I think I'm avoiding it",
+                  "actually excited about this one, first time in weeks",
+                  "not scared of it, just flat about it"),
+    "Access notes": ("hard to start cold; needs someone to sit with me for the first ten minutes",
+                     "phone call — I put these off for weeks",
+                     "too many open tabs of decision before anything can be typed",
+                     "fine lying down, impossible at a desk"),
+    "Blocked on": ("waiting on the landlord's reply", "the portal is down",
+                   "needs Julia's spec before anything can be drafted",
+                   "insurance card hasn't arrived"),
+    "Context": ("confirmed 2026-07-02: the screen does not allow AI tools",
+                "came out of the Tuesday conversation with M.",
+                "there are two versions of this file and the newer one is in Drive, not the repo",
+                "she has asked twice; the second ask was more urgent than the first"),
+    "Barriers": ("as a PhD I'm overqualified and never know how to handle that in a cover letter",
+                 "don't know whether to pitch this as a paper or a tool",
+                 "no idea what a reasonable rate would be to ask for",
+                 "unclear who the audience even is"),
+    "Engagement notes": ("Steady: about half an hour a day, mornings",
+                         "Backburner until after the surgery recovery",
+                         "opens up once the grant decision lands",
+                         "weighed against the article — whichever has the nearer date"),
+    "Reaching for": ("income that covers rent without contract work",
+                     "being able to work without pain by the autumn",
+                     "a practice that keeps going when the job situation changes",
+                     "staying in touch with the people who matter"),
+    "Resolution condition": ("until income covers basic needs and the GA decision is made",
+                             "when the manuscript is accepted somewhere",
+                             "when the move is finished and the boxes are gone",
+                             "when I no longer need the brace"),
+    "Description": ("a short article for a general audience, drafted then workshopped",
+                    "the household admin that keeps the flat running",
+                    "rebuilding the tool's front end so it works on a phone",
+                    "physiotherapy and the appointments around it"),
+    "Arc position rationale": (
+        "This sits early in the arc because everything downstream reads the schema it defines, so "
+        "changing it later would mean redoing the work that depends on it.",
+        "This comes last on purpose. It is polish, and doing it before the shape is settled would "
+        "mean polishing something that is about to change.",
+        "This runs in parallel with the drafting rather than after it, because the two inform each "
+        "other and doing them in sequence loses that.",
+    ),
+    "Learning notes": ("this one only fires when I'm already calm — needs a version for bad days",
+                       "worked in June, stopped working once the schedule got fragmented",
+                       "too abstract to act on; needs a concrete first move attached",
+                       "still good, no change needed as of this month"),
+    "What for": ("When planning a day that involves leaving the house.",
+                 "At the point of sitting down to write, before opening anything else.",
+                 "Whenever a task has been carried over three days running.",
+                 "When the plan has more than four items on it."),
+    "Relevant docs": ("~/Documents/papers/anthro-article/",
+                      "the shared Drive folder for the grant, plus the PDF of the call",
+                      "docs/api_contract_v2.md",
+                      "the email thread with the clinic, in Mail"),
+    "Intent": ("A slow week. Recovery is the point; anything else is a bonus.",
+               "Sprint on the application. Everything else waits until it is sent.",
+               "Caregiving most days. Short windows only, and I don't know when they'll come.",
+               "Back to normal after the move. Ease in rather than starting at full speed."),
+    "Availability note": ("caregiving; fragmented time; no deep-focus blocks",
+                          "mornings only, and the mornings are good ones",
+                          "more time than usual this week, not less — evenings are free",
+                          "in and out of appointments; assume interruptions"),
+}
+
+
+# --- WHAT THE FIELD DOES -----------------------------------------------------
+# `means` says what belongs in a field. This says what HAPPENS when it is set — June, 2026-07-18:
+# "we want to make sure the semantic explanations help the LLM actually navigate the system and
+# how it works correctly." A model filling in a field should know the consequence, not only the
+# definition, because the consequence is what makes a wrong value expensive.
+#
+# THREE STATUSES, and the distinction is load-bearing. Several of these fields are waiting on
+# design that has not happened yet. That is a normal state for a system still being built, NOT a
+# defect, and it must not be written as one:
+#
+#   live       — something actually reads or writes it now. Says what, and what changes.
+#   planned    — designed, not built. Says where the design is, so it can be read.
+#   undesigned — it exists, nothing reads or writes it, and no plan was found. Stated once,
+#                plainly, with no editorial. An undesigned field is not a broken field.
+#
+# Kept as its own dict, like HINTS, so the runtime picture is reviewable as a SET — and so the
+# ONE thing most likely to go stale sits in ONE place. See docs/BUILD_DOC.md §3 clause 5: a build
+# that changes what reads or writes a field updates that field's entry here, in the same commit.
+#
+# `written_by` answers a question June asked directly of `Last surfaced` — "the llm wouldn't write
+# to this path, right? That would be updated by python?" — which is exactly the kind of thing an
+# agent needs and could not previously find anywhere.
+
+DOES_STATUSES = ("live", "planned", "undesigned")
+
+DOES = {
+
+    # ---- the free-text routing group --------------------------------------
+    "Affective": {
+        "status": "live",
+        "written_by": "The capture path (capture_generate.py) and ANY agent writing directly "
+                      "through gsdo_objects / the MCP server. There is no validator on the "
+                      "content — the only mechanical check is guard #3, which refuses a bare "
+                      "number. Everything else about whether the text is affect is your judgment.",
+        "read_by": "daily_plan.py loads it and passes it into the planning prompt, so what you "
+                   "write here is read back to June as part of how her day is described. A status "
+                   "note written here becomes the plan's account of how she FEELS about the item.",
+    },
+    "Access notes": {
+        "status": "planned",
+        "written_by": "Nothing writes it today; the live space is empty of it. The intended "
+                      "writer is the AI at capture/weeding time, proposing from what June says.",
+        "read_by": "No code reads it yet. It is designed as the place unnamed barriers accumulate "
+                   "so recurring ones can be promoted to real tags — AI_LAYER_SPEC.md §2 Task "
+                   "`access` row + the §6 promotion loop. June, 2026-07-18: surfacing the field "
+                   "and its purpose is the intended remedy for its emptiness.",
+    },
+    "Blocked on": {
+        "status": "live",
+        "written_by": "The capture path and direct agent writes.",
+        "read_by": "daily_plan.py; prompts/daily_list.md and prompts/daily_memory_pass.md instruct "
+                   "the planner on it. When set it becomes the item's displayed line — the plan "
+                   "shows what is being waited for instead of asking her to act.",
+    },
+    "Context": {
+        "status": "live",
+        "written_by": "Every write path: capture, the weeding gate (prompts/weeding_gate.md), the "
+                      "MCP server, the app, direct agent writes.",
+        "read_by": "The most widely read text field in the system — daily_plan.py, plan_generate.py, "
+                   "status_check.py, focus_period_generate.py all load it in full into the model's "
+                   "context, and the app renders it. ⚠ Do NOT write your own filing rationale here: "
+                   "an agent's reasoning about WHY it filed something belongs in the write log, not "
+                   "in a field June reads. That misroute was real and was closed in commit e39dd5b.",
+    },
+    "Access conditions": {
+        "status": "live",
+        "written_by": "The capture path (capture_fields.ALLOWED_ACCESS) and the app's detail pane. "
+                      "An unknown tag name is dropped, never created.",
+        "read_by": "daily_plan.py reads it ON A TASK, for low-capacity filtering and errand "
+                   "batching. On a PROJECT it is live in the schema but nothing reads it yet "
+                   "(docs/BUILD_DOC.md Track B §4), so a tag set there does not currently reach "
+                   "the plan. PLANNED ADDITION: docs/review_reorganize_backend_spec.md §6 adds "
+                   "`Requires-deep-thinking`, `Involves-bureaucracy` and `Induces-pain` (§6 gives "
+                   "behaviour only for Induces-pain: a capacity signal the scheduler and model "
+                   "weigh, deprioritised on low-capacity days and paired with rest, kept as a tag "
+                   "and never a number). Another thread is building these; until they exist, "
+                   "writing them does nothing because unknown tags are dropped.",
+    },
+
+    # ---- durations, dates -------------------------------------------------
+    "Duration min": {
+        "status": "live",
+        "written_by": "The capture path, and the app.",
+        "read_by": "scheduler.py places the day around it, grain.py sizes work blocks from it, "
+                   "daily_plan.py and plan_generate.py both read it. It is the single number that "
+                   "decides how much of June's day an item is allowed to claim — a wrong estimate "
+                   "here shows up as a day that does not fit.",
+    },
+    "Duration source": {
+        "status": "planned",
+        "written_by": "The capture path, always alongside Duration min.",
+        "read_by": "Nothing reads it yet. It exists so the duration-bias learning loop can "
+                   "separate June's own numbers from the model's guesses "
+                   "(scripts/capture_fields.py build_optional_props). Recording it now is what "
+                   "makes that loop possible later; the data cannot be reconstructed after the fact.",
+    },
+    "Due date": {
+        "status": "live",
+        "written_by": "Not written by any Python path — set by June in the app or in Anytype.",
+        "read_by": "daily_plan.py and plan_generate.py: it drives urgency and ordering, and the "
+                   "within-thread pick uses the nearest deadline to choose what surfaces.",
+    },
+    "Scheduled": {
+        "status": "live",
+        "written_by": "plan generation (capture_generate.py, server.py) — it records a placement "
+                      "the system made, or June moving an item.",
+        "read_by": "daily_plan.py, plan_generate.py, grain.py, block_duration.py, status_check.py, "
+                   "and the app's plan view. A future-dated Scheduled keeps an item out of today.",
+    },
+    "Deadline": {
+        "status": "live",
+        "written_by": "The capture path; the app's detail pane.",
+        "read_by": "daily_plan.py and plan_generate.py load it into the planning context.",
+    },
+
+    # ---- engagement -------------------------------------------------------
+    "Engagement": {
+        "status": "live",
+        "written_by": "The capture path (default Open for a new project), the weeding gate, "
+                      "server.py, and the app.",
+        "read_by": "The most consequential select on Project. daily_plan.py, plan_generate.py, "
+                   "grain.py, neglect.py, block_duration.py, status_check.py and "
+                   "focus_period_generate.py all gate on it, and the app shows it as a chip. "
+                   "Setting Backburner removes a project from the daily plan until a neglect "
+                   "threshold; Done removes it entirely. This value decides whether June sees the "
+                   "project at all.",
+    },
+    "Engagement notes": {
+        "status": "live",
+        "written_by": "The capture path and the weeding gate.",
+        "read_by": "daily_plan.py passes it to the planner as the authoritative statement of what "
+                   "the Engagement value MEANS for this project right now.",
+    },
+    "Goal engagement": {
+        "status": "live",
+        "written_by": "Nothing writes it — June sets it in the app or in Anytype.",
+        "read_by": "daily_plan.py:114 loads it and daily_plan.py:415 prints it on the goal's line "
+                   "in the planning prompt, with the instruction that Steady reads as normal and "
+                   "Backburner is noted but de-emphasised. ⚠ CORRECTION 2026-07-18: this entry "
+                   "previously said the field was 'not yet consumed by code'. It is consumed, as "
+                   "framing for the model. The cross-goal balancing engine (§8d) that would use it "
+                   "for real prioritisation is still unbuilt.",
+    },
+
+    # ---- statuses ---------------------------------------------------------
+    "Task status": {
+        "status": "live",
+        "written_by": "The capture path, the weeding gate, the MCP server, server.py, the app.",
+        "read_by": "daily_plan.py, grain.py, neglect.py. Parked takes a task out of the daily plan "
+                   "and the orient map; Blocked makes the plan display `Blocked on` instead of an "
+                   "action. Legacy `Active` is treated as Ready.",
+    },
+    "Goal status": {
+        "status": "live",
+        "written_by": "Nothing writes it — set by June.",
+        "read_by": "daily_plan.py:104-105, and only when the object's type key is `gsdo_goal`. "
+                   "OPEN QUESTION, June's own, recorded as a question and not answered here: "
+                   "\"im not sure what the goal status is either, other than perhaps a mechanism "
+                   "for allowing us to retire goals?\" That is her speculation about the field's "
+                   "purpose, not a decision, and no doc settles it.",
+    },
+    "Project status": {
+        "status": "undesigned",
+        "written_by": "Nothing writes it.",
+        "read_by": "Nothing in scripts/ reads it; the app's detail pane still displays it. "
+                   "Superseded by Engagement, which is what the plan actually gates on.",
+    },
+    "Strategy status": {
+        "status": "live",
+        "written_by": "capture_generate.py:392 sets it to Active when a strategy is adopted.",
+        "read_by": "daily_plan.py:252-253 filters the strategy set on it — only Active (or unset) "
+                   "strategies are loaded into the planning prompt. Setting Retired takes a "
+                   "strategy out of every plan from that point on.",
+    },
+
+    # ---- Strategy ---------------------------------------------------------
+    "What for": {
+        "status": "live",
+        "written_by": "Nothing writes it — June writes it, in the app or in Anytype.",
+        "read_by": "daily_plan.py:258 loads it and it is printed under 'Active strategies' in the "
+                   "planning prompt, so it is read by the model on every plan.",
+    },
+    "Learning notes": {
+        "status": "planned",
+        "written_by": "Nothing writes it; unused across her 12 live Strategy objects.",
+        "read_by": "No code reads it. The app displays it (strategyFields.ts). It IS defined in "
+                   "the spec — AI_LAYER_SPEC.md §2 Strategy calls it \"the anti-forgetting field: "
+                   "what this strategy needs that it isn't doing yet; annotations on whether it's "
+                   "still working. A learning loop targets this field so the strategy improves "
+                   "instead of silently failing — and so June is reminded the system is revisable, "
+                   "not stuck.\" AI_LAYER_SPEC.md:505 lists that loop as still open, to be designed "
+                   "once strategies have accumulated real annotations.",
+    },
+
+    # ---- the why-fields ---------------------------------------------------
+    "Reaching for": {
+        "status": "live",
+        "written_by": "The weeding gate proposes it for sub-goals and Projects; top-level Goals "
+                      "are June's to author.",
+        "read_by": "daily_plan.py:417 and plan_generate.py print it on the goal's line, so it "
+                   "reaches the model as the reason the goal exists.",
+    },
+    "Barriers": {
+        "status": "planned",
+        "written_by": "Nothing writes it in code; the weeding-gate example set references it.",
+        "read_by": "No code reads it. June, 2026-07-18: \"Keep this — its pending further design.\" "
+                   "docs/route_structure_assessment_2026-07-12.md §5 names 'barriers never "
+                   "resurface' as the missing piece — the resurfacing, not the definition.",
+    },
+    "Horizon": {
+        "status": "undesigned",
+        "written_by": "Nothing writes it.",
+        "read_by": "Nothing reads it. ⚠ CORRECTION 2026-07-18: this entry previously said it "
+                   "'feeds Goal ordering' and that the AI reads it to choose narration register. "
+                   "That is the spec's intent (AI_LAYER_SPEC.md §2 Goal), not built behaviour — no "
+                   "ordering or register code reads Horizon. The app uses it for chips and tabs.",
+    },
+    "Resolution condition": {
+        "status": "live",
+        "written_by": "Nothing writes it — June's, via the app or the weeding gate's proposal.",
+        "read_by": "daily_plan.py:113 loads it and :420 prints it as 'resolved when: …' on the "
+                   "goal's line in the planning prompt.",
+    },
+    "Description": {
+        "status": "live",
+        "written_by": "The capture path, the MCP server, server.py, the app.",
+        "read_by": "daily_plan.py, plan_generate.py, status_check.py and the app's plan view.",
+    },
+
+    # ---- links ------------------------------------------------------------
+    "Goal link": {
+        "status": "live",
+        "written_by": "The capture path, the MCP server, gsdo_objects (which drops a wrong-kind "
+                      "link rather than writing it).",
+        "read_by": "daily_plan.py:147 — the alignment chain the plan uses to say which goal a "
+                   "piece of work serves. (Read nowhere before the 2026-07-14 loader fix.)",
+    },
+    "Linked Projects": {
+        "status": "live",
+        "written_by": "The capture path, the MCP server, gsdo_objects.",
+        "read_by": "daily_plan.py, plan_generate.py, grain.py, neglect.py, "
+                   "focus_period_generate.py. It is how a task inherits its project's engagement, "
+                   "Side and grain — an unlinked task is a bare chore with no inheritance.",
+    },
+    "Project link": {
+        "status": "live",
+        "written_by": "The capture path, the MCP server, gsdo_objects.",
+        "read_by": "daily_plan.py, for the recurring item's project association.",
+    },
+    "Parent project": {
+        "status": "live",
+        "written_by": "server.py (the move operation).",
+        "read_by": "daily_plan.py:170-180 walks it upward to inherit Side, and the app's map "
+                   "renders the nesting. This is the edge that makes work streams work.",
+    },
+    "Depends on": {
+        "status": "undesigned",
+        "written_by": "Nothing writes it.",
+        "read_by": "Nothing reads it. Documented in the per-repo binding scripts/gsdt_bind.py "
+                   "generates; no ordering code consumes it and no plan for one was found.",
+    },
+    "Arc position rationale": {
+        "status": "live",
+        "written_by": "An agent working on the repo, through the binding protocol in "
+                      "scripts/gsdt_bind.py.",
+        "read_by": "No Python path reads it. Its reader is a PERSON or an AGENT opening the "
+                   "object — it exists so the reasoning survives across sessions instead of being "
+                   "re-derived (guard #6). Agent-facing by design, so 'the plan path does not read "
+                   "it' is not the right test of whether it works.",
+    },
+
+    # ---- misc Task/Project ------------------------------------------------
+    "Relevant docs": {
+        "status": "planned",
+        "written_by": "Nothing writes it. field_semantics previously said the weeding gate "
+                      "populates it; no prompt in prompts/ mentions it, so that was not accurate. "
+                      "June can set it by hand in the review surface (review_surface.py:43).",
+        "read_by": "Nothing reads it, and the plan path is the wrong place to look — its consumer "
+                   "is an AGENT about to work the item. June, 2026-07-18: \"Need to be fixed.\" "
+                   "Concretely, fixed means three things: (1) the MCP server exposes it — "
+                   "cd_mcp_server.list_tasks returns only id/name/status and there is no "
+                   "get_task(id) tool at all, so a full-field read tool is the missing seam; "
+                   "(2) the drift skill gains a READ-side rule to match its write-routing table, "
+                   "telling an agent to open these paths before starting; (3) something populates "
+                   "it — capture should set it when an item names a file or an external system.",
+    },
+    "AI autonomous": {
+        "status": "planned",
+        "written_by": "Nothing writes it.",
+        "read_by": "Nothing reads it, and again the plan path is the wrong test. June: it is "
+                   "\"useful more in the agent-facing interface\" — an agent deciding whether it "
+                   "can just do the task. Same missing seam as Relevant docs: not returned by any "
+                   "MCP tool, not mentioned in the drift skill.",
+    },
+    "Done": {
+        "status": "live",
+        "written_by": "Everything: check-off in the app, the MCP server's complete_task, "
+                      "server.py, the capture path.",
+        "read_by": "Everything: daily_plan.py, plan_generate.py, grain.py, neglect.py, "
+                   "status_check.py, and roughly twenty app components. Checking it removes the "
+                   "item from the plan and feeds the completion record.",
+    },
+    "Side": {
+        "status": "live",
+        "written_by": "The capture path, the weeding gate, server.py, focus_period_author.py, and "
+                      "the app's detail pane (on Project and sub-project only — not on work "
+                      "streams, goals or tasks). ⚠ A RENAME IS AGREED: June, 2026-07-18, "
+                      "\"lets rename to work\" — Obligation becomes Work per "
+                      "docs/review_reorganize_backend_spec.md §12. Another thread is applying it; "
+                      "until then the live option is still `Obligation`, and only live option "
+                      "names may be written.",
+        "read_by": "This is the field with the widest visible consequence, so what it does is "
+                   "worth knowing precisely. BACKEND — grain.py:21-40 is the whole rule, and it "
+                   "runs on every plan (daily_plan.py, plan_generate.py, "
+                   "focus_period_generate.py). `Fun / hobby` → the project is EXCLUDED from the "
+                   "plan; its tasks are pulled out (daily_plan.partition_by_side) and replaced by "
+                   "one open self-directed block, so the time is protected but June picks what "
+                   "goes in it. `Daily life` → rendered at TASK grain: the specific chore appears "
+                   "by name. `Obligation` / `Wellbeing` → rendered as a work block (\"work on X\"); "
+                   "no code distinguishes the two in selection. Side is also printed on the "
+                   "project's line in the planning prompt. Descendants inherit it from the nearest "
+                   "ancestor that sets it (daily_plan.py:170-180; app/src/model/fields.ts sideOf). "
+                   "FRONTEND — it renders as a labelled chip on the project row (one uniform "
+                   "colour: the chip says WHICH side by its word, never by hue), and it is the "
+                   "Map's filter axis (FilterMenu.tsx → MapScreen.tsx), so setting it decides "
+                   "which subtrees are reachable when June filters. A node with no Side anywhere "
+                   "in its chain fails every specific filter and disappears from a filtered map. "
+                   "The Routines tab deliberately ignores the Side filter.",
+    },
+    "Block chunk min": {
+        "status": "live",
+        "written_by": "Nothing writes it — June's durable preference, set on the project.",
+        "read_by": "block_duration.py and daily_plan.py, to size one work chunk on this project. "
+                   "Read by DISPLAY NAME, because its Anytype key is auto-generated.",
+    },
+
+    # ---- Recurring --------------------------------------------------------
+    "Interval unit": {
+        "status": "live",
+        "written_by": "The capture path.",
+        "read_by": "datetime_seam.py:105-141 — it selects the whole due-today branch. It also "
+                   "decides whether `Active` means anything: on `as_needed` the Active checkbox IS "
+                   "the due-today answer; on day/week/month Active is never consulted.",
+    },
+    "Interval count": {
+        "status": "live",
+        "written_by": "Nothing writes it.",
+        "read_by": "datetime_seam.py, for day and week units. ⚠ It is IGNORED for `month`: "
+                   "datetime_seam.py:22-24 records that v1 fires monthly regardless of N, because "
+                   "every-N-months needs a stored start anchor the system does not keep. So "
+                   "'every 3 months' currently runs every month.",
+    },
+    "Day of week": {
+        "status": "live",
+        "written_by": "Nothing writes it; the app's recurrence card edits it.",
+        "read_by": "datetime_seam.py, for week-unit items. Empty means un-anchored.",
+    },
+    "Time of day": {
+        "status": "live",
+        "written_by": "Nothing writes it; the app's recurrence card edits it.",
+        "read_by": "datetime_seam.py and daily_plan.py — it makes the item a fixed anchor the "
+                   "day's flexible work is arranged around, rather than something the scheduler "
+                   "may move.",
+    },
+    "Fixed appointment": {
+        "status": "live",
+        "written_by": "Nothing writes it; a checkbox June sets.",
+        "read_by": "plan_generate.py:621,643 — a missed Fixed-appointment recurring is SKIPPED by "
+                   "the persistence rule and waits for its next cadence instead of carrying "
+                   "forward.",
+    },
+    "Frequency": {
+        "status": "undesigned",
+        "written_by": "Nothing writes it.",
+        "read_by": "Nothing reads it. Legacy from the v1 prototype, replaced by Interval unit + "
+                   "Interval count. It may still exist in the space; ignore it.",
+    },
+
+    # ---- Focus Period -----------------------------------------------------
+    "Period start": {
+        "status": "live",
+        "written_by": "focus_period_author.py, from June speaking the period aloud. Python anchors "
+                      "the date; the model never resolves a weekday itself.",
+        "read_by": "focus_period.py — with Period end it decides WHICH period is active, and the "
+                   "active period is what the whole plan is generated under.",
+    },
+    "Period end": {
+        "status": "live",
+        "written_by": "focus_period_author.py.",
+        "read_by": "focus_period.py. When today is past it, no period is active and the plan "
+                   "appends a gentle prompt to write a new one rather than planning without a "
+                   "configuration. Lapsed periods are kept, never deleted.",
+    },
+    "Intent": {
+        "status": "live",
+        "written_by": "focus_period_author.py, in June's own words, NEVER reworded by the "
+                      "generator (backend spec §17).",
+        "read_by": "daily_plan.py, plan_generate.py, focus_period_generate.py — it goes into the "
+                   "planning prompt as framing, and it is the most heavily used field on the type. "
+                   "This is where a nuance goes when you are tempted to invent a field for it.",
+    },
+    "Availability start": {
+        "status": "live",
+        "written_by": "focus_period_author.py.",
+        "read_by": "focus_period.in_availability_window, deterministically. On `Auto`, being "
+                   "inside this window is what makes the plan render as a priority list rather "
+                   "than a clock schedule.",
+    },
+    "Availability end": {
+        "status": "live",
+        "written_by": "focus_period_author.py.",
+        "read_by": "focus_period.in_availability_window; the test needs both ends.",
+    },
+    "Availability note": {
+        "status": "live",
+        "written_by": "focus_period_author.py.",
+        "read_by": "daily_plan.py and focus_period_generate.py pass it to the planner. The dates "
+                   "say when the window is; this says what to do about it, and this is the half "
+                   "the planner actually acts on.",
+    },
+    "Days off": {
+        "status": "live",
+        "written_by": "focus_period_author.py, as a parsed list of ISO dates.",
+        "read_by": "focus_period.is_day_off, second in precedence after Days on and ahead of the "
+                   "weekly default. A day marked off is not planned as a work day.",
+    },
+    "Days on": {
+        "status": "live",
+        "written_by": "focus_period_author.py.",
+        "read_by": "focus_period.is_day_off, HIGHEST precedence — it beats Days off and the weekly "
+                   "Sat/Sun default.",
+    },
+    "Output format": {
+        "status": "live",
+        "written_by": "focus_period_author.py.",
+        "read_by": "focus_period.resolve_output_shape. It changes the SHAPE the day is rendered "
+                   "in, not what is in it: a clock schedule, or a short priority-ordered list to "
+                   "pull from when a window opens. On `Auto` the shape resolves from the "
+                   "availability window alone — structured inputs only, never a text scan.",
+    },
+    "Workday end": {
+        "status": "live",
+        "written_by": "focus_period_author.py.",
+        "read_by": "plan_generate.py and focus_period.py override the hardcoded 18:00 with it. "
+                   "Unpopulated on all 7 live periods, so the widening case it was built for "
+                   "(working later during a sprint) has never actually run. A companion "
+                   "`Workday start` is specified in backend spec §17 and does not exist yet.",
+    },
+    "Foreground projects": {
+        "status": "live",
+        "written_by": "focus_period_author.py, as real object ids — and only after June confirms "
+                      "the reflect-back.",
+        "read_by": "daily_plan.py:437 and plan_generate.py:409 drive real SELECTION from it, by "
+                   "id, not as a prose hint. While the period is active these projects override "
+                   "their own Engagement; when it lapses the project's Engagement returns.",
+    },
+    "Paused projects": {
+        "status": "live",
+        "written_by": "focus_period_author.py — and rarely. The first authoring run over-paused "
+                      "every non-foreground project, which silently dropped their tasks from the "
+                      "plan; the prompt now requires an explicit stop from June.",
+        "read_by": "focus_period_generate.py and the plan path: a paused project is held out of "
+                   "generation entirely. Not-foreground is NOT paused.",
+    },
+
+    # ---- fields with no documented MEANING, which still have a runtime story --
+    # An undefined meaning and an undefined function are different gaps. Several of the fields in
+    # UNDEFINED below do something quite specific at runtime; saying so is not inventing a
+    # rationale, it is reporting the code.
+    "Needs clarifying": {
+        "status": "undesigned",
+        "written_by": "Nothing writes the checkbox; the app's detail pane can toggle it.",
+        "read_by": "No code reads the checkbox. (`Needs Clarifying` the STATUS value is a "
+                   "different thing and is read.) June, 2026-07-18, on what it is for — the "
+                   "clearest statement anyone has written down: it belongs to the same family as "
+                   "`AI autonomous`, \"essentially telling agents, 'dont act on this, it can be "
+                   "raised, but it needs clarifying or design or something'\". Both are "
+                   "agent-facing control flags rather than content. She also said it needs more "
+                   "usage data before deciding; backend spec §13 keeps it open.",
+    },
+    "Last surfaced": {
+        "status": "undesigned",
+        "written_by": "PYTHON ONLY, and never an LLM. daily_plan.update_last_surfaced is the sole "
+                      "writer and it sits behind an interactive terminal confirmation June does "
+                      "not use. No MCP tool can set it; there is no generic property setter. "
+                      "June asked exactly this and was right: an agent should not write here.",
+        "read_by": "status_check.py and neglect.py read it, but only as a FALLBACK — the live "
+                   "staleness signal is the append-only surface log (surface_log.py), because this "
+                   "field is a single overwriting date. 5 of 137 tasks carry a value, none newer "
+                   "than 2026-06-18.",
+    },
+    "Active": {
+        "status": "live",
+        "written_by": "recurring_active.set_recurring_active is the single writer (server.py's "
+                      "complete/uncomplete/toggle endpoints and capture_generate.py call it). "
+                      "It reads back and logs.",
+        "read_by": "datetime_seam.py:112-116, and ONLY inside the `as_needed` branch. June's read "
+                   "of it — \"probably a tick we use to determine whether or not it surfaces in "
+                   "the daily plan\" — matches what the spec asks for: "
+                   "docs/review_reorganize_backend_spec.md §3 says \"it is not 'done' (that's "
+                   "per-occurrence); it is an on/off 'in my daily plan' toggle\" and \"Add `active` "
+                   "… Default active. `daily_plan`/scheduler skip recurring anchors that are not "
+                   "active.\" ⚠ Built only halfway: for an as-needed item Active IS the "
+                   "surfaces-today answer, but day/week/month items ignore it entirely, so "
+                   "unticking a weekly recurring currently does nothing. The scheduler-level skip "
+                   "§3 describes is unbuilt.",
+    },
+    "Day of month": {
+        "status": "live",
+        "written_by": "Nothing writes it; the app's recurrence card and the review surface edit it.",
+        "read_by": "datetime_seam.py:131-140, the month branch: due when today's day number equals "
+                   "it, clamped to the month's last day so 31 fires on Feb 28/29. Two "
+                   "consequences worth knowing — a month-unit recurring with this UNSET is never "
+                   "due, silently; and Interval count is ignored for months, so every-N-months "
+                   "runs monthly. Semantics are from the code; no spec defines this field.",
+    },
+    "Foreground projects (on Goal)": {
+        "status": "undesigned",
+        "written_by": "Nothing. Every writer targets Focus Period.",
+        "read_by": "Nothing. Investigated 2026-07-18 at June's request: no build script attaches "
+                   "this property to Goal — build_focus_period.py:30-34 creates and links it to "
+                   "Focus Period alone, and build_goal.py does not list it. It appears on Goal "
+                   "because Anytype properties are space-global and were linked there by hand, and "
+                   "ensure_type only ever adds. So it is a leak with zero runtime effect, not a "
+                   "feature. Goal-level foreground is also explicitly rejected in the design "
+                   "(build_goal.py:17-19, June 2026-07-13: a sprint is a Focus Period foreground "
+                   "state on a PROJECT, never a property of a life area).",
+    },
+    "Applies when": {
+        "status": "live",
+        "written_by": "Nothing in scripts/ writes it; June sets it in the app or in Anytype.",
+        "read_by": "daily_plan.py:254-261 loads it by display name and :388-390 splits the "
+                   "strategy set with it: `Always` strategies are listed every day, and a strategy "
+                   "whose state matches today's capacity is injected as a FIRM directive on the "
+                   "whole plan. This is close to what June described as the intent — \"should "
+                   "trigger in specific coded conditions — when I click this button in the UI, "
+                   "here's what you should do\" — recorded as HER INTENT, not as built behaviour, "
+                   "because only part of it is built: daily_plan._APPLIES_TO_LEVEL maps only "
+                   "`Low energy`, and build_strategy.py mints only `Always` and `Low energy`, so "
+                   "`Overwhelmed` / `Sprint` / `Stuck` are inert and cannot even be selected.",
+    },
+    "Goal status (on Project)": {
+        "status": "undesigned",
+        "written_by": "Nothing writes it on a Project.",
+        "read_by": "Nothing reads it on a Project. Checked 2026-07-18 at June's request (\"Is it "
+                   "in the mockup? I think this might be leak\") — she is right on all three "
+                   "checks: the mockup assigns Goal status to GOAL only "
+                   "(design/mockups/review-reorganize-mobile-v4.html:106-108), "
+                   "app/src/fixtures/schema.ts gives Project Engagement / Project status / Side / "
+                   "Deadline / Typical block / Access conditions and not this, build_goal.py links "
+                   "the property to Goal alone, and daily_plan.py:104-105 reads it only when the "
+                   "type key is `gsdo_goal`. A leak, inert.",
+    },
+}
+
+
 # --- fields with NO documented meaning ---------------------------------------
 # Deliberately NOT given definitions. A fabricated rationale sitting beside cited ones would be
 # worse than an obvious gap. Each value states what was searched and what was (not) found.
 
 UNDEFINED = {
     "Needs clarifying": "A checkbox on Task and Recurring. `Needs Clarifying` exists as a STATUS "
-                        "value with a documented meaning, but no doc found explains what the "
-                        "separate checkbox means or how it relates to the status. "
-                        "docs/review_reorganize_backend_spec.md §13 has it as an OPEN question "
-                        "('reconsider whether it earns its place').",
+                        "value with a documented meaning, but no doc explains what the separate "
+                        "checkbox means or how it relates to the status; backend spec §13 has it "
+                        "as an OPEN question. The nearest thing to a purpose anyone has written "
+                        "down is June's, 2026-07-18, and it is a family resemblance rather than a "
+                        "definition: it belongs with `AI autonomous` as an agent-facing control "
+                        "flag — \"essentially telling agents, 'dont act on this, it can be "
+                        "raised, but it needs clarifying or design or something'\". She also said "
+                        "it needs more usage data before deciding, so that stays her framing of "
+                        "the question, not a settled meaning.",
     "Last surfaced": "A date on Task. docs/orchestrator_flags_2026-07-11.md describes it as the "
-                     "neglect/staleness input, and reports it NON-FUNCTIONAL end to end (written "
-                     "only by an interactive CLI path June doesn't use; 5 of 137 tasks had it, none "
-                     "newer than 2026-06-18). Its intended semantics were never written down as a "
-                     "field definition, so none is given here.",
-    "Active": "A checkbox on Recurring created by scripts/build_recurring.py. No spec or design doc "
-              "found defining what it means or what reads it.",
-    "Day of month": "A number on Recurring. The interval model in AI_LAYER_SPEC.md §2 does not "
-                    "mention it; no other doc found defines it.",
+                     "neglect/staleness input and reports it non-functional end to end. Its "
+                     "intended semantics were never written down as a field definition, so none is "
+                     "given here — but what it DOES is now recorded (see the what-it-does entry): "
+                     "it is SYSTEM-MAINTAINED and must never be written by an LLM. Python is its "
+                     "only writer, and no agent-facing tool can set it.",
     "Foreground projects (on Goal)": "An objects field of this name also exists on the live Goal "
                                      "type. On Focus Period it is defined (see FIELDS); ON A GOAL "
                                      "no doc found explains what it means, and re-searched "
                                      "2026-07-18 during the Focus Period recovery. Not defined "
                                      "here. Same shape as `Goal status (on Project)` below.",
-    "Applies when": "A select on Strategy (Always / Low energy / Overwhelmed / Sprint / Stuck). It "
-                    "exists and its options are documented "
-                    "(docs/review_reorganize_backend_spec.md §12), but docs/BUILD_DOC.md §8 records "
-                    "that it is barely used (1 of 12 Strategies) and NOMINALLY OVERLAPS `What for`, "
-                    "with the redundancy explicitly unresolved. No settled meaning to state.",
+    "Applies when": "A select on Strategy (Always / Low energy / Overwhelmed / Sprint / Stuck). Its "
+                    "options are documented (backend spec §12) but its MEANING is not settled: "
+                    "docs/BUILD_DOC.md §8 records that it is barely used (1 of 12) and nominally "
+                    "overlaps `What for`, with the redundancy explicitly unresolved. June's stated "
+                    "INTENT for it, 2026-07-18 — recorded as intent, not as built behaviour: it "
+                    "\"should trigger in specific coded conditions — when I click this button in "
+                    "the UI, here's what you should do.\" Part of that shape is already built (see "
+                    "the what-it-does entry: one option is wired to the low-capacity signal), but "
+                    "whether the field should be the machine-matchable trigger layer, and what the "
+                    "other options should do, is undecided.",
     "Goal status (on Project)": "The live Project type carries a `Goal status` select. The specs "
                                 "define Goal status only for Goal. Whether this is intentional or "
                                 "a schema leak is not documented.",
@@ -1022,6 +1769,59 @@ def is_undefined(name):
         return False
     n = name.strip().lower()
     return any(n == k.lower() for k in UNDEFINED)
+
+
+def does(name):
+    """What HAPPENS when this field is set: {status, written_by, read_by}, or None if unrecorded.
+
+    Covers FIELDS and UNDEFINED alike — a field can have no documented MEANING and still have a
+    precise runtime story, and those are different gaps. `status` is one of DOES_STATUSES.
+    """
+    key = canonical(name)
+    if key:
+        return DOES.get(key)
+    if not isinstance(name, str):
+        return None
+    n = name.strip().lower()
+    for k in UNDEFINED:
+        if n == k.lower():
+            return DOES.get(k)
+    return None
+
+
+def does_line(name, type_name=None):
+    """One compact line of what-it-does, for describe_model's per-field output. None if unrecorded.
+
+    Deliberately lossy: it carries the STATUS and the reader, because those are what change how an
+    agent should treat the field. `field_semantics.describe(name)` has the full text.
+
+    `type_name` scopes the answer exactly as `one_line` does, and for the same reason — with more
+    at stake here. A field name can be live on two types with completely different runtime stories:
+    `Foreground projects` drives real selection on a Focus Period and does NOTHING on a Goal.
+    Printing the Focus Period story under the Goal's field would tell an agent that writing there
+    changes the plan. It does not. So a type mismatch looks for a disambiguated entry
+    ("<field> (on <type>)") and, failing that, returns None rather than the other type's answer.
+    """
+    d = does(name)
+    key = canonical(name)
+    if type_name and key and type_name not in FIELDS[key]["types"]:
+        d = does(f"{name} (on {type_name})")
+    if not d:
+        return None
+    read = " ".join(str(d.get("read_by") or "").split())
+    if len(read) > 150:
+        read = read[:149].rsplit(" ", 1)[0] + "…"
+    return f"[{d.get('status', '?')}] {read}"
+
+
+def examples(name):
+    """Varied illustrations for a free-text field, as a tuple. Empty when the field has none.
+
+    Always three or more where present, and never a template — see EXAMPLES_BANNER, which must be
+    shown with them anywhere they are rendered.
+    """
+    key = canonical(name)
+    return tuple(EXAMPLES.get(key) or ()) if key else ()
 
 
 def undefined_reason(name):
@@ -1078,6 +1878,8 @@ def default_entry(name):
     e = dict(FIELDS[key])
     e["field"] = key
     e["hint"] = HINTS.get(key) or _first_sentence(e["means"])
+    e["does"] = DOES.get(key)
+    e["examples"] = list(EXAMPLES.get(key) or ())
     return e
 
 
@@ -1180,8 +1982,11 @@ def schema_payload(path=None):
     """
     return {
         "fields": {name: resolved(name, path) for name in FIELDS},
-        "undefined": dict(UNDEFINED),
+        "undefined": {name: {"reason": why, "does": DOES.get(name)}
+                      for name, why in UNDEFINED.items()},
         "routing_brief": routing_brief(),
+        "examples_banner": EXAMPLES_BANNER,
+        "does_statuses": list(DOES_STATUSES),
     }
 
 
@@ -1213,7 +2018,9 @@ def describe(name, path=None):
     if not key:
         reason = undefined_reason(name)
         if reason:
-            return f"{name}\n  UNDEFINED — no documented meaning.\n  {reason}"
+            out = [f"{name}", "  UNDEFINED — no documented meaning.", f"  {reason}"]
+            out += _does_lines(does(name))
+            return "\n".join(out)
         raise KeyError(f"field_semantics.describe: no entry for {name!r} "
                        f"(not in FIELDS and not in UNDEFINED)")
     e = resolved(key, path)
@@ -1226,6 +2033,11 @@ def describe(name, path=None):
         lines.append(f"  INSTEAD:  {what} -> {where}")
     for rule in e.get("usage") or []:
         lines.append(f"  RULE:     {rule}")
+    lines += _does_lines(e.get("does"))
+    if e.get("examples"):
+        lines.append(f"  EXAMPLES: ({EXAMPLES_BANNER})")
+        for ex in e["examples"]:
+            lines.append(f"            · {ex}")
     if e.get("observed"):
         lines.append(f"  OBSERVED: {e['observed']}")
     lines.append(f"  SOURCE:   {e['source']}")
@@ -1233,6 +2045,18 @@ def describe(name, path=None):
         for k in e["overridden"]:
             lines.append(f"  REVISED BY JUNE: {k} — repo default was: {e['default'].get(k)!r}")
     return "\n".join(lines)
+
+
+def _does_lines(d):
+    """Render a what-it-does record. Empty list when a field has none — never a fabricated one."""
+    if not d:
+        return []
+    out = [f"  DOES:     [{d.get('status', '?')}]"]
+    if d.get("written_by"):
+        out.append(f"    written by:  {d['written_by']}")
+    if d.get("read_by"):
+        out.append(f"    read by:     {d['read_by']}")
+    return out
 
 
 def describe_many(names):
@@ -1254,9 +2078,12 @@ def routing_brief():
     Short by design: it is read at the call site, where a long block would be ignored.
     """
     return (
-        "WHICH FIELD DOES THIS TEXT BELONG IN? (scripts/field_semantics.py has the full rules)\n"
-        "  Affective   — ONLY how June feels about the item, in her words ('I'm dreading this', "
-        "'I'm putting it off'). Never status, findings, confirmations, blockers. Never a number.\n"
+        "WHICH FIELD DOES THIS TEXT BELONG IN? (scripts/field_semantics.py has the full rules, "
+        "plus what each field DOES at runtime and several varied illustrations per field — those "
+        "illustrations show the range, they are never a template to copy)\n"
+        "  Affective   — ONLY how June feels about the item, in her words: dread, avoidance, "
+        "hyperfixation, flatness, relief. Never status, findings, confirmations, blockers. "
+        "Never a number.\n"
         "  Blocked on  — what is concretely being waited for.\n"
         "  Barriers    — the strategic 'I don't know how to...' open question (Goal/Project only).\n"
         "  Access notes— what is in the way of STARTING it (executive-function/sensory/access).\n"
@@ -1300,10 +2127,12 @@ def scalar_affect_problem(field_name, value):
         return None
     if isinstance(value, bool) or isinstance(value, (int, float)):
         return (f"{field_name} is free text, never a scalar (guard #3): got {value!r}. "
-                f"Affective holds how June feels in her words, e.g. 'dreading it'.")
+                f"Affective holds how June feels about the item, in her own words — a sentence, "
+                f"not a rating.")
     if isinstance(value, str) and _BARE_SCALAR.match(value):
         return (f"{field_name} is free text, never a scalar (guard #3): got the bare rating "
-                f"{value!r}. Affective holds how June feels in her words, e.g. 'dreading it'.")
+                f"{value!r}. Affective holds how June feels about the item, in her own words — a "
+                f"sentence, not a rating.")
     return None
 
 
