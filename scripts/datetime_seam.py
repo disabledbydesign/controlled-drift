@@ -109,8 +109,12 @@ def today_fixed_time(item, today=None):
     today = today or dt.date.today()
     unit = item.get("interval_unit")
     clock = _parse_time(item.get("time_of_day"))
-    if not unit or unit == "as_needed":
-        return False, clock
+    if unit == "as_needed":
+        # An as-needed task is off until asked-for. When Active, it is "due" every day until June
+        # completes it (which writes Active=false) — it keeps resurfacing. (June, 2026-07-17.)
+        return bool(item.get("active")), clock
+    if not unit:
+        return False, clock   # never-configured stays off — not this feature (the surface list's)
 
     if unit == "day":
         # Every N days — v1: schedule daily items every day (anchor refinement is post-v1)
@@ -162,6 +166,7 @@ def recurring_items_for_today(anytype_objects, today=None):
             "day_of_month":   pval("day_of_month", "number"),
             "time_of_day":    pval("gsdo_time_of_day", "text"),
             "duration_min":   pval("gsdo_duration_min", "number"),
+            "active":         bool(pval("active", "checkbox")),   # real key confirmed in Task 1 (bare, not gsdo_active)
         }
         due, clock = today_fixed_time(item, today)
         if not due:
@@ -171,5 +176,6 @@ def recurring_items_for_today(anytype_objects, today=None):
             "name":         item["name"],
             "fixed_time":   dt.datetime.combine(today, clock) if clock else None,
             "duration_min": item["duration_min"] or DEFAULT_DURATION_MIN,
+            "as_needed":    item["interval_unit"] == "as_needed",   # routes completion in Task 4
         })
     return results
