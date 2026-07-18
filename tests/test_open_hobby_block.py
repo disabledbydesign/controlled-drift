@@ -136,3 +136,53 @@ def test_pure_hobby_is_still_excluded():
     schedulable, hobby = partition_by_side(tasks, projects)
     assert schedulable == []
     assert [t["name"] for t in hobby] == ["leatherworking"]
+
+
+def _pj(name, side):
+    """Same project shape the other format_context tests use (test_context_categories.py)."""
+    return {"id": name, "name": name, "side": side, "is_workstream": False,
+            "parent_project_id": None, "engagement": "Steady", "goal_name": None, "arc": None}
+
+
+def test_discrete_grain_supersedes_block_grain():
+    """A task linked to BOTH a Daily-life project and a block-grain one renders ONCE, discretely.
+
+    June, 2026-07-18: "daily life supersedes obligation if both are tagged, in terms of the UI
+    logic." Previously the task was appended to EVERY linked project, so it appeared as a
+    discrete chore under the Daily-life one AND again inside the block project's arc.
+    Latent when found — zero tasks in her space matched. Pinned so it cannot regress.
+    """
+    import daily_plan
+    projects = [_pj("household", "Daily life"), _pj("Job search", "Work")]
+    tasks = [{"id": "t1", "name": "mail the form", "status": "Active",
+              "linked_projects": ["household", "Job search"]}]
+    ctx = daily_plan.format_context([], projects, tasks, [], [], [], None)
+
+    # Once, not twice.
+    assert ctx.count("mail the form") == 1, ctx
+    # And it sits in the Daily tasks section, not the block section.
+    assert "### Daily tasks" in ctx
+    assert ctx.index("mail the form") > ctx.index("### Daily tasks"), ctx
+
+
+def test_two_block_projects_are_unaffected_by_the_precedence_rule():
+    """The ordinary case must not change: with no discrete project involved, nothing supersedes.
+
+    Note what "unchanged" means here, because it is not obvious: a block-grain project renders as
+    ONE "Work on X" chunk, not as a task list — its tasks surface only inside its arc. So a task
+    linked to two block projects contributes to both chunks and its NAME does not appear at all.
+    That is the design (a block is a unit of time, not a list), and the precedence rule must
+    leave it exactly so.
+    """
+    import daily_plan
+    projects = [_pj("Job search", "Work"), _pj("Scholarly writing", "Work")]
+    tasks = [{"id": "t2", "name": "update the CV", "status": "Active",
+              "linked_projects": ["Job search", "Scholarly writing"]}]
+    ctx = daily_plan.format_context([], projects, tasks, [], [], [], None)
+
+    assert "### Block-organized work" in ctx
+    block_at = ctx.index("### Block-organized work")
+    assert ctx.index("Job search", block_at) > block_at
+    assert ctx.index("Scholarly writing", block_at) > block_at
+    # No "Daily tasks" section at all — nothing here is discrete grain.
+    assert "### Daily tasks" not in ctx, ctx

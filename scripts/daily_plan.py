@@ -509,21 +509,33 @@ def format_context(goals, projects, tasks, strategies, today_recurrings, neglect
                 extras.append(f"access: {', '.join(t['access'])}")
             return f" ({'; '.join(extras)})" if extras else ""
 
-        project_tasks: dict = {}
-        no_project = []
-        for t in tasks:
-            projs = t.get("linked_projects") or []
-            if projs:
-                for pn in projs:
-                    project_tasks.setdefault(pn, []).append(t)
-            else:
-                no_project.append(t)
-
         proj_by_name = {p["name"]: p for p in projects}
 
         def _grain_of(pname):
             p = proj_by_name.get(pname)
             return grain.classify(p) if p else "task"        # no-project → discrete, daily-side
+
+        project_tasks: dict = {}
+        no_project = []
+        for t in tasks:
+            projs = t.get("linked_projects") or []
+            if not projs:
+                no_project.append(t)
+                continue
+            # DISCRETE GRAIN SUPERSEDES BLOCK GRAIN (June, 2026-07-18):
+            # "daily life supersedes obligation if both are tagged, in terms of the UI logic."
+            #
+            # A task can be linked to several projects. Previously it was appended to EVERY one,
+            # so a task linked to both a Daily-life project (grain "task") and a Work project
+            # (grain "block") rendered TWICE — once as a discrete chore, and again inside the
+            # block's arc. That is duplication, not precedence.
+            #
+            # A chore is a chore. If any linked project says "show this as itself", it is shown
+            # as itself, once, and does not also become a step inside someone's work chunk.
+            # Latent when found — zero tasks in June's space had that combination.
+            discrete = [pn for pn in projs if _grain_of(pn) == "task"]
+            for pn in (discrete or projs):
+                project_tasks.setdefault(pn, []).append(t)
 
         daily_projects = {pn: ts for pn, ts in project_tasks.items() if _grain_of(pn) == "task"}
 
