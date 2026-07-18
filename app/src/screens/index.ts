@@ -1,4 +1,7 @@
 export { Placeholder } from './Placeholder.tsx';
+export { StructurePanel } from './StructurePanel.tsx';
+export { subtreeVis } from './MapScreen.tsx';
+export type { VisFilters } from './MapScreen.tsx';
 export { TodayScreen } from './TodayScreen.tsx';
 export { AddScreen } from './AddScreen.tsx';
 export { MapScreen } from './MapScreen.tsx';

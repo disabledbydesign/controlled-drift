@@ -11,6 +11,8 @@
 import { describe, it, expect, vi, afterEach } from 'vitest';
 import { render, screen, fireEvent, cleanup } from '@testing-library/react';
 import { themes } from '@tokens';
+import { defaultSchema } from '../../../fixtures/index.ts';
+import { applySchema } from '../../../model/index.ts';
 import type { ModelNode } from '../../../model/index.ts';
 import type { RowCtx } from '../types.ts';
 import { Row } from '../Row.tsx';
@@ -22,6 +24,10 @@ afterEach(cleanup);
 function ctx(overrides: Partial<RowCtx['ui']> = {}): RowCtx {
   return {
     T: themes.celestial,
+    // Added with Task 6: `Row` now renders `ChipStrip` when this row's chip is being edited,
+    // and the strip's option lists come from the schema. Without it the chipEdit test throws
+    // on `schema.OPTS` rather than exercising the branch it names.
+    schema: applySchema(defaultSchema),
     ui: {
       detail: null,
       menuFor: null,

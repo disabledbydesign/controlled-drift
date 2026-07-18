@@ -1,30 +1,27 @@
 /**
  * The slice of app state a row reads and writes.
  *
- * Declared HERE rather than imported from `shell/useAppState.ts` so the dependency runs one
- * way — shell → screens → components — and a component never reaches back up into the shell.
- * `UiState` satisfies `RowUi` structurally; if the two ever drift, `MapScreen` (which passes a
- * real `UiState` in) stops compiling, which is the intended alarm.
+ * ── CHANGED IN TASK 6 ────────────────────────────────────────────────────────
+ * `RowUi` and `RowCtx` used to be their own declarations, structurally satisfied by the
+ * shell's `UiState`. They are now ALIASES of the panel types, because Task 6 makes `Row`
+ * render `ChipStrip` — so a row genuinely needs the panel context, including
+ * `schema` (the chip strip's option lists are schema-derived) and the picker/filter fields.
+ *
+ * Two separate declarations that have to stay identical is exactly the drift trap this
+ * codebase keeps closing structurally elsewhere (see the stale-index note in
+ * `shell/useAppState.ts`). One declaration under two names cannot drift.
+ *
+ * The dependency still runs one way — shell → screens → components, and inside components
+ * `rows` → `panels`, never back. `UiState` satisfies `PanelUi` structurally; if the two drift,
+ * `AppShell` stops compiling, which is the intended alarm.
  */
 
-import type { Theme } from '@tokens';
-import type { Graph, GraphIndex, MutationResult } from '../../model/index.ts';
+import type { PanelCtx, PanelUi } from '../panels/types.ts';
 
-/** v4's `this.st.chipEdit` — WHICH field of WHICH row has its option strip open. */
-export interface ChipEditTarget {
-  id: string;
-  field: string;
-}
+export type { ChipEditTarget } from '../panels/types.ts';
 
-export interface RowUi {
-  /** id of the object open in the detail editor. */
-  detail: string | null;
-  /** id of the row whose kebab menu is open. */
-  menuFor: string | null;
-  chipEdit: ChipEditTarget | null;
-  /** id of the row a drag is currently hovering over. */
-  dragOverId: string | null;
-}
+/** @see PanelUi — one declaration, two names, so they cannot fall out of step. */
+export type RowUi = PanelUi;
 
 /**
  * What `row()` had implicitly as `this`.
@@ -33,16 +30,7 @@ export interface RowUi {
  * `this.up` / `this.toggleDone` / `this.move` directly. Those are gathered into one object
  * rather than a dozen props, so the port reads against the original line-for-line.
  */
-export interface RowCtx {
-  T: Theme;
-  graph: Graph;
-  idx: GraphIndex;
-  ui: RowUi;
-  /** v4's `up(patch)`. */
-  up: (patch: Partial<RowUi>) => void;
-  /** v4's mutate-then-`bump()`; here, the one seam mutations go through. */
-  apply: (result: MutationResult) => void;
-}
+export type RowCtx = PanelCtx;
 
 /**
  * v4:1173 — `this.D = (this.props.density==='Compact') ? {...} : {...}`

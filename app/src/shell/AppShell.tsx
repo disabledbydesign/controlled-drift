@@ -3,6 +3,8 @@ import type { Theme, ThemeName } from '@tokens';
 import { appBg, TopAccent } from '../components/atoms/index.ts';
 import { DetailOverlay } from '../components/detail/index.ts';
 import type { DetailCtx } from '../components/detail/index.ts';
+import { PickerPage } from '../components/panels/index.ts';
+import type { PanelCtx } from '../components/panels/index.ts';
 import { starfield } from '../theme/starfield.ts';
 import {
   AddScreen,
@@ -99,6 +101,21 @@ export function AppShell({ T, name, setTheme }: AppShellProps) {
     flash: (msg: string) => st.apply({ graph: st.graph, toast: msg, ui: null, node: null }),
   };
 
+  /**
+   * The context the three structure tabs, their panels and every `Row` share — v4's `this`,
+   * minus the parts only `detail()` reads. `UiState` satisfies `PanelUi` structurally; if the
+   * two drift, this line stops compiling, which is the intended alarm.
+   */
+  const panelCtx: PanelCtx = {
+    T,
+    graph: st.graph,
+    idx: st.idx,
+    schema: st.schema,
+    ui: st.ui,
+    up: st.up,
+    apply: st.apply,
+  };
+
   const goTab = (next: AppTab) => {
     if (next === tab) return;
     up({ tab: next });
@@ -110,13 +127,13 @@ export function AppShell({ T, name, setTheme }: AppShellProps) {
     ) : tab === 'add' ? (
       <AddScreen T={T} />
     ) : tab === 'map' ? (
-      // Task 4 wire-in: the Map tab now renders the real fixture tree through `Row`, so it
-      // needs the graph and the state seam, not just the index.
-      <MapScreen T={T} graph={st.graph} idx={st.idx} ui={st.ui} up={st.up} apply={st.apply} />
+      // Task 6: all three structure tabs take the one panel context and each wraps itself in
+      // `StructurePanel` (v4:959), which owns the controls, the filter block and the scroller.
+      <MapScreen ctx={panelCtx} />
     ) : tab === 'routines' ? (
-      <RoutinesScreen T={T} idx={st.idx} />
+      <RoutinesScreen ctx={panelCtx} />
     ) : tab === 'strategies' ? (
-      <StrategiesScreen T={T} graph={st.graph} />
+      <StrategiesScreen ctx={panelCtx} />
     ) : (
       <SettingsScreen T={T} />
     );
@@ -216,8 +233,15 @@ export function AppShell({ T, name, setTheme }: AppShellProps) {
         </a>
       </div>
 
-      {/* v4's overlay slot. Last in the tree, painted over everything. */}
+      {/* v4's overlay slot (renderShell 936-938): detail, then pickerPage, then toast — in
+          that order, and the order is the z-order. `toast()` is Task 11.
+
+          ⚠ `PickerPage` is deliberately mounted at SHELL level, not inside `StructurePanel`.
+          v4 puts it here, and the reason shows up in use: `moveFor` is also set from the
+          detail editor's location block, so the picker has to be able to paint over the
+          detail pane (zIndex 45 vs. its 30), not sit behind it inside a tab body. */}
       <DetailOverlay ctx={detailCtx} />
+      <PickerPage ctx={panelCtx} />
     </div>
   );
 }

@@ -61,6 +61,37 @@ export function effective(idx: GraphIndex, n: ModelNode, vk: string): EffectiveV
   return { val: '', from: null };
 }
 
+/**
+ * v4:329 —
+ *   sideOf(n){ let x=n; while(x){ if(x.vals&&x.vals.side)return x.vals.side; x=x.parent; } return null; }
+ *
+ * Which life-area a node belongs to, inheriting from the nearest ancestor that names one.
+ * Half of `subtreeVis` (v4:330): the Side filter passes when `sideOf(n) === st.sideFilter`.
+ *
+ * ⚠ THIS IS NOT THE SAME INHERITANCE RULE AS `effective()` ABOVE, and the difference is v4's,
+ * not an accident of the port:
+ *
+ *   · `sideOf` starts at **n itself** and stops on **truthiness** — an own empty `side`
+ *     keeps walking up.
+ *   · `effective` starts at **n.parent** and stops on **hasOwnProperty** — a present-but-empty
+ *     ancestor value stops the walk and means an intentional "none" (backend spec §4 tri-state).
+ *
+ * They answer different questions ("what side am I in" vs. "what would I inherit if I had no
+ * value"), so they are deliberately NOT harmonised. Ported exactly as v4 has it.
+ *
+ * Lives in the model layer rather than beside `subtreeVis` in the screens because it needs the
+ * derived index to walk ancestry — v4 could read `x.parent` off the node, this port cannot
+ * (see `ModelNode` in types.ts for why the back-pointer is not reproduced).
+ */
+export function sideOf(idx: GraphIndex, n: ModelNode): string | null {
+  let x: ModelNode | null = n;
+  while (x) {
+    if (x.vals && x.vals.side) return String(x.vals.side);
+    x = idx.parentOf.get(x.id) ?? null;
+  }
+  return null;
+}
+
 /** True when this node has its own value for `vk` — v4's `inheritRow` test. */
 export function isOwnValue(n: ModelNode, vk: string): boolean {
   return Object.prototype.hasOwnProperty.call(n.vals, vk);

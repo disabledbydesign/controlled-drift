@@ -32,6 +32,7 @@ export { applySchema } from './schema.ts';
 
 export {
   effective,
+  sideOf,
   isOwnValue,
   hasSchedulableAncestor,
   INHERIT,

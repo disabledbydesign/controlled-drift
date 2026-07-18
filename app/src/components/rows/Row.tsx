@@ -2,6 +2,7 @@ import type { CSSProperties, DragEvent } from 'react';
 import { Badge, Chip } from '../atoms/index.ts';
 import { chipsFor, isSelfOrDescendant, move } from '../../model/index.ts';
 import type { ModelNode } from '../../model/index.ts';
+import { ChipStrip } from '../panels/ChipStrip.tsx';
 import { Lead } from './Lead.tsx';
 import { D } from './types.ts';
 import type { RowCtx } from './types.ts';
@@ -87,12 +88,19 @@ export interface RowProps extends RowOptions {
  * outranks it: a row being dragged onto shows the blue dashed outline INSTEAD, and v4
  * suppresses the rose inset in that case (`active && !dragOver`) so the two never stack.
  *
- * ── deliberately absent ──────────────────────────────────────────────────────
- * v4 renders `chipStrip(n,depth,chipsBelow)` beneath the line when a chip is being edited.
- * That is Task 6. It is absent rather than stubbed — a stub that renders nothing looks
- * identical to a missing one and hides the gap (same rule `AppShell` states for its overlays).
- * Tapping a chip today still sets `chipEdit`, and the row visibly highlights, so the seam is
- * observable.
+ * ── the two strips underneath (Task 6) ───────────────────────────────────────
+ * v4:460 renders `chipStrip(n,depth,chipsBelow)` beneath the line when this row has a chip
+ * being edited. That is now mounted.
+ *
+ * ⚠ `menuStrip` (v4:477) is NOT ported. It is DEAD IN v4 — `menuStrip` appears exactly once
+ * (its own definition) and all 18 `menuFor:` assignments in v4 are `null`, so the strip is
+ * unreachable there. A first pass ported it and mounted it here on inferred placement; removed
+ * for the same reason `typeSection` and `renderApp`/`header`/`tab` were, and because inferred
+ * placement of unreachable code is worse than its absence. Its Move action is reachable anyway,
+ * through the detail editor's location block. `ui.menuFor` and `row()`'s `active` test still
+ * read it, faithfully, in the same
+ * `ui.menuFor === n.id` — see its own header for why that placement is INFERRED rather than
+ * transcribed, and why nothing in v4 or here currently sets `menuFor` to a non-null value.
  */
 export function Row({
   ctx,
@@ -361,7 +369,12 @@ export function Row({
           </button>
         )}
       </div>
-      {/* v4 renders chipStrip() here when this row's chipEdit is open. Task 6. */}
+      {/* v4:460 — `dropdown = (st.chipEdit && st.chipEdit.id===n.id) ? chipStrip(...) : null`.
+          The wrapper above is `position:relative`, which is what the strip's `top:100%`
+          anchors to. */}
+      {ui.chipEdit && ui.chipEdit.id === n.id ? (
+        <ChipStrip ctx={ctx} n={n} depth={depth} chipsBelow={chipsBelow} />
+      ) : null}
     </div>
   );
 }

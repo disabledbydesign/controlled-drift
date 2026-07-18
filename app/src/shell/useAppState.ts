@@ -74,6 +74,31 @@ export interface UiState {
   addParentFor: string | null;
   /** free-text filter inside the move/add picker (Task 6). */
   pickerFilter: string;
+  /**
+   * Which destination rows are expanded inside the move/add picker — v4's `st.pickerExpanded`
+   * (read at v4:609, written at v4:611, cleared by the picker's Cancel at v4:616). Absent id =
+   * collapsed, so the picker opens showing only the top level. v4 never declares it in the
+   * initial bag; it appears only via `up()`.
+   */
+  pickerExpanded: Readonly<Record<string, boolean>>;
+
+  // ── per-tab filter state (Task 6) ───────────────────────────────────────────
+  // v4 declares `recFilter:'all'` in its initial bag (v4:78) but NOT the three `strat*` keys,
+  // which appear only via `up()` and are read with `||` defaults (v4:651). Declared here
+  // because the bag is strictly typed; the defaults below are v4's own fallbacks.
+  /** Routines cadence filter — v4's `st.recFilter`. */
+  recFilter: 'all' | 'asneeded' | 'scheduled';
+  /** Strategies "When" filter: 'all' or one of `OPTS.strategyState`. v4's `st.stratWhen`. */
+  stratWhen: string;
+  /** Strategies status filter: 'all' or 'active'. v4's `st.stratStatus`. */
+  stratStatus: string;
+  /** Whether the Strategies tab's own filter block is open — v4's `st.stratFilterOpen`. */
+  stratFilterOpen: boolean;
+  /**
+   * Row whose Delete button is armed for a second tap — v4's `st.confirmDelete`, set by
+   * `askDelete` (v4:476) and auto-cleared after 3s. Read by `menuStrip` (v4:477) only.
+   */
+  confirmDelete: string | null;
 
   /**
    * v4's `st._returnFrom` — which tab sent the user into the detail editor, so its back
@@ -102,6 +127,12 @@ const INITIAL_UI: UiState = {
   moveFor: null,
   addParentFor: null,
   pickerFilter: '',
+  pickerExpanded: {},
+  recFilter: 'all',
+  stratWhen: 'all',
+  stratStatus: 'all',
+  stratFilterOpen: false,
+  confirmDelete: null,
   returnFrom: null,
 };
 

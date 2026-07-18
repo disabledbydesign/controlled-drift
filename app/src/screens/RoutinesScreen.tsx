@@ -1,10 +1,184 @@
-import type { Theme } from '@tokens';
-import type { GraphIndex } from '../model/index.ts';
-import { Placeholder } from './Placeholder.tsx';
+import type { ReactNode } from 'react';
+import { Rail } from '../components/atoms/index.ts';
+import { Row } from '../components/rows/index.ts';
+import type { PanelCtx } from '../components/panels/index.ts';
+import { pathTo } from '../model/index.ts';
+import type { ModelNode } from '../model/index.ts';
+import { StructurePanel } from './StructurePanel.tsx';
 
-/** Placeholder until Task 6 ports `recurringBody()` (~677). */
-export function RoutinesScreen({ T, idx }: { T: Theme; idx: GraphIndex }) {
-  let n = 0;
-  for (const obj of idx.byId.values()) if (obj.level === 'RECURRING') n += 1;
-  return <Placeholder T={T} name="Routines" note={`${n} recurring objects`} />;
+/** v4:685 — days-per-unit, used only for sorting. `quarter` and `year` are not in `OPTS.unit`. */
+const U_DAYS: Record<string, number> = { day: 1, week: 7, month: 30, quarter: 91, year: 365 };
+
+/**
+ * The Routines tab — v4 `recurringBody()` (~677) inside `structurePanel`.
+ *
+ * Every RECURRING object in the graph, grouped under the project it belongs to, with the
+ * project's full ancestor path as the header. This is the one place `toggleCollapse` (v4:676)
+ * belongs: the GROUP HEADERS collapse, not the tree. (The Map is a drill-in and collapses
+ * nothing — an earlier revision of the plan conflated the two.)
+ *
+ * ── ordering says something ──────────────────────────────────────────────────
+ * Within a group, `rank` sorts by how often the thing comes round: as-needed first (rank −1,
+ * it has no cadence at all), then daily, weekly, monthly. So the shape of a routine group is
+ * legible before any label is read.
+ *
+ * ── the filters here are the tab's own ───────────────────────────────────────
+ * The All / As needed / Scheduled chips are `st.recFilter`, separate from the shared filter
+ * block. ⚠ Note what `match` (v4:684) does NOT consult: neither `hideInactive` nor the Side
+ * filter reaches this list, so a paused routine still shows with "Hide inactive" on. That is
+ * v4's behaviour, ported as-is and flagged rather than corrected — it is arguably right (a
+ * paused routine is exactly what you come here to un-pause) but it is not a decision this port
+ * gets to make.
+ *
+ * Rows use `hideBadge` (the whole tab is one type, so the badge would be noise) and `noMenu`.
+ * `flat:true` is passed by v4 and is a dead parameter there — see `RowOptions`.
+ */
+export function RoutinesScreen({ ctx }: { ctx: PanelCtx }) {
+  const { T, graph, idx, ui, up } = ctx;
+  const C = T.c;
+  const q = ui.search.trim().toLowerCase();
+  const rf = ui.recFilter || 'all';
+
+  const fchip = (label: string, val: 'all' | 'asneeded' | 'scheduled') => (
+    <button
+      key={val}
+      onClick={() => up({ recFilter: val })}
+      style={{
+        flex: '0 0 auto',
+        background: rf === val ? C.blue + '22' : C.panel,
+        border: '1px solid ' + (rf === val ? C.blue + '66' : C.border),
+        borderRadius: T.r.chip,
+        color: rf === val ? C.blue : C.dim,
+        fontSize: '12px',
+        fontWeight: 600,
+        padding: '6px 13px',
+        cursor: 'pointer',
+        fontFamily: 'inherit',
+      }}
+    >
+      {label}
+    </button>
+  );
+
+  const match = (r: ModelNode): boolean =>
+    (!q || r.title.toLowerCase().includes(q)) &&
+    (rf === 'all' ||
+      (rf === 'asneeded' ? r.vals.unit === 'as_needed' : r.vals.unit !== 'as_needed'));
+
+  const rank = (r: ModelNode): number =>
+    r.vals.unit === 'as_needed'
+      ? -1
+      : (Number(r.vals.count) || 1) * (U_DAYS[String(r.vals.unit)] ?? 7);
+
+  const groups: Array<{ parent: ModelNode; recs: ModelNode[] }> = [];
+  const walk = (n: ModelNode): void => {
+    const recs = n.children.filter((c) => c.level === 'RECURRING');
+    if (recs.length) groups.push({ parent: n, recs });
+    n.children.forEach(walk);
+  };
+  graph.roots.forEach(walk);
+
+  /** v4:676 `toggleCollapse(id)`, verbatim: present = collapsed, delete to expand. */
+  const toggleCollapse = (id: string) => {
+    const c: Record<string, true> = { ...ui.collapsed };
+    if (c[id]) delete c[id];
+    else c[id] = true;
+    up({ collapsed: c });
+  };
+
+  const body: ReactNode[] = [];
+  body.push(
+    <div key="rf" style={{ display: 'flex', gap: '7px', padding: '12px 12px 4px', flexWrap: 'wrap' }}>
+      {fchip('All', 'all')}
+      {fchip('As needed', 'asneeded')}
+      {fchip('Scheduled', 'scheduled')}
+    </div>,
+  );
+
+  let any = false;
+  groups.forEach((g) => {
+    const recs = g.recs.filter(match).sort((a, b) => rank(a) - rank(b));
+    if (!recs.length) return;
+    any = true;
+    const path = pathTo(idx, g.parent.id)
+      .map((p) => p.title)
+      .join(' › ');
+    const gid = g.parent.id;
+    const col = !!ui.collapsed[gid];
+    body.push(
+      <div
+        key={'gh' + gid}
+        onClick={() => toggleCollapse(gid)}
+        style={{
+          display: 'flex',
+          alignItems: 'center',
+          gap: '7px',
+          padding: '14px 12px 6px',
+          cursor: 'pointer',
+        }}
+      >
+        <span
+          style={{
+            color: C.dimmer,
+            fontSize: '9px',
+            flex: '0 0 auto',
+            display: 'inline-block',
+            transform: col ? 'rotate(-90deg)' : 'none',
+            transition: 'transform .15s',
+          }}
+        >
+          ▼
+        </span>
+        <Rail T={T} level={g.parent.level} />
+        <span style={{ flex: 1, minWidth: 0, fontSize: '11.5px', fontWeight: 700, color: C.dim }}>
+          {path}
+        </span>
+        <span style={{ fontSize: '11px', color: C.dimmer, flex: '0 0 auto' }}>{recs.length}</span>
+      </div>,
+    );
+    if (!col) {
+      recs.forEach((r) =>
+        body.push(
+          <Row
+            key={r.id}
+            ctx={ctx}
+            n={r}
+            depth={1}
+            onTap={() => up({ detail: r.id })}
+            hideBadge
+            flat
+            noMenu
+          />,
+        ),
+      );
+    }
+  });
+
+  if (!any) {
+    body.push(
+      <div
+        key="re"
+        style={{ color: C.dimmer, fontSize: '13px', textAlign: 'center', padding: '40px 20px' }}
+      >
+        No recurring items
+      </div>,
+    );
+  }
+
+  body.push(
+    <div
+      key="rn"
+      style={{
+        fontSize: '11.5px',
+        color: C.dimmer,
+        textAlign: 'center',
+        padding: '16px 24px',
+        lineHeight: 1.5,
+      }}
+    >
+      Tap the circle to mark an item not-done so it re-enters the daily plan.
+    </div>,
+  );
+
+  return <StructurePanel ctx={ctx}>{body}</StructurePanel>;
 }

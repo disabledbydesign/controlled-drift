@@ -1,172 +1,244 @@
+import { useRef } from 'react';
 import type { ReactNode } from 'react';
-import type { Theme } from '@tokens';
+import { typeColor } from '../components/atoms/index.ts';
 import { Row } from '../components/rows/index.ts';
-import type { RowCtx } from '../components/rows/index.ts';
-import { isInactive } from '../model/index.ts';
-import type { Graph, GraphIndex, ModelNode, MutationResult } from '../model/index.ts';
-import type { UiState } from '../shell/useAppState.ts';
+import { NAV } from '../components/panels/index.ts';
+import type { PanelCtx } from '../components/panels/index.ts';
+import { isInactive, node, pathTo, sideOf } from '../model/index.ts';
+import type { GraphIndex, ModelNode } from '../model/index.ts';
+import { StructurePanel } from './StructurePanel.tsx';
 
-export interface MapScreenProps {
-  T: Theme;
-  graph: Graph;
-  idx: GraphIndex;
-  ui: UiState;
-  up: (patch: Partial<UiState>) => void;
-  apply: (result: MutationResult) => void;
+/** The filter inputs `subtreeVis` reads, gathered so the callers cannot disagree. */
+export interface VisFilters {
+  /** Already `.trim().toLowerCase()`d by the caller, as v4 does. */
+  q: string;
+  hideInactive: boolean;
+  sideFilter: string;
 }
 
 /**
- * v4 `subtreeVis(n)` (~330), narrowed to the part Task 4 owns.
+ * v4 `subtreeVis(n)` (~330), now complete:
  *
- * The rule that matters: a node stays visible if IT passes the filter **or any descendant
- * does**. Without that, hiding a done task would also hide the project it lives under as soon
- * as the project itself read as inactive, and whole live branches would vanish behind a dead
- * ancestor.
+ *   sidePass = (st.sideFilter||'all')==='all' || sideOf(n)===st.sideFilter
+ *   self     = (!q || title.includes(q)) && !(st.hideInactive && isInactive(n)) && sidePass
+ *   return self || n.children.some(subtreeVis)
  *
- * v4's full predicate also ANDs in the title search and the Side filter. Both are omitted
- * here, not forgotten: neither has a control yet (Task 6 brings `filterMenu` / `mapControls`),
- * and the Side half needs v4's `sideOf(n)` (~329), which walks ancestors for an inherited
- * `side` and is **not ported into `model/`**. Reported rather than added — `model/` is outside
- * this task's file scope.
+ * The `||` at the end is the rule that matters: a node stays visible if IT passes **or any
+ * descendant does**. Without it, hiding done tasks would also hide the project they live under
+ * as soon as the project itself read as inactive, and whole live branches would vanish behind
+ * a dead ancestor.
+ *
+ * Task 4 shipped this with only the `hideInactive` conjunct, because neither of the other two
+ * had a control yet and `sideOf` was unported. Both are here now.
  */
-function subtreeVis(n: ModelNode, hideInactive: boolean): boolean {
-  const self = !(hideInactive && isInactive(n));
-  return self || n.children.some((c) => subtreeVis(c, hideInactive));
+export function subtreeVis(idx: GraphIndex, n: ModelNode, f: VisFilters): boolean {
+  const sidePass = (f.sideFilter || 'all') === 'all' || sideOf(idx, n) === f.sideFilter;
+  const self =
+    (!f.q || n.title.toLowerCase().includes(f.q)) && !(f.hideInactive && isInactive(n)) && sidePass;
+  return self || n.children.some((c) => subtreeVis(idx, c, f));
 }
 
 /**
- * The Map tab — the object tree.
+ * The Map tab — v4 `treeBody()` (~630) inside `structurePanel`.
  *
- * ── WHAT THIS IS AND IS NOT ──────────────────────────────────────────────────
- * This renders `Row` recursively with real indentation and expand/collapse. **v4's Map does
- * not navigate this way.** v4's `treeBody` (~630) is a DRILL-IN: every row is `depth:0`, the
- * chevron sets `st.focus` and the panel swaps to that node's children behind a breadcrumb —
- * so nothing ever nests and `depth` is never exercised on that path. `toggleCollapse` (~676)
- * is real v4 code, but it belongs to the Routines tab, where it collapses the grouping
- * headers, not the tree.
+ * ── ⚠ THIS IS A DRILL-IN, NOT A NESTED TREE ──────────────────────────────────
+ * Nothing on this screen indents and nothing expands in place. Every row renders at
+ * `depth:0`; tapping a container (or its chevron) sets `st.focus` to that node and the panel
+ * REPLACES itself with that node's children, behind a breadcrumb that walks back out. v4's own
+ * comment at line 634: *"Drill-in: show only the focused level + a breadcrumb. No inline
+ * expand → nothing accumulates, nothing jumps."*
  *
- * Porting `treeBody` — breadcrumb, focus, drill animation, `mapControls` — is Task 6, which
- * names it explicitly. This screen is Task 4's wire-in: it puts `Row` in front of real fixture
- * data on the real page, and it is the one place the depth-indentation rule is actually
- * visible, because the drill-in path never indents anything. Task 6 replaces the body below
- * the controls; `Row` itself does not change.
+ * Task 4 built an interim nested tree here because an earlier revision of the plan said
+ * "expand/collapse", conflating this with the Routines tab's grouping headers
+ * (`toggleCollapse` at v4:676, which is real and belongs there). That container is what this
+ * replaces. `Row` itself was correct and is unchanged.
  *
- * ── layout ───────────────────────────────────────────────────────────────────
- * Its own flex column with `overflow:hidden`, holding the controls ABOVE an inner scroller —
- * matching v4's `structurePanel` (959-965), which is why `AppShell` renders the structure tabs
- * outside its scrolling wrapper. Nested in a scroller instead, `flex:1` would be inert and the
- * controls would scroll away with the list.
+ * Leaves (TASK / RECURRING) cannot be drilled into, so they tap through to the detail editor
+ * and carry their chips under the title rather than beside it.
+ *
+ * ── search narrows to a flat list, deliberately ──────────────────────────────
+ * With a filter typed, v4 abandons the drill-in entirely: no breadcrumb, no focus, just every
+ * matching node in the whole tree at `depth:0`. v4's own comment calls this "intentional
+ * narrowing" — while searching you want hits, not structure. Note the search branch applies
+ * `hideInactive` but NOT the Side filter; that asymmetry is v4's and is ported as-is.
+ *
+ * ── the panel's entry direction is derived from DEPTH ────────────────────────
+ * Going deeper enters from the right, coming back out from the left, and staying at the same
+ * depth reuses the last direction. v4 keeps the previous depth on the instance
+ * (`_prevTreeDepth` / `_treeDir`); a ref is the same scope here. It is computed during render
+ * from the focus actually in state — the same rule `AppShell` uses for tab direction — so any
+ * route that changes `focus` animates correctly, not only the click handler.
  */
-export function MapScreen({ T, graph, idx, ui, up, apply }: MapScreenProps) {
+export function MapScreen({ ctx }: { ctx: PanelCtx }) {
+  const { T, graph, idx, ui, up } = ctx;
   const C = T.c;
-  const hw = T.mode === 'hardware';
+  const q = ui.search.trim().toLowerCase();
+  const f: VisFilters = { q, hideInactive: ui.hideInactive, sideFilter: ui.sideFilter };
 
-  const ctx: RowCtx = { T, graph, idx, ui, up, apply };
+  const nav = useRef<{ depth: number; dir: 'fwd' | 'back' }>({ depth: 0, dir: 'fwd' });
 
-  /** v4:676 — `toggleCollapse(id)`, verbatim: present = collapsed, delete to expand. */
-  const toggleCollapse = (id: string) => {
-    const c: Record<string, true> = { ...ui.collapsed };
-    if (c[id]) delete c[id];
-    else c[id] = true;
-    up({ collapsed: c });
-  };
-
-  const render = (nodes: ModelNode[], depth: number): ReactNode[] =>
-    nodes
-      .filter((n) => subtreeVis(n, ui.hideInactive))
-      .flatMap((n) => {
-        const kids = n.children.filter((c) => subtreeVis(c, ui.hideInactive));
-        const expandable = kids.length > 0;
-        const open = expandable && !ui.collapsed[n.id];
-        // v4's treeBody rule: TASK and RECURRING put their chips under the title, because
-        // those two rows are the ones that carry a status the eye needs to land on.
-        const chipsBelow = n.level === 'TASK' || n.level === 'RECURRING';
-        return [
-          <Row
-            key={n.id}
-            ctx={ctx}
-            n={n}
-            depth={depth}
-            expandable={expandable}
-            open={open}
-            chipsBelow={chipsBelow}
-            onExpand={expandable ? () => toggleCollapse(n.id) : undefined}
-            onTap={
-              expandable ? () => toggleCollapse(n.id) : () => up({ detail: n.id, menuFor: null })
-            }
-          />,
-          ...(open ? render(kids, depth + 1) : []),
-        ];
+  // ── search: flat matches across the whole tree ────────────────────────────
+  if (q) {
+    const flat: ReactNode[] = [];
+    const walkFlat = (nodes: ModelNode[]): void => {
+      nodes.forEach((n) => {
+        if (!(ui.hideInactive && isInactive(n)) && n.title.toLowerCase().includes(q)) {
+          flat.push(<Row key={n.id} ctx={ctx} n={n} depth={0} onTap={() => up({ detail: n.id })} />);
+        }
+        walkFlat(n.children);
       });
-
-  const rows = render(graph.roots, 0);
-
-  return (
-    <div
-      style={{
-        flex: 1,
-        minHeight: 0,
-        display: 'flex',
-        flexDirection: 'column',
-        overflow: 'hidden',
-      }}
-    >
-      {/* Interim stand-in for v4's `mapControls` (~967) — Task 6 replaces this whole strip with
-          the real search field, Side filter and add button. It exists now because Task 4 has to
-          be DRIVEN: `hideInactive` is already in UI state and wired through the tree, and with
-          no control there is no way to observe that on the running page. */}
-      <div
-        style={{
-          flex: '0 0 auto',
-          display: 'flex',
-          alignItems: 'center',
-          gap: '8px',
-          padding: '10px 12px',
-          borderBottom: '1px solid ' + C.hair,
-          background: T.chrome,
-        }}
-      >
-        <button
-          onClick={() => up({ hideInactive: !ui.hideInactive })}
-          style={{
-            cursor: 'pointer',
-            padding: '5px 12px',
-            fontFamily: hw ? T.mono : T.font,
-            fontSize: '11px',
-            fontWeight: 600,
-            textTransform: hw ? 'uppercase' : 'none',
-            letterSpacing: hw ? '.08em' : 0,
-            color: ui.hideInactive ? C.blue : C.dim,
-            background: ui.hideInactive ? C.blue + '22' : 'none',
-            border: '1px solid ' + (ui.hideInactive ? C.blue + '66' : C.border),
-            borderRadius: T.r.chip,
-          }}
-        >
-          Hide inactive
-        </button>
-        <span
-          style={{ marginLeft: 'auto', fontFamily: T.mono, fontSize: '10px', color: C.dimmest }}
-        >
-          {rows.length} rows
-        </span>
-      </div>
-
-      <div style={{ flex: 1, minHeight: 0, overflowY: 'auto', overflowX: 'hidden' }}>
-        {rows.length ? (
-          rows
+    };
+    walkFlat(graph.roots);
+    return (
+      <StructurePanel ctx={ctx}>
+        {flat.length ? (
+          flat
         ) : (
           <div
-            style={{
-              color: C.dimmer,
-              fontSize: '13px',
-              textAlign: 'center',
-              padding: '40px 20px',
-            }}
+            style={{ color: C.dimmer, fontSize: '13px', textAlign: 'center', padding: '40px 20px' }}
           >
             Nothing matches
           </div>
         )}
+      </StructurePanel>
+    );
+  }
+
+  // ── drill-in ──────────────────────────────────────────────────────────────
+  const focus = ui.focus ? (node(idx, ui.focus) ?? null) : null;
+  const path = focus ? pathTo(idx, focus.id) : [];
+
+  const crumbs: Array<{ id: string | null; title: string; level: string | null }> = [
+    { id: null, title: 'root', level: null },
+    ...path.map((x) => ({ id: x.id, title: x.title, level: x.level as string })),
+  ];
+
+  const items = focus
+    ? focus.children.filter((c) => subtreeVis(idx, c, f))
+    : graph.roots.filter((g) => subtreeVis(idx, g, f));
+
+  const depth = path.length;
+  const dir: 'fwd' | 'back' =
+    depth > nav.current.depth ? 'fwd' : depth < nav.current.depth ? 'back' : nav.current.dir;
+  nav.current = { depth, dir };
+
+  const rows: ReactNode[] = [];
+  if (!items.length) {
+    rows.push(
+      <div
+        key="e"
+        style={{ color: C.dimmer, fontSize: '13px', textAlign: 'center', padding: '30px 20px' }}
+      >
+        {focus ? 'Nothing here yet — add with +' : 'Nothing matches'}
+      </div>,
+    );
+  }
+  items.forEach((n) => {
+    const canDrill = !['TASK', 'RECURRING'].includes(n.level);
+    const drill = () => up({ focus: n.id, menuFor: null, chipEdit: null });
+    rows.push(
+      <Row
+        key={n.id}
+        ctx={ctx}
+        n={n}
+        depth={0}
+        expandable={canDrill}
+        open={false}
+        chipsBelow={['TASK', 'RECURRING'].includes(n.level)}
+        onExpand={canDrill ? drill : undefined}
+        onTap={canDrill ? drill : () => up({ detail: n.id })}
+      />,
+    );
+  });
+
+  return (
+    <StructurePanel ctx={ctx}>
+      <div
+        style={{
+          display: 'flex',
+          alignItems: 'center',
+          gap: '6px',
+          padding: '8px 8px 10px 12px',
+          position: 'sticky',
+          top: 0,
+          zIndex: 5,
+          background: T.chrome,
+          backdropFilter: T.blur,
+          WebkitBackdropFilter: T.blur,
+          borderBottom: '1px solid ' + C.hair,
+        }}
+      >
+        <div
+          style={{
+            flex: 1,
+            minWidth: 0,
+            display: 'flex',
+            alignItems: 'center',
+            flexWrap: 'wrap',
+            gap: '4px',
+          }}
+        >
+          {crumbs.map((c, i) => (
+            <span key={i} style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
+              {i > 0 ? <span style={{ color: C.dimmer, fontSize: '12px' }}>›</span> : null}
+              <button
+                onClick={() => up({ focus: c.id, menuFor: null, chipEdit: null })}
+                style={{
+                  background: 'none',
+                  border: 'none',
+                  // v4 reads `this.TYPE[c.level]`. That map is superseded by the gallery's
+                  // `typeRamp` via `typeColor` — v4's coloured TASK green, colliding with the
+                  // completion green.
+                  color: c.level ? typeColor(T, c.level) : C.text,
+                  fontWeight: i === crumbs.length - 1 ? 700 : 500,
+                  fontSize: '13px',
+                  cursor: 'pointer',
+                  padding: 0,
+                  fontFamily: 'inherit',
+                }}
+              >
+                {c.title}
+              </button>
+            </span>
+          ))}
+        </div>
+        {focus ? (
+          <button
+            onClick={() => up({ detail: focus.id, menuFor: null, chipEdit: null })}
+            aria-label="edit"
+            style={{
+              flex: '0 0 auto',
+              width: '32px',
+              height: '32px',
+              border: 'none',
+              background: 'none',
+              color: C.dim,
+              cursor: 'pointer',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              borderRadius: T.r.field,
+            }}
+          >
+            <svg width={16} height={16} viewBox="0 0 24 24" fill="none">
+              <path d="M12 20h9" stroke="currentColor" strokeWidth={2} strokeLinecap="round" />
+              <path
+                d="M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4L16.5 3.5z"
+                stroke="currentColor"
+                strokeWidth={2}
+                strokeLinecap="round"
+                strokeLinejoin="round"
+              />
+            </svg>
+          </button>
+        ) : null}
       </div>
-    </div>
+      <div
+        key={'panel-' + (focus ? focus.id : 'root')}
+        style={{ animation: (dir === 'back' ? 'navback' : 'navfwd') + ' ' + NAV }}
+      >
+        {rows}
+      </div>
+    </StructurePanel>
   );
 }
