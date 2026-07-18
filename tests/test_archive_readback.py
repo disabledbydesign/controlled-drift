@@ -83,3 +83,53 @@ def test_archive_raises_when_delete_rejected(monkeypatch):
     with pytest.raises(RuntimeError):
         ta.archive_object("obj-1")
     assert calls == ["DELETE"]
+
+
+def test_archive_polls_through_an_async_lag(monkeypatch):
+    """Anytype archives ASYNCHRONOUSLY — the first re-fetch can still read `archived: False`.
+
+    Confirmed live 2026-07-18 by the type-conversion probe: the first read immediately after a
+    successful DELETE returned False, a moment later True. A single immediate read-back reported
+    FAILURE for an archive that had succeeded. This pins the polling so that regression cannot
+    come back.
+    """
+    import task_actions
+
+    calls = []
+    state = {"reads": 0}
+
+    def fake_call(method, path, body=None):
+        calls.append((method, path))
+        if method == "DELETE":
+            return 204, {}
+        state["reads"] += 1
+        # Archived only becomes visible on the third read — the race.
+        archived = state["reads"] >= 3
+        return 200, {"object": {"id": "obj-1", "archived": archived}}
+
+    monkeypatch.setattr(task_actions, "call", fake_call)
+    monkeypatch.setattr(task_actions.g, "get_space_id", lambda: "space-1")
+    monkeypatch.setattr(task_actions.time, "sleep", lambda _s: None)
+
+    out = task_actions.archive_object("obj-1")
+    assert out == {"id": "obj-1", "archived": True}
+    assert state["reads"] == 3, "should have polled, not read once"
+    assert calls[0][0] == "DELETE" and calls[1][0] == "GET"
+
+
+def test_archive_still_raises_when_it_never_archives(monkeypatch):
+    """Polling must not swallow a REAL failure — only the timing assumption changed."""
+    import task_actions
+
+    def fake_call(method, path, body=None):
+        if method == "DELETE":
+            return 204, {}
+        return 200, {"object": {"id": "obj-1", "archived": False}}
+
+    monkeypatch.setattr(task_actions, "call", fake_call)
+    monkeypatch.setattr(task_actions.g, "get_space_id", lambda: "space-1")
+    monkeypatch.setattr(task_actions.time, "sleep", lambda _s: None)
+
+    import pytest
+    with pytest.raises(RuntimeError, match="still reads back unarchived"):
+        task_actions.archive_object("obj-1")

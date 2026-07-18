@@ -308,6 +308,127 @@ def test_toggle_refuses_a_non_recurring(space):
         api_write.set_recurring_paused("task-1", True)
 
 
+# --- type conversion (spec §5) ----------------------------------------------
+
+def test_convert_task_to_recurring_keeps_the_same_id(space):
+    """The whole reason the in-place path was worth probing for: a new object would have a new
+    id, and every inbound reference to the old one would break."""
+    out = api_write.convert_type("task-1", "Recurring")
+    assert out["ok"] is True
+    assert out["object"]["id"] == "task-1"
+    assert out["object"]["type"] == "Recurring"
+
+
+def test_convert_preserves_every_field_including_ones_the_new_type_does_not_show(space):
+    """Spec §5: fields not applicable to the new type stay STORED, just unshown. `Task status` is
+    not a Recurring field — it must still be on the object afterwards, or converting back would
+    silently lose what June entered.
+
+    This is the test that fails if a conversion drops a field.
+    """
+    api_write.set_vals("task-1", {"context": "spoke to the receptionist", "duration": 25})
+    before = api_write._stored_values(api_write._get_object("task-1"))
+    assert before["Task status"] == "Ready"
+
+    api_write.convert_type("task-1", "Recurring")
+
+    after = api_write._stored_values(api_write._get_object("task-1"))
+    for name, was in before.items():
+        if name in ("Linked Projects", "Project link"):
+            continue           # the parent relink, the one thing a conversion rewrites
+        assert name in after, f"conversion dropped {name!r}"
+        assert after[name] == was, f"conversion changed {name!r}"
+    assert after["Task status"] == "Ready"
+    assert after["Context"] == "spoke to the receptionist"
+    assert after["Duration min"] == 25
+
+
+def test_convert_relinks_the_parent_onto_the_property_the_new_type_uses(space):
+    """A Task holds its parent in `Linked Projects`, a Recurring in `Project link`. If the old
+    link were left set, the tree would reach the object two ways."""
+    api_write.convert_type("task-1", "Recurring")
+    obj = api_write._get_object("task-1")
+    assert api_write._link_ids(obj, "Project link") == ["proj-1"]
+    assert api_write._link_ids(obj, "Linked Projects") == []
+
+
+def test_convert_round_trip_brings_the_unshown_field_back(space):
+    """Spec §5's "reappear if converted back", driven rather than assumed."""
+    api_write.convert_type("task-1", "Recurring")
+    out = api_write.convert_type("task-1", "Task")
+    assert out["object"]["vals"]["status"] == "Ready"
+    assert api_write._link_ids(api_write._get_object("task-1"), "Linked Projects") == ["proj-1"]
+
+
+def test_convert_refuses_a_parent_that_still_has_children(space):
+    """The leaf guard. This is the test that fails if a parent is let through."""
+    with pytest.raises(api_write.WriteRefused) as e:
+        api_write.convert_type("proj-1", "Task")
+    assert "Call the surgeon" in str(e.value), "the refusal must name what to move first"
+    # and nothing was written — the guard runs before any PATCH
+    assert api_write._type_name(api_write._get_object("proj-1")) == "Project"
+
+
+def test_convert_a_leaf_project_to_a_task_is_allowed(space):
+    """The same guard must not refuse a childless project — that is the miscategorised case."""
+    out = api_write.convert_type("ws-1", "Task")
+    assert out["object"]["type"] == "Task"
+    assert out["object"]["level"] == "TASK"
+
+
+def test_convert_project_to_workstream_sets_the_flag(space):
+    out = api_write.convert_type("proj-2", "Workstream")
+    assert out["object"]["level"] == "WORKSTREAM"
+    assert api_write._checkbox(api_write._get_object("proj-2"), "Is workstream") is True
+
+
+def test_convert_workstream_back_to_project_clears_the_flag(space):
+    api_write.convert_type("ws-1", "Subproject")
+    assert api_write._checkbox(api_write._get_object("ws-1"), "Is workstream") is False
+
+
+def test_convert_refuses_a_parent_that_cannot_host_the_new_type(space):
+    """A Project under a Goal cannot become a Recurring — no link expresses it, so converting
+    would silently orphan the object. Refuse, naming the fix."""
+    # A CHILDLESS project under a goal, so the leaf guard is not what refuses this.
+    new_id = api_write.create_child("PROJECT", "Sort out insurance", parent_id="goal-1")["object"]["id"]
+    with pytest.raises(api_write.WriteRefused) as e:
+        api_write.convert_type(new_id, "Recurring")
+    assert "Goal" in str(e.value) and "Move it under a project" in str(e.value)
+
+
+def test_convert_refuses_subproject_to_project_as_a_move_not_a_conversion(space):
+    with pytest.raises(api_write.WriteRefused) as e:
+        api_write.convert_type("proj-1", "Subproject")
+    assert "sits under another project" in str(e.value)
+
+
+def test_convert_refuses_an_unknown_target(space):
+    with pytest.raises(api_write.WriteRefused):
+        api_write.convert_type("task-1", "Sandwich")
+
+
+def test_convert_fails_when_the_type_write_does_not_persist(space):
+    space.swallow_writes = True
+    with pytest.raises(RuntimeError, match="type did not persist"):
+        api_write.convert_type("task-1", "Recurring")
+
+
+def test_convert_reads_back_after_writing(space):
+    api_write.convert_type("task-1", "Recurring")
+    methods = [m for m, _ in space.calls]
+    assert "GET" in methods[methods.index("PATCH"):], "no re-fetch after the write"
+
+
+def test_convert_logs_the_type_change_to_the_corrections_log(space):
+    api_write.convert_type("task-1", "Recurring")
+    recs = [r for r in corrections_log.read_records() if r.get("kind") == "surface_convert"]
+    type_rec = next(r for r in recs if r.get("field") == api_write.TYPE_FIELD)
+    assert type_rec["before"] == "Task" and type_rec["after"] == "Recurring"
+    assert type_rec["object_id"] == "task-1"
+    assert type_rec["surface"] == "review_reorganize"
+
+
 # --- envelope shape ---------------------------------------------------------
 
 def test_every_mutation_returns_the_same_envelope(space):

@@ -127,6 +127,38 @@ def test_patch_refuses_title_and_vals_together(live):
 
 def test_unknown_object_suffix_is_404(live):
     base, _ = live
-    st, b = _req(base, "POST", "/api/object/task-1/type", {"target": "Recurring"})
-    # spec §5 type conversion is deliberately not built here — it must not half-exist.
+    st, b = _req(base, "POST", "/api/object/task-1/frobnicate", {})
     assert st == 404
+
+
+# --- type conversion over HTTP (spec §5) ------------------------------------
+
+def test_post_type_converts_a_task_to_a_recurring(live):
+    """Was asserted as 404 while §5 was unbuilt, so the endpoint could not half-exist. It exists
+    now: the response carries the RE-FETCHED object at its new level, with the same id."""
+    base, _ = live
+    st, b = _req(base, "POST", "/api/object/task-1/type", {"target": "Recurring"})
+    assert st == 200 and b["ok"] is True
+    assert b["object"]["id"] == "task-1", "the id must survive — every reference depends on it"
+    assert b["object"]["type"] == "Recurring"
+    assert b["object"]["level"] == "RECURRING"
+
+
+def test_post_type_leaf_guard_is_400_and_names_the_children(live):
+    base, _ = live
+    st, b = _req(base, "POST", "/api/object/proj-1/type", {"target": "Task"})
+    assert st == 400 and b["ok"] is False
+    assert "Call the surgeon" in b["error"]
+
+
+def test_post_type_rejects_an_unknown_target(live):
+    base, _ = live
+    st, b = _req(base, "POST", "/api/object/task-1/type", {"target": "Sandwich"})
+    assert st == 400 and b["ok"] is False
+
+
+def test_post_type_that_does_not_persist_is_a_500_never_a_silent_ok(live):
+    base, space = live
+    space.swallow_writes = True
+    st, b = _req(base, "POST", "/api/object/task-1/type", {"target": "Recurring"})
+    assert st == 500 and b["ok"] is False and "did not persist" in b["error"]

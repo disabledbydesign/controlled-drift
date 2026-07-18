@@ -177,6 +177,14 @@ class FakeSpace:
             return 200, {"object": copy.deepcopy(self.objects[oid])}
         if body.get("name") is not None:
             self.objects[oid]["name"] = body["name"]
+        if body.get("type_key") is not None:
+            # In-place type change, copied from live behaviour probed 2026-07-18: the object keeps
+            # its id AND every property value, including values for properties the new type does
+            # not link. Only the `type` block is replaced.
+            tname = self._type_name_of_key(body["type_key"])
+            if tname is None:
+                return 400, {"error": f"unknown type_key {body['type_key']!r}"}
+            self.objects[oid]["type"] = _type_block(tname)
         self._apply(oid, body.get("properties") or [])
         return 200, {"object": copy.deepcopy(self.objects[oid])}
 

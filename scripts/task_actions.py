@@ -10,7 +10,7 @@ Discipline (CLAUDE.md): a good answer is not a saved object. Every mutation here
 the object and PROVES the change persisted before reporting success — never "I PATCHed it,
 probably fine." Raises on any failure; nothing silent.
 """
-import sys, os
+import sys, time, os
 import datetime as dt
 sys.path.insert(0, os.path.dirname(__file__))
 from anytype_test import call
@@ -181,6 +181,12 @@ def reschedule_task(task_id, when_text, today=None):
     return {"id": task_id, "when_label": _when_label(scheduled, is_today, is_parked)}
 
 
+# Anytype archives asynchronously; see the polling note in archive_object. Small and bounded —
+# the observed lag was well under a second, and a real failure must still surface quickly.
+_ARCHIVE_POLL_TRIES = 6
+_ARCHIVE_POLL_DELAY = 0.25
+
+
 def _archived_marker(obj):
     """Is this re-fetched object marked archived? True / False / None (no marker field at all).
 
@@ -217,18 +223,35 @@ def archive_object(object_id):
         raise RuntimeError(f"could not archive object {object_id!r}: {st} {b}")
 
     # Read back and PROVE it — never confirm an undo on the API's acknowledgment alone.
-    st2, b2 = call("GET", f"/spaces/{sid}/objects/{object_id}")
-    if st2 in (404, 410):
-        return {"id": object_id, "archived": True}
-    if st2 != 200 or not isinstance(b2, dict) or "object" not in b2:
-        raise RuntimeError(
-            f"could not confirm archive of {object_id!r}: read-back {st2} {b2}")
-    marker = _archived_marker(b2["object"])
-    if marker is not True:
-        raise RuntimeError(
-            f"archive_object({object_id!r}): object still reads back unarchived "
-            f"(archived marker={marker!r})")
-    return {"id": object_id, "archived": True}
+    #
+    # ⚠ POLL, do not read once. CONFIRMED LIVE 2026-07-18 by the type-conversion probe: the
+    # FIRST re-fetch immediately after a successful DELETE read `archived: False`, and a moment
+    # later read True. **Anytype archives ASYNCHRONOUSLY**, the same way schema tag/property
+    # deletes do (BUILD_DOC §6). A single immediate read-back therefore reports FAILURE for an
+    # archive that actually succeeded — and `delete_object` inherits that.
+    #
+    # BUILD_DOC §6 carried this as "archive_object re-fetch behavior after DELETE is UNCONFIRMED,
+    # needs one live undo". That probe was the live undo; the answer is that it is a race.
+    #
+    # Polling keeps the discipline intact — an object that never marks archived STILL raises, so
+    # a genuine failure is not swallowed. Only the timing assumption changed.
+    last = None
+    for attempt in range(_ARCHIVE_POLL_TRIES):
+        st2, b2 = call("GET", f"/spaces/{sid}/objects/{object_id}")
+        if st2 in (404, 410):
+            return {"id": object_id, "archived": True}
+        if st2 != 200 or not isinstance(b2, dict) or "object" not in b2:
+            raise RuntimeError(
+                f"could not confirm archive of {object_id!r}: read-back {st2} {b2}")
+        last = _archived_marker(b2["object"])
+        if last is True:
+            return {"id": object_id, "archived": True}
+        if attempt < _ARCHIVE_POLL_TRIES - 1:
+            time.sleep(_ARCHIVE_POLL_DELAY)
+    raise RuntimeError(
+        f"archive_object({object_id!r}): object still reads back unarchived after "
+        f"{_ARCHIVE_POLL_TRIES} checks over ~{_ARCHIVE_POLL_TRIES * _ARCHIVE_POLL_DELAY:.1f}s "
+        f"(archived marker={last!r})")
 
 
 if __name__ == "__main__":

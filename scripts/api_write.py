@@ -76,17 +76,67 @@ exception is the recurring active flag, which goes through `recurring_active.set
 — the documented single writer of that flag — and lands in `reactivation_log` there. Not
 duplicated here; that means a paused-toggle carries no `authored_by`, stated rather than hidden.
 
-SEAM FOR SPEC §5 (type conversion) — deliberately NOT built here
-----------------------------------------------------------------
-Task ↔ Recurring ↔ Subproject ↔ Workstream conversion is a larger job (data-preserving prop carry,
-relink, and an open question — contract Q2 — about whether Anytype supports an in-place type
-change at all). It plugs in at exactly three places in this module, and nowhere else:
-  • `_LEVEL_TYPE` — level → Anytype type name; a conversion moves an object between these.
-  • `_link_prop_for` — the parent link changes with the type, so a conversion must relink.
+SPEC §5 (type conversion) — BUILT, and contract Q2 is CLOSED
+------------------------------------------------------------
+`convert_type` reclassifies a miscategorised object — June's stated primary use is correcting the
+weeding gate when it filed a one-time Task as a Recurring or the reverse.
+
+**Contract Q2, answered empirically against the live space on 2026-07-18, not guessed:** Anytype
+DOES support an in-place type change. `PATCH /spaces/{sid}/objects/{oid}` accepts `type_key` and
+returns 200; the re-fetched object carries the new type, **the same id**, and every property value
+it had before — including values for properties the new type does not link (a `Task status` rode
+through onto a Recurring). The probe method and its object's full lifecycle are recorded below.
+
+That answer collapses the hard half of the job. The create-new → copy-props → relink → delete-old
+path contract Q2 feared would have had to reproduce the object's id or break every inbound
+reference (linked projects, plan-cache rows, arc step ids, focus-period front/paused lists, this
+log's own `object_id`, June's bookmarks). It preserves the id **by construction**, because it never
+makes a second object. Nothing is orphaned because nothing moves.
+
+It plugs into exactly the three seam points named here, and nowhere else:
+  • `_LEVEL_TYPE` — target level → Anytype type name; the conversion writes across this map.
+  • `_LINK_PROP` — the parent link changes with the type, so a conversion must relink.
   • `_verify` / `node_for` — the same read-back and node projection apply unchanged.
-It additionally needs a LEAF GUARD (contract §4 guard 1: an object with children cannot become a
-Task/Recurring) — `_descendant_ids` here is the primitive that answers it, already written and
-already used by the move cycle guard.
+
+Three guards, each refusing rather than doing something lossy:
+  1. **Leaf guard** (contract §4 guard 1): an object with children cannot become a Task or a
+     Recurring. `_descendant_ids` answers it, and the message NAMES the children to move first.
+  2. **Un-hostable parent**: a Project under a Goal cannot become a Task, because no link expresses
+     "Task under Goal" — converting would silently orphan it. Refused, naming the fix.
+  3. **Nothing-to-do**: Subproject and Project are the SAME storage (both the `Project` type,
+     `is_workstream` false); what makes one a subproject is sitting under another project. Asking
+     to convert between them is a move, not a conversion, and is refused saying so — rather than
+     reporting a success that changed nothing and handing back a node still reading `SUBPROJECT`.
+
+What is deliberately NOT enforced here: contract §4 guard 2 (the picker only offers Task/Recurring
+when the node has a schedulable ancestor). That is an offering rule, not a data constraint —
+enforcing it server-side would refuse to convert an unparented object, and unparented Tasks and
+Recurrings are legitimate in June's real data (`api_tree` maintains four orphan buckets precisely
+so they are not lost). Also not enforced: spec §15's calendar-owned-field rule, because `source`
+is not on the live Recurring type yet — stated rather than silently assumed.
+
+The Q2 probe, in full, so nobody has to re-run it
+-------------------------------------------------
+One throwaway object, created and destroyed in June's live space; nothing else was written.
+  1. `create("Task", "ZZZ throwaway type-change probe 2026-07-18 delete me", properties={Context,
+     Duration min: 25, Task status: Ready})` → id `bafyreigkyt…il3nm`, reads back as `Task`.
+  2. `PATCH /spaces/{sid}/objects/{oid}` `{"type_key": "gsdo_recurring"}` → **HTTP 200**.
+  3. Re-fetch: same id, `type.key == "gsdo_recurring"`, and all three property values present —
+     `Context` and `Duration min` intact, and `Task status` STILL SET although Recurring does not
+     link it. This is the preservation guarantee spec §5 asks for, observed rather than assumed.
+  4. `DELETE` → 200; re-fetched `archived == True` and absent from `fetch_all_objects`.
+
+⚠ FINDING FOR SOMEONE ELSE'S FILE, surfaced not fixed: the archive marker is NOT visible on an
+immediate re-fetch. Step 4's first read (issued right after the DELETE returned) came back
+`archived == False`; a second read moments later returned `archived == True`. Anytype applies the
+archive asynchronously, the same way BUILD_DOC §6 records for schema tag/property deletes.
+`task_actions.archive_object` re-fetches EXACTLY ONCE, immediately, and raises when the marker is
+not yet `True` — so on the live API it can report a spurious failure for an archive that in fact
+succeeded, and `delete_object` below inherits that. BUILD_DOC §6 lists this behaviour as
+"UNCONFIRMED against the live API (2026-07-17), needs one live undo": this probe WAS that live
+undo, and the answer is that it is a race. The fix is to poll until the marker appears (the
+established pattern for Anytype's async deletes) — not made here, because `task_actions.py` is
+outside this change and the repo rule is to change only what was asked.
 
 NOT built here, and why: `clear-field` (`POST /api/object/{id}/clear-field`, contract §4). It must
 REMOVE a property rather than set it empty, because key-presence IS the tri-state (spec §4:
@@ -145,6 +195,25 @@ _ALL_LINKS = {
 }
 
 WORKSTREAM_PROP = "Is workstream"   # live display name of the `is_workstream` checkbox
+
+#: Not a property on the object — the object's TYPE, as the correction log's vocabulary for the
+#: non-field parts of an object (contract §7.4, alongside `__title__` and `PARENT_FIELD`).
+TYPE_FIELD = "__type__"
+
+#: The conversion targets contract §4 lists for `setType`, mapped onto what they mean in storage:
+#: (Anytype type name, intended `is_workstream`; None = the flag does not apply to this type).
+#: ⚠ Subproject and Project are deliberately IDENTICAL — spec §5 says the two differ by nesting
+#: depth, not by anything stored. `convert_type` refuses that pair rather than pretending.
+_CONVERT_TARGET = {
+    "Task": ("Task", None),
+    "Recurring": ("Recurring", None),
+    "Subproject": ("Project", False),
+    "Project": ("Project", False),
+    "Workstream": ("Project", True),
+}
+
+#: Targets that cannot hold children (contract §4 guard 1, spec §5's leaf guard).
+_LEAF_TARGETS = ("Task", "Recurring")
 
 
 class WriteRefused(Exception):
@@ -226,6 +295,51 @@ def _find_node(payload, object_id):
         if hit is not None:
             return hit
     return None
+
+
+def _checkbox(obj, prop_name):
+    """One checkbox property's value, or None when the object does not set it at all. The
+    absent/false distinction is kept because `is_workstream` unset and explicitly-false are the
+    same for rendering but not for "did this conversion have anything to do"."""
+    for p in obj.get("properties", []):
+        if p.get("name") == prop_name and "checkbox" in p:
+            return bool(p["checkbox"])
+    return None
+
+
+def _stored_values(obj):
+    """{property display name: typed value} for every property the object actually SETS.
+
+    This is the snapshot spec §5's preservation rule is proven against: whatever is in here before
+    a conversion must still be in here afterwards, unchanged, except for the handful of properties
+    the conversion deliberately rewrites. Built with `api_tree._value` so it reads values the same
+    way everything else in this layer does, and skips `_UNSET` so an empty property is not
+    mistaken for a value that later vanished.
+    """
+    out = {}
+    for p in obj.get("properties", []):
+        name = p.get("name")
+        if not name:
+            continue
+        if "objects" in p:
+            out[name] = sorted(api_tree._ids(p["objects"]))
+            continue
+        val = api_tree._value(p)
+        if val is not api_tree._UNSET:
+            out[name] = val
+    return out
+
+
+def _direct_children(object_id, objs):
+    """Objects whose parent link points AT `object_id`, as (id, name). The leaf guard needs these
+    by name — "it has sub-items" is not actionable, "move these three first" is."""
+    kids = []
+    for o in objs:
+        for prop in ("Parent project", "Linked Projects", "Project link"):
+            if object_id in _link_ids(o, prop):
+                kids.append((o["id"], o.get("name") or "(untitled)"))
+                break
+    return kids
 
 
 def _descendant_ids(object_id, objs):
@@ -499,6 +613,132 @@ def create_child(level, title, parent_id=None):
     except Exception as e:
         print(f"[api_write] authorship log failed for {new_id!r}: {e}", file=sys.stderr)
     return {"ok": True, "object": node_for(new_id)}
+
+
+def convert_type(object_id, target):
+    """Reclassify a miscategorised object, KEEPING every value it already holds (spec §5).
+
+    June's stated primary use: the weeding gate filed a one-time Task as a Recurring, or the
+    reverse, and she wants it corrected without retyping what she entered.
+
+    In-place, because the live API allows it (contract Q2, probed 2026-07-18 — see the module
+    docstring). The object's ID NEVER CHANGES, so every inbound reference survives untouched:
+    linked projects, plan-cache rows, arc step ids, focus-period lists, this log's own history.
+
+    Three writes at most, each proven by read-back before the next claim is made:
+      1. the type itself (`type_key`),
+      2. the parent relink — the property expressing "sits under" is type-dependent, so a Task
+         under a project uses `Linked Projects` where a Recurring uses `Project link`; the old
+         one is CLEARED or the tree would reach the object two ways (the same reason
+         `move_object` clears),
+      3. `is_workstream`, which is the only thing distinguishing a Workstream from a Project.
+
+    The final read-back is the one that matters most: it proves the new type landed, the links are
+    exactly right, AND that nothing was dropped — every property the object held before is still
+    held, with the same value, apart from the ones just listed. A conversion that silently lost a
+    field would be the exact failure spec §5 exists to prevent, so it raises rather than reports.
+    """
+    target = (target or "").strip()
+    if target not in _CONVERT_TARGET:
+        raise WriteRefused(
+            f"{target!r} is not a type this surface converts to — "
+            f"pick one of {', '.join(_CONVERT_TARGET)}")
+    type_name, want_ws = _CONVERT_TARGET[target]
+
+    before = _get_object(object_id)
+    old_type = _type_name(before)
+    old_level = _write_level(before)          # also refuses a non-GSDO type outright
+    new_level = _WRITE_LEVEL[type_name]
+    cur_ws = _checkbox(before, WORKSTREAM_PROP)
+
+    # Guard 3 — nothing to do. Checked BEFORE any write so a no-op never reports a success.
+    if old_type == type_name and (want_ws is None or bool(cur_ws) == want_ws):
+        if type_name == "Project":
+            raise WriteRefused(
+                f"this is already a {target.lower() if target != 'Subproject' else 'project'} "
+                "— a subproject and a project are the same kind of object, and what makes one a "
+                "subproject is that it sits under another project. Move it instead of converting "
+                "it.")
+        raise WriteRefused(f"this is already a {type_name}")
+
+    objs = g.fetch_all_objects(g.get_space_id())
+
+    # Guard 1 — the leaf guard. Naming the children makes the refusal actionable.
+    if target in _LEAF_TARGETS:
+        kids = _direct_children(object_id, objs)
+        if kids:
+            names = ", ".join(name for _, name in kids[:5])
+            more = f" (and {len(kids) - 5} more)" if len(kids) > 5 else ""
+            raise WriteRefused(
+                f"this has {len(kids)} item{'s' if len(kids) != 1 else ''} under it, and a "
+                f"{type_name} cannot hold anything: {names}{more}. Move them somewhere else "
+                f"first, then convert.")
+
+    # Guard 2 — the parent must be able to host the new kind, or the object would be orphaned.
+    old_parents = {p: _link_ids(before, p) for p in _ALL_LINKS.get(old_level, [])}
+    parent_id = next((ids[0] for ids in old_parents.values() if ids), None)
+    new_link = None
+    if parent_id is not None:
+        parent_type = _type_name(_get_object(parent_id))
+        new_link = _LINK_PROP.get((new_level, parent_type))
+        if new_link is None:
+            raise WriteRefused(
+                f"this sits under a {parent_type}, and a {type_name} cannot sit under a "
+                f"{parent_type}. Move it under a project first, then convert.")
+
+    kept_before = _stored_values(before)
+
+    # 1. the type. Written on its own, before any property write, so the properties that follow
+    #    are resolved against the type the object actually has by then.
+    gsdo_objects.update(object_id, type_key=g.find_type(type_name)["key"])
+    after_type = _get_object(object_id)
+    if _type_name(after_type) != type_name:
+        raise RuntimeError(
+            f"api_write: type did not persist on {object_id!r} "
+            f"(wrote {type_name!r}, read back {_type_name(after_type)!r})")
+
+    # 2 + 3. relink and the workstream flag, in one write — both are ordinary properties.
+    props, expected_links = {}, {}
+    for prop in _ALL_LINKS.get(new_level, []):
+        expected_links[prop] = [parent_id] if prop == new_link else []
+    for prop in _ALL_LINKS.get(old_level, []):
+        expected_links.setdefault(prop, [])
+    for prop, want in expected_links.items():
+        if sorted(_link_ids(after_type, prop)) != sorted(want):
+            props[prop] = want
+    if want_ws is not None and bool(cur_ws) != want_ws:
+        props[WORKSTREAM_PROP] = want_ws
+    if props:
+        gsdo_objects.update(object_id, properties=props)
+
+    # The proof. Links first, then the no-field-was-dropped check.
+    final = _verify_links(object_id, expected_links)
+    if want_ws is not None and bool(_checkbox(final, WORKSTREAM_PROP)) != want_ws:
+        raise RuntimeError(
+            f"api_write: {WORKSTREAM_PROP!r} did not persist on {object_id!r} "
+            f"(wrote {want_ws!r}, read back {_checkbox(final, WORKSTREAM_PROP)!r})")
+
+    rewritten = set(expected_links) | {WORKSTREAM_PROP}
+    kept_after = _stored_values(final)
+    for name, was in kept_before.items():
+        if name in rewritten:
+            continue
+        if name not in kept_after:
+            raise RuntimeError(
+                f"api_write: converting {object_id!r} to {target} DROPPED {name!r} "
+                f"(was {was!r}, now absent) — spec §5 requires every value to survive a "
+                f"conversion, so this is a failed convert, not a partial one")
+        if not _same(was, kept_after[name]):
+            raise RuntimeError(
+                f"api_write: converting {object_id!r} to {target} CHANGED {name!r} "
+                f"(was {was!r}, now {kept_after[name]!r})")
+
+    _log(object_id, old_type, TYPE_FIELD, old_type, type_name, kind="surface_convert")
+    if new_link is not None and props:
+        _log(object_id, type_name, PARENT_FIELD,
+             sorted({i for ids in old_parents.values() for i in ids}) or None, [parent_id],
+             kind="surface_convert")
+    return {"ok": True, "object": node_for(object_id)}
 
 
 def delete_object(object_id):

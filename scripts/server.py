@@ -307,11 +307,63 @@ def _start_focus_generation(fn):
     threading.Thread(target=worker, daemon=True).start()
     return True
 
-# Bind address. Default is loopback (Mac-only). Set CD_BIND=0.0.0.0 to also accept
-# connections from June's phone on the same wifi (so she can use the overlay from bed).
-# Security note: 0.0.0.0 exposes the surface to everyone on the local network (no auth) —
-# fine on a trusted home network, her call. Loopback stays the safe default.
-HOST = os.environ.get("CD_BIND", "127.0.0.1")
+# Bind address. `CD_BIND` accepts a COMMA-SEPARATED PREFERENCE LIST, tried in order; the first
+# address that binds wins. Default is loopback (Mac-only).
+#
+# ⚠ WHY A LIST (June, 2026-07-18): she wants her phone to reach this over Tailscale, with wifi as
+# a FALLBACK if Tailscale is down. Those two have very different exposure, and the whole risk of a
+# fallback is that it happens quietly — you end up exposed and never know. So:
+#
+#   · the list is tried in order, most-private first
+#   · whichever one wins is printed at startup
+#   · falling back to a BROADER address prints a loud, unmissable warning naming what changed
+#
+# Recommended for her setup — mesh first, wifi only if the mesh is unavailable:
+#   CD_BIND=100.86.195.93,0.0.0.0
+#
+# Security note, unchanged and worth restating: 0.0.0.0 exposes this to EVERYONE on the local
+# network, and this server has NO AUTHENTICATION of any kind while serving her medical and
+# financial task data. The Tailscale address does not — only enrolled devices route to it. The
+# real fix for the fallback case is a shared token; until that exists, the warning is what stops
+# the exposure being silent.
+_BIND_PREFS = [h.strip() for h in os.environ.get("CD_BIND", "127.0.0.1").split(",") if h.strip()]
+
+# How exposed is each kind of address? Used only to decide whether a fallback deserves a warning.
+def _bind_breadth(host):
+    if host in ("0.0.0.0", "::", ""):
+        return 2                      # every interface, including wifi
+    if host.startswith("127.") or host == "localhost" or host == "::1":
+        return 0                      # this machine only
+    return 1                          # one specific interface (e.g. the Tailscale address)
+
+
+def _bind(port, handler):
+    """Bind the first address in the preference list that works. Never fall back silently."""
+    errors = []
+    for i, host in enumerate(_BIND_PREFS):
+        try:
+            srv = ThreadingHTTPServer((host, port), handler)
+        except OSError as e:
+            errors.append(f"{host}: {e}")
+            continue
+        if i > 0:
+            first = _BIND_PREFS[0]
+            print("")
+            print("  " + "!" * 68)
+            print(f"  !! FELL BACK to {host} — could not bind {first}")
+            print(f"  !!   {errors[0]}")
+            if _bind_breadth(host) > _bind_breadth(first):
+                print("  !! THIS IS A WIDER BIND THAN INTENDED. Anything on the local network can")
+                print("  !! now reach this server, and it has no authentication.")
+            print("  " + "!" * 68)
+            print("")
+        return srv, host
+    raise SystemExit(
+        "Controlled Drift: could not bind any address in CD_BIND="
+        + ",".join(_BIND_PREFS) + "\n  " + "\n  ".join(errors))
+
+
+HOST = _BIND_PREFS[0]
 PORT = int(os.environ.get("CD_PORT", "5050"))   # override for a sandboxed/second instance
 OVERLAY_HTML = os.path.join(os.path.dirname(__file__), "..", "docs", "overlay_daily.html")
 PROJECT_NAME = "Build Controlled Drift"  # the map's root project
@@ -626,6 +678,12 @@ class Handler(BaseHTTPRequestHandler):
                     self._send(400, {"ok": False, "error": "move needs a parent_id"})
                     return
                 self._run_write(lambda: api_write.move_object(oid, parent))
+                return
+            if suffix == "type":
+                # Spec §5 — reclassify without losing entered data. In place, so the id (and
+                # every reference to it) survives. An unknown/missing target is a WriteRefused
+                # inside `convert_type`, which `_run_write` answers as 400.
+                self._run_write(lambda: api_write.convert_type(oid, body.get("target")))
                 return
             self._send(404, {"ok": False, "error": f"no write action {suffix!r} on an object"})
             return
@@ -1212,8 +1270,8 @@ def main():
     s = _load_settings()
     if s.get("backend") in VALID_BACKENDS:
         os.environ["CD_BACKEND"] = s["backend"]
-    srv = ThreadingHTTPServer((HOST, PORT), Handler)
-    print(f"Controlled Drift overlay → http://{HOST}:{PORT}")
+    srv, bound_host = _bind(PORT, Handler)
+    print(f"Controlled Drift overlay → http://{bound_host}:{PORT}")
     print("  GET /api/plan · /api/map · /api/period · /api/actions · /api/status · /api/session · /api/settings")
     print("  GET /api/focus/status · /api/focus/result   POST /api/focus/author (async) · /api/focus/commit")
     print("  POST /api/refresh · /api/negotiate · /api/capture (async)")

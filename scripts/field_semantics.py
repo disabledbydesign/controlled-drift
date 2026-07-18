@@ -916,6 +916,27 @@ FIELDS = {
         "observed": "Populated on 6 of 7 live periods: Auto x4, Clock schedule x1, Priority list x1.",
     },
 
+    "Workday start": {
+        "types": ("Focus Period",),
+        "means": "The clock time 'HH:MM' the workday starts for this period. Empty means the "
+                 "system default (10:00).",
+        "not_this": "A wake-up time, and not a statement about capacity.",
+        "instead": {"what this stretch feels like or demands": "Intent / Availability note",
+                    "a narrower stretch of DAYS inside the period": "Availability start / end"},
+        "usage": ["The companion to `Workday end`, added for backend spec §17 — the day-bounds "
+                  "logic was end-only, so a period could say 'work till 22:00 this sprint' but "
+                  "not 'don't start me before 11' on a slow-morning stretch.",
+                  "It moves the FLOOR only. A plan generated after this time still starts now — "
+                  "the field never schedules work into the past.",
+                  "Distinct from Availability start, which is a DATE bounding which days are "
+                  "free; this is a CLOCK time bounding the hours within a day."],
+        "source": "docs/review_reorganize_backend_spec.md §17 (flagged NEW there); "
+                  "scripts/plan_generate.py day-bounds; scripts/build_focus_period.py",
+        "observed": "NOT YET ON THE LIVE TYPE (2026-07-18). The builder was edited to add it but "
+                    "deliberately not run — schema writes to June's space are human-gated "
+                    "(docs/BUILD_DOC.md §2). Every reader/writer is wired and inert until then.",
+    },
+
     "Workday end": {
         "types": ("Focus Period",),
         "means": "The clock time 'HH:MM' the workday ends for this period. Empty means the system "
@@ -930,9 +951,9 @@ FIELDS = {
                   "list); docs/superpowers/plans/2026-07-02-focus-configuration-layer.md Task 3.3",
         "observed": "UNPOPULATED on all 7 live periods (2026-07-18) — the widening case the field "
                     "was built for has never been used. Separately, "
-                    "docs/review_reorganize_backend_spec.md §17 specifies a companion "
-                    "`workday_start` and flags it as NEW; the live type has only this end field and "
-                    "the scheduler's day-bounds logic is still end-only. Unbuilt, not dropped.",
+                    "the companion `Workday start` (backend spec §17) is now BUILT in code — "
+                    "the day-bounds logic reads both ends — but its schema write is still "
+                    "pending June's approval; see that field's entry.",
     },
 
     "Foreground projects": {
@@ -1045,6 +1066,7 @@ HINTS = {
     "Days off": "Dates forced off, overriding the weekly default. ISO dates, never words.",
     "Days on": "Dates forced to be work days, overriding the weekly default. ISO dates, never words.",
     "Output format": "The plan's shape: Auto, a clock schedule, or a priority list to pull from.",
+    "Workday start": "HH:MM the day starts. Push it later for a period of slow mornings.",
     "Workday end": "HH:MM the day ends. Push it later for a sprint, earlier for a gentle week.",
     "Foreground projects": "Projects in front this period. Overrides their Engagement while it's active.",
     "Paused projects": "Projects stopped this period. Rare — only when June explicitly says to stop one.",
@@ -1382,19 +1404,22 @@ DOES = {
     },
     "Linked Projects": {
         "status": "live",
-        "written_by": "The capture path, the MCP server, gsdo_objects.",
+        "written_by": "The capture path, the MCP server, gsdo_objects, api_write.move_object. "
+                      "Also api_write.convert_type (backend spec §5): a type conversion RELINKS the parent onto whichever of these properties the new type uses, and clears the one it converted away from, so the tree never reaches the object two ways.",
         "read_by": "daily_plan.py, plan_generate.py, grain.py, neglect.py, "
                    "focus_period_generate.py. It is how a task inherits its project's engagement, "
                    "Side and grain — an unlinked task is a bare chore with no inheritance.",
     },
     "Project link": {
         "status": "live",
-        "written_by": "The capture path, the MCP server, gsdo_objects.",
+        "written_by": "The capture path, the MCP server, gsdo_objects, api_write.move_object. "
+                      "Also api_write.convert_type (backend spec §5): a type conversion RELINKS the parent onto whichever of these properties the new type uses, and clears the one it converted away from, so the tree never reaches the object two ways.",
         "read_by": "daily_plan.py, for the recurring item's project association.",
     },
     "Parent project": {
         "status": "live",
-        "written_by": "server.py (the move operation).",
+        "written_by": "server.py (the move operation), api_write.move_object. "
+                      "Also api_write.convert_type (backend spec §5): a type conversion RELINKS the parent onto whichever of these properties the new type uses, and clears the one it converted away from, so the tree never reaches the object two ways.",
         "read_by": "daily_plan.py:170-180 walks it upward to inherit Side, and the app's map "
                    "renders the nesting. This is the edge that makes work streams work.",
     },
@@ -1582,6 +1607,14 @@ DOES = {
                    "in, not what is in it: a clock schedule, or a short priority-ordered list to "
                    "pull from when a window opens. On `Auto` the shape resolves from the "
                    "availability window alone — structured inputs only, never a text scan.",
+    },
+    "Workday start": {
+        "status": "planned",
+        "written_by": "focus_period_author.py, via focus_period_adapter's authoring payload.",
+        "read_by": "plan_generate.py's day-bounds, replacing the hardcoded 10:00 start. Wired "
+                   "end to end, but the property does not exist on the live Focus Period type "
+                   "yet — build_focus_period.py adds it and has NOT been run (human-gated). "
+                   "Until June approves that write, reads return None and the default applies.",
     },
     "Workday end": {
         "status": "live",

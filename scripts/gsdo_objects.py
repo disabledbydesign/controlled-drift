@@ -175,8 +175,18 @@ def create(type_name, name, body=None, properties=None):
         raise ValueError(f"create: type {type_name!r} not found")
     return create_object(t.get("key"), name, body=body, properties=properties)
 
-def update(object_id, name=None, properties=None, body=None):
-    """Update an existing object's name, properties, and/or body (Markdown).
+def update(object_id, name=None, properties=None, body=None, type_key=None):
+    """Update an existing object's name, properties, body (Markdown), and/or TYPE.
+
+    type_key: change the object's type IN PLACE, keeping the same object id (backend spec §5
+    conversion). ⚠ VERIFIED LIVE 2026-07-18 against June's real space, because contract Q2 left
+    it open and the two possible implementations differ by a rewrite: a Task carrying `Context`,
+    `Duration min` and `Task status` was PATCHed to `gsdo_recurring`, came back HTTP 200 as a
+    `Recurring` with **the same id and all three property values intact** — including `Task
+    status`, which is not a Recurring field. So Anytype keeps values for properties the new type
+    does not link, which is exactly what spec §5 requires ("fields not applicable to the new type
+    stay stored, just unshown, and reappear if converted back"). No create-copy-delete is needed,
+    and therefore no inbound reference is ever orphaned.
 
     properties: {prop_name_or_key: value} — resolved + formatted the same way as
     create (select option names -> tag ids, etc.). Use this instead of hand-rolling
@@ -198,6 +208,8 @@ def update(object_id, name=None, properties=None, body=None):
     payload = {}
     if name is not None:
         payload["name"] = name
+    if type_key is not None:
+        payload["type_key"] = type_key
     if body is not None:
         payload["markdown"] = body   # PATCH updates the body via `markdown`, NOT `body`
     props = []
@@ -211,7 +223,8 @@ def update(object_id, name=None, properties=None, body=None):
     if props:
         payload["properties"] = props
     if not payload:
-        raise ValueError("update: nothing to change (pass name, properties, and/or body)")
+        raise ValueError(
+            "update: nothing to change (pass name, properties, body, and/or type_key)")
     st, b = call("PATCH", f"/spaces/{sid}/objects/{object_id}", payload)
     if st not in (200, 201):
         raise RuntimeError(f"update {object_id!r} failed: {st} {b}")
