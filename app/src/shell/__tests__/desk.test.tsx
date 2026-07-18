@@ -64,7 +64,7 @@ beforeEach(() => {
 });
 
 function mount() {
-  return render(<Surface T={T} name="celestial" setTheme={() => {}} />);
+  return render(<Surface T={T} name="celestial" setTheme={() => {}} source="fixtures" />);
 }
 
 /** The desktop Map's columns carry `data-desk-col`; nothing on the phone path does. */

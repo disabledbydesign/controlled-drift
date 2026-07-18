@@ -103,6 +103,7 @@ Output ONLY a JSON object with these keys (use null or [] when she didn't say):
 - "availability_note": the situated meaning of that stretch, in her words (what it means for planning)
 - "days_off", "days_on": lists of ISO dates she explicitly marks off/on, else []
 - "output_format": "Auto" by DEFAULT. Auto = clock schedule on normal days, priority-list only during a fragmented availability window. Only use "Priority list" or "Clock schedule" if she clearly wants that one shape for the WHOLE period.
+- "workday_start": "HH:MM" only if she implies the day starts later than usual (slow mornings, "not before 11", a caregiving morning), else null
 - "workday_end": "HH:MM" only if she implies working late (a sprint), else null
 - "foreground_projects": the FEW projects from HER PROJECT LIST above that she's putting in front this period — match what she said to the closest real project name from that list; don't invent one.
 - "paused_projects": ONLY projects she EXPLICITLY says to STOP/drop this period. Default is []. Do NOT pause a project just because it isn't foreground — non-foreground projects stay present (backgrounded), they simply aren't prioritized. Hobby / creative / dev work she frames as low-priority or self-directed goes in NEITHER list — it is open time she chooses herself; say so in "intent".

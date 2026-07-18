@@ -1,4 +1,4 @@
-import { useCallback, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   defaultSchema,
   seed,
@@ -7,16 +7,21 @@ import {
   seedPlan,
   seedStrategies,
 } from '../fixtures/index.ts';
-import type { Period, Plan } from '../fixtures/index.ts';
-import { applySchema, index } from '../model/index.ts';
+import type { Period, Plan, Schema } from '../fixtures/index.ts';
+import { applySchema, index, updateNode } from '../model/index.ts';
+import { apiGet, apiSend } from '../api/client.ts';
+import { graphFromTree, planFromLive, schemaFromResponse } from '../api/adapt.ts';
+import type { LivePlan, TreeResponse } from '../api/adapt.ts';
 import type {
   DerivedSchema,
   FocusForm,
   Graph,
   GraphIndex,
+  ModelNode,
   MutationResult,
   PeriodResult,
   PlanResult,
+  WriteIntent,
 } from '../model/index.ts';
 import type { ChipEditTarget } from '../components/rows/index.ts';
 import type { FocusView } from '../components/focus/index.ts';
@@ -391,12 +396,41 @@ function initialPeriods(): Period[] {
   return structuredClone(seedPeriods) as Period[];
 }
 
-export function useAppState(): AppState {
-  const [graph, setGraph] = useState<Graph>(initialGraph);
-  const [plan, setPlan] = useState<Plan>(initialPlan);
+/**
+ * Where the app's data comes from.
+ *
+ * `live` — the real endpoints, against June's Anytype space. The only value production uses.
+ * `fixtures` — the extracted v4 fixtures, no network. Kept because the component tests are
+ *   written against known fixture content, and because contract §5 explicitly RETAINS an
+ *   offline path ("the export-diff fallback, which spec §1 explicitly keeps"). It is not a
+ *   demo mode: nothing in the running app can select it.
+ */
+export type DataSource = 'live' | 'fixtures';
+
+/** An empty graph — what `live` starts from, so no fixture content is ever shown as hers. */
+function emptyGraph(): Graph {
+  return { roots: [], strategies: [], orphans: [] };
+}
+
+/** An empty plan, for the same reason. */
+function emptyPlan(): Plan {
+  return { date: '', generated: '', shape: 'schedule', woven: '', blocks: [] };
+}
+
+export function useAppState(source: DataSource = 'live'): AppState {
+  const live = source === 'live';
+  const [graph, setGraph] = useState<Graph>(live ? emptyGraph : initialGraph);
+  const [plan, setPlan] = useState<Plan>(live ? emptyPlan : initialPlan);
   const [periods, setPeriods] = useState<Period[]>(initialPeriods);
   const [ui, setUi] = useState<UiState>(INITIAL_UI);
   const [toast, setToast] = useState<Signal | null>(null);
+  /**
+   * The live vocabularies. `null` until the fetch settles; `defaultSchema` is the FALLBACK the
+   * contract asks for (§3.1: "ship `defaultSchema()` as the client-side fallback so a schema
+   * fetch failure degrades to the last-known vocabulary rather than a blank form"), never the
+   * first thing rendered when a live read is on its way.
+   */
+  const [liveSchema, setLiveSchema] = useState<Schema | null>(null);
 
   /** Raise a SUCCESS signal. The three `apply*` seams all land here so the shape is identical. */
   const succeed = useCallback((msg: string, nodeId: string | null) => {
@@ -404,23 +438,303 @@ export function useAppState(): AppState {
   }, []);
 
   const idx = useMemo(() => index(graph), [graph]);
-  // The schema literal is constant for now; the backend will make it fetched (Track B).
-  const schema = useMemo(() => applySchema(defaultSchema), []);
+  /**
+   * The derived form vocabulary.
+   *
+   * ⚠ TWO VOCABULARIES IN `defaultSchema` ARE NOW WRONG AGAINST THE LIVE SPACE, which is why
+   * this is fetched and not a literal: Project engagement lost `Sprint` and `Hyperfixation`
+   * (retired from the data structure — those tags no longer exist), and `Applies when` never
+   * gained `Overwhelmed` / `Sprint` / `Stuck`. Offering a value the space cannot store does not
+   * degrade gracefully; it produces a failed write at the moment she taps it. See `api/adapt.ts`.
+   */
+  const schema = useMemo(
+    () => applySchema(liveSchema ?? defaultSchema),
+    [liveSchema],
+  );
 
   const up = useCallback((patch: Partial<UiState>) => {
     setUi((prev) => ({ ...prev, ...patch }));
   }, []);
 
+  const fail = useCallback<AppState['fail']>((msg, opts = {}) => {
+    // Logged BEFORE it is shown, and unconditionally: a failure she dismisses without reading
+    // must still be diagnosable afterwards. See `errorLog.ts` for which log and why.
+    logFailure(msg, {
+      objectId: opts.nodeId ?? null,
+      before: opts.before ?? null,
+      ...(opts.kind ? { kind: opts.kind } : null),
+    });
+    setToast((prev) => ({
+      kind: 'failure',
+      msg,
+      nodeId: opts.nodeId ?? null,
+      seq: (prev?.seq ?? 0) + 1,
+    }));
+  }, []);
+
+  /**
+   * The graph as it is RIGHT NOW, for the async write path.
+   *
+   * A write resolves hundreds of milliseconds after `apply` returned, by which time `graph`
+   * captured in that closure is stale — she may have edited two more fields. Rolling back to a
+   * captured graph would silently discard those. The ref always holds the current value, so a
+   * rollback edits the live graph rather than replacing it.
+   */
+  const graphRef = useRef(graph);
+  graphRef.current = graph;
+
+  /** Per-object debounce timers for the title field, which fires per keystroke. */
+  const titleTimers = useRef(new Map<string, ReturnType<typeof setTimeout>>());
+  useEffect(() => {
+    const timers = titleTimers.current;
+    return () => {
+      for (const t of timers.values()) clearTimeout(t);
+    };
+  }, []);
+
+  /**
+   * Put the SERVER's object into the graph, replacing whatever the optimistic mutation guessed.
+   *
+   * This is the read-back discipline arriving in the UI. `api_write` re-fetches from Anytype
+   * after every write and returns that read (never the request echoed back), so what lands here
+   * is observed state — including any normalisation Anytype applied that the client did not
+   * predict (dates, multi-selects, a select stored as a tag id).
+   *
+   * Children are taken from the server node too: `node_for` finds the object inside the freshly
+   * built tree payload, so its subtree is current.
+   */
+  const acceptServerNode = useCallback((serverNode: ModelNode, replacingId?: string) => {
+    const targetId = replacingId ?? serverNode.id;
+    setGraph((cur) => updateNode(cur, targetId, () => serverNode).graph);
+  }, []);
+
+  /**
+   * Perform one write and reconcile local state with what actually persisted.
+   *
+   * Optimism + rollback rather than a spinner: every mutation here is a single field on a row
+   * she is looking at, the round trip is short, and blocking the UI on each one would make the
+   * surface feel like a form rather than a list. The cost of optimism is that a failure must be
+   * UNDONE visibly, which is what the rollback and the persistent failure bar do together.
+   */
+  const performWrite = useCallback(
+    async (intent: WriteIntent, before: Graph) => {
+      const rollback = (msg: string, id: string | null) => {
+        setGraph(before);
+        fail(msg, { nodeId: id, before: intent });
+      };
+
+      if (intent.op === 'unsupported') {
+        // Never a silent success. The optimistic change is reverted and she is told which
+        // action has no endpoint, rather than seeing a change that will vanish on reload.
+        rollback(
+          `Could not ${intent.what} — this surface cannot save that yet, so nothing changed.`,
+          intent.id,
+        );
+        return;
+      }
+
+      if (intent.op === 'complete') {
+        const path = intent.done ? '/api/complete' : '/api/uncomplete';
+        const res = await apiSend<{
+          completed?: Record<string, unknown>;
+          uncompleted?: Record<string, unknown>;
+          plan?: LivePlan;
+        }>('POST', path, { id: intent.id });
+        if (!res.ok) {
+          rollback(
+            `Could not ${intent.done ? 'check off' : 'reopen'} that — it is NOT saved. ${res.error}`,
+            intent.id,
+          );
+          return;
+        }
+        // ⚠ `/api/complete` does NOT answer the contract's `{ok, object}` envelope — it returns
+        // `{completed: {...partial}, plan}` (contract §4 lists it as CHANGE, unbuilt). So the
+        // confirmed fields are MERGED into the node rather than replacing it; replacing would
+        // blank every field the partial does not carry.
+        const confirmed = (res.data.completed ?? res.data.uncompleted ?? {}) as Record<
+          string,
+          unknown
+        >;
+        setGraph((cur) => {
+          const r = updateNode(cur, intent.id, (n) => ({
+            ...n,
+            vals: {
+              ...n.vals,
+              done: Boolean(confirmed['done']),
+              ...(typeof confirmed['status'] === 'string' ? { status: confirmed['status'] } : null),
+            },
+          }));
+          return r.graph;
+        });
+        // The check-off also re-writes today's plan cache, and the response carries it. An
+        // `{empty:true}` body means the id was not in today's plan — not a plan to render.
+        if (res.data.plan && !res.data.plan.empty) setPlan(planFromLive(res.data.plan));
+        return;
+      }
+
+      if (intent.op === 'recurringActive') {
+        const res = await apiSend<{ object?: ModelNode; warning?: string }>(
+          'POST',
+          '/api/recurring/active',
+          { id: intent.id, active: intent.active },
+        );
+        if (!res.ok) {
+          rollback(`Could not change whether that is in the plan — it is NOT saved. ${res.error}`, intent.id);
+          return;
+        }
+        if (res.data.object) acceptServerNode(res.data.object);
+        // A saved write whose read-back could not be assembled is reported, not swallowed —
+        // the toggle itself was already proven inside `set_recurring_active`.
+        else if (res.data.warning) fail(res.data.warning, { nodeId: intent.id, kind: 'read_back' });
+        return;
+      }
+
+      if (intent.op === 'archive') {
+        const res = await apiSend<{ archived?: boolean }>('DELETE', `/api/object/${intent.id}`);
+        if (!res.ok) {
+          rollback(`Could not delete that — it is still there. ${res.error}`, intent.id);
+          return;
+        }
+        return; // nothing to accept: the object is gone, and the optimistic removal was right
+      }
+
+      if (intent.op === 'create') {
+        const res = await apiSend<{ object?: ModelNode }>('POST', '/api/object', {
+          level: intent.level,
+          title: intent.title,
+          ...(intent.parentId ? { parent_id: intent.parentId } : null),
+        });
+        if (!res.ok) {
+          rollback(`Could not create that — nothing was saved. ${res.error}`, intent.tempId);
+          return;
+        }
+        if (res.data.object) {
+          // THE TEMP ID IS REPLACED BY THE REAL ONE (contract §4). The detail pane was opened on
+          // the temp id, so it is re-pointed in the same tick or the editor would be looking at
+          // a node that no longer exists.
+          acceptServerNode(res.data.object, intent.tempId);
+          setUi((prev) =>
+            prev.detail === intent.tempId ? { ...prev, detail: res.data.object!.id } : prev,
+          );
+        }
+        return;
+      }
+
+      const path = `/api/object/${intent.id}`;
+      const body =
+        intent.op === 'patchTitle'
+          ? { title: intent.title }
+          : intent.op === 'move'
+            ? { parent_id: intent.parentId }
+            : { vals: intent.vals };
+      const url = intent.op === 'move' ? `${path}/move` : path;
+      const res = await apiSend<{ object?: ModelNode }>(
+        intent.op === 'move' ? 'POST' : 'PATCH',
+        url,
+        body,
+      );
+      if (!res.ok) {
+        const what =
+          intent.op === 'patchTitle'
+            ? 'rename that'
+            : intent.op === 'move'
+              ? 'move that'
+              : `save ${Object.keys(intent.vals).join(', ')}`;
+        rollback(`Could not ${what} — it is NOT saved. ${res.error}`, intent.id);
+        return;
+      }
+      if (res.data.object) acceptServerNode(res.data.object);
+    },
+    [acceptServerNode, fail],
+  );
+
   const apply = useCallback(
     (result: MutationResult) => {
+      const before = graphRef.current;
       setGraph(result.graph);
+      graphRef.current = result.graph;
       if (result.ui) setUi((prev) => ({ ...prev, ...result.ui }));
       // `result.node` is the object the write was about — that is what makes an INLINE success
       // possible at all, because it is the only thing that says which row to settle.
       if (result.toast) succeed(result.toast, result.node ? result.node.id : null);
+
+      // THE ONE PLACE THE SURFACE WRITES. Every mutation call site in the app funnels through
+      // `apply`, so there is no second route to the network and none to forget.
+      if (!live || !result.write) return;
+      const intent = result.write;
+      if (intent.op === 'patchTitle') {
+        // Debounced: v4's title textarea writes per keystroke (contract §4 asks for exactly
+        // this). The LAST title wins, and the rollback target is the graph as it was before the
+        // first keystroke of the burst — which is why `before` is captured out here.
+        const prev = titleTimers.current.get(intent.id);
+        if (prev) clearTimeout(prev);
+        titleTimers.current.set(
+          intent.id,
+          setTimeout(() => {
+            titleTimers.current.delete(intent.id);
+            void performWrite(intent, before);
+          }, 600),
+        );
+        return;
+      }
+      void performWrite(intent, before);
     },
-    [succeed],
+    [live, performWrite, succeed],
   );
+
+  /**
+   * HYDRATION — the schema, the tree and today's plan, read from the running server on mount.
+   *
+   * Three separate awaits rather than one `Promise.all` result: they fail independently and a
+   * schema outage must not blank the tree. Each failure is reported on its own terms.
+   */
+  useEffect(() => {
+    if (!live) return;
+    let cancelled = false;
+
+    void (async () => {
+      const [schemaRes, treeRes, planRes] = await Promise.all([
+        apiGet<unknown>('/api/schema'),
+        apiGet<TreeResponse>('/api/tree'),
+        apiGet<LivePlan>('/api/plan'),
+      ]);
+      if (cancelled) return;
+
+      if (schemaRes.ok) {
+        setLiveSchema(schemaFromResponse(schemaRes.data));
+      } else {
+        // Contract §3.1's fallback. It is a REAL degradation, not a quiet default: the built-in
+        // vocabulary is a stale snapshot, so she is told rather than left to discover it when a
+        // write is refused.
+        fail(
+          `Could not read the field options from Anytype, so the pickers are showing the last known list — some options may no longer save. ${schemaRes.error}`,
+          { kind: 'schema_read' },
+        );
+      }
+
+      if (treeRes.ok) {
+        setGraph(graphFromTree(treeRes.data));
+      } else {
+        // NO FIXTURE FALLBACK HERE, deliberately, and this is the one place the contract's
+        // "fixtures are the fallback" does NOT apply. A stale vocabulary is still June's
+        // vocabulary; fixture OBJECTS are not her objects, and rendering "Renew library card"
+        // as though it were in her space would be a fabricated record of her own life. Empty
+        // plus a loud failure is the honest state.
+        fail(`Could not read your objects from Anytype — nothing is shown. ${treeRes.error}`, {
+          kind: 'tree_read',
+        });
+      }
+
+      if (planRes.ok && !planRes.data.empty) setPlan(planFromLive(planRes.data));
+      else if (!planRes.ok) {
+        fail(`Could not read today's plan. ${planRes.error}`, { kind: 'plan_read' });
+      }
+    })();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [live, fail]);
 
   const applyPlan = useCallback(
     (result: PlanResult) => {
@@ -438,22 +752,6 @@ export function useAppState(): AppState {
     },
     [succeed],
   );
-
-  const fail = useCallback<AppState['fail']>((msg, opts = {}) => {
-    // Logged BEFORE it is shown, and unconditionally: a failure she dismisses without reading
-    // must still be diagnosable afterwards. See `errorLog.ts` for which log and why.
-    logFailure(msg, {
-      objectId: opts.nodeId ?? null,
-      before: opts.before ?? null,
-      ...(opts.kind ? { kind: opts.kind } : null),
-    });
-    setToast((prev) => ({
-      kind: 'failure',
-      msg,
-      nodeId: opts.nodeId ?? null,
-      seq: (prev?.seq ?? 0) + 1,
-    }));
-  }, []);
 
   const dismissToast = useCallback(() => setToast(null), []);
 

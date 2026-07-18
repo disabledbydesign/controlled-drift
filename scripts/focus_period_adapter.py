@@ -96,6 +96,7 @@ def to_write_properties(fields, objects=None):
     if f.get("availability_note"): props["Availability note"] = f["availability_note"]
     if f.get("days_off"):          props["Days off"] = _csv(f["days_off"])
     if f.get("days_on"):           props["Days on"] = _csv(f["days_on"])
+    if f.get("workday_start"):     props["Workday start"] = f["workday_start"]
     if f.get("workday_end"):       props["Workday end"] = f["workday_end"]
     if fg:                         props["Foreground projects"] = fg
     if paused:                     props["Paused projects"] = paused
@@ -197,6 +198,7 @@ def period_to_fields(period):
         "days_off": list(p.get("days_off") or []),
         "days_on": list(p.get("days_on") or []),
         "output_format": p.get("output_format") or "Auto",
+        "workday_start": p.get("workday_start"),
         "workday_end": p.get("workday_end"),
         "foreground_projects": list(p.get("foreground") or []),
         "paused_projects": list(p.get("paused") or []),
@@ -212,6 +214,7 @@ _ITEM_FIELDS = {
     "output_format": ("output_format",),
     "intent": ("intent",),
     "paused": ("paused_projects",),
+    "workday_start": ("workday_start",),
     "workday_end": ("workday_end",),
     "reactivate_tasks": ("reactivate_tasks",),
 }
@@ -248,6 +251,9 @@ def reflect_back(fields, original=None):
     if paused:
         items.append({"key": "paused", "label": "Paused", "edit": "projects",
                       "display": ", ".join(paused)})
+    if f.get("workday_start"):
+        items.append({"key": "workday_start", "label": "Starting at", "edit": "text",
+                      "display": f["workday_start"]})
     if f.get("workday_end"):
         items.append({"key": "workday_end", "label": "Working until", "edit": "text",
                       "display": f["workday_end"]})

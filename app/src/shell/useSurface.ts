@@ -8,7 +8,7 @@ import type { AddCtx, SettingsCtx } from '../screens/index.ts';
 import type { AppTab } from './tabs.ts';
 import { present } from './signals.ts';
 import { useAppState } from './useAppState.ts';
-import type { AppState } from './useAppState.ts';
+import type { AppState, DataSource } from './useAppState.ts';
 
 /**
  * The five context objects every screen reads — v4's `this`, sliced per consumer — built ONCE
@@ -46,10 +46,15 @@ export interface SurfaceOptions {
   setTheme: (n: ThemeName) => void;
   /** v4's `this._wide` — true for `deskApp()`, false for `renderShell()`. */
   wide: boolean;
+  /**
+   * Where the data comes from. Defaults to the real endpoints; the component tests pass
+   * `'fixtures'` so they keep asserting against known content. See `DataSource`.
+   */
+  source?: DataSource;
 }
 
-export function useSurface({ T, name, setTheme, wide }: SurfaceOptions): Surface {
-  const st = useAppState();
+export function useSurface({ T, name, setTheme, wide, source }: SurfaceOptions): Surface {
+  const st = useAppState(source);
   const tab = st.ui.tab;
   const { up } = st;
 

@@ -50,7 +50,8 @@ def resolve_project_names_to_ids(names, objects=None):
       {"Period start": "2026-06-30", "Period end": "2026-07-06", "Intent": "...",
        "Availability start"/"Availability end": ISO date, "Availability note": "...",
        "Days off"/"Days on": "2026-07-03, 2026-07-04",  # CSV or JSON array
-       "Output format": "Auto"|"Clock schedule"|"Priority list", "Workday end": "22:00",
+       "Output format": "Auto"|"Clock schedule"|"Priority list",
+       "Workday start": "11:00", "Workday end": "22:00",
        "Foreground projects": [<id>, ...], "Paused projects": [<id>, ...]}
     """
     if objects is None:

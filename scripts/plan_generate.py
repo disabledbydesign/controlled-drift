@@ -277,11 +277,10 @@ displays. Therefore:
 
 Output **ONLY** the single fenced ```json code block specified here — nothing before it,
 nothing after it. **Do NOT write out the prose plan** described earlier in this prompt: the
-JSON below already carries all of it — the woven frame, each block's framing, each item's
-why — so the prose version is redundant and only slows you down. Skip straight to the JSON.
+JSON below already carries all of it — the woven frame and each block's framing — so the
+prose version is redundant and only slows you down. Skip straight to the JSON.
 Use exactly this shape (keep clock times verbatim from the schedule — 24-hour format, e.g. "13:30 – 15:00"; the UI converts to 12-hour for display; `project`
-is null for items with no project like Lunch; `why` is the short upward-link phrase,
-omit/null if none; `ref` is the task-reference token — see TASK REFERENCE in the inputs —
+is null for items with no project like Lunch; `ref` is the task-reference token — see TASK REFERENCE in the inputs —
 for items that ARE one of the listed tasks, and null for non-task items like Lunch, breaks,
 or household chores). One optional field — `user_set`: set `"user_set": true` on a meal item
 (Lunch) ONLY when June explicitly asked to move it to a specific time this turn ("lunch at 2",
@@ -297,23 +296,21 @@ command or pressure clause to it. Do not write `"Rest — not optional"`, `"Rest
 appear anywhere in the output. June decides what her body needs; the plan offers rest, it never
 orders her to take it. (This overrides any stock phrasing you would default to for a recovery day.)
 
-**THREE RULES FOR EVERY ITEM:**
+**TWO RULES FOR EVERY ITEM:**
 
 1. `task` is what June reads on her phone — rewrite internal labels into plain action language
    she can act on immediately. "GRA open design Q — voice/instance formalization" → "Work through
    open questions about how GRA handles voice and instance attribution." No abbreviations,
    no ALL-CAPS markers, no parenthetical codes. A plain verb phrase, scannable at a glance.
 
-2. `why` must be grounded in the Goals/Projects context above — read the goal's `reaching_for`
-   and the project's purpose, then write one sentence connecting THIS task to THAT. Do not
-   invent a rationale. Do not use project-internal jargon. If the connection is not clear from
-   the context, write what the task concretely produces ("produces a decision she can act on
-   next session") rather than a vague upward-link. No metaphors. Omit/null for interstitial items.
-
-3. `interstitial`: set to true if this is a quick between-task action that doesn't need a full
+2. `interstitial`: set to true if this is a quick between-task action that doesn't need a full
    time block — trash, recycling, laundry switch, a 5-minute errand, anything ≤ 15 min where
    June returns to her desk right after. These render as slim in-line markers in the schedule,
-   not full work blocks. No `why` for interstitial items. Set false (or omit) for all focused work.
+   not full work blocks. Set false (or omit) for all focused work.
+
+**Do NOT write a per-item rationale.** No `why` field, and no extra sentence explaining what an
+item moves toward — the surface does not show one, so it would be text nobody reads. The
+upward-link to her goals belongs in the woven frame, which carries the whole day's reasoning.
 
 ```json
 {
@@ -324,8 +321,8 @@ orders her to take it. (This overrides any stock phrasing you would default to f
       "time": "09:00 – 12:00",
       "framing": "the 1-2 sentence block framing",
       "items": [
-        {"time": "09:00 – 10:30", "project": "Project/thread name", "task": "plain action phrase June can act on", "why": "one sentence grounded in her actual goal — what this produces or moves", "ref": "T1", "interstitial": false},
-        {"time": "10:30 – 10:35", "project": null, "task": "Take out recycling", "why": null, "ref": null, "interstitial": true}
+        {"time": "09:00 – 10:30", "project": "Project/thread name", "task": "plain action phrase June can act on", "ref": "T1", "interstitial": false},
+        {"time": "10:30 – 10:35", "project": null, "task": "Take out recycling", "ref": null, "interstitial": true}
       ]
     }
   ],
@@ -336,7 +333,7 @@ orders her to take it. (This overrides any stock phrasing you would default to f
 ```
 
 This JSON is the whole output — it is exactly what June sees in the overlay. Keep the woven
-frame specific and warm (per the guidance above), the block framings and why-phrases intact,
+frame specific and warm (per the guidance above), the block framings intact,
 and the items in schedule order. No prose before or after — just the block.
 """
 
@@ -360,7 +357,7 @@ one that fits. **Do NOT invent clock times. Do NOT group into morning/afternoon 
 You compose this list: choose which candidate moves belong today and put them in the order that
 serves June's Focus Period intent + her active Strategies + her capacity (you do NOT have to
 include every candidate — deferring to still_here is expected, especially on a low day). Then
-rewrite each item into plain language, add a grounded `why`, write a short warm woven frame, and a
+rewrite each item into plain language, write a short warm woven frame, and a
 one-line `header` naming what today's shape is and why.
 
 ## REQUIRED OUTPUT — THE JSON BLOCK ONLY
@@ -371,9 +368,10 @@ Output **ONLY** the single fenced ```json block — nothing before or after. Use
   "Today's fragmented — a short list to pull from, no fixed times. When a window opens, start at
   the top." No metaphors.
 - each item's `task` is plain action language June can act on immediately (no codes, no ALL-CAPS,
-  no jargon); `why` is one sentence grounded in her actual goal/project (what this produces or
-  moves — never invented); `project` is the project/thread name or null; `ref` is the task's
+  no jargon); `project` is the project/thread name or null; `ref` is the task's
   reference token from TASK REFERENCE (so she can mark it done), null if it isn't a listed task.
+- **no per-item rationale.** No `why` field and no extra explanatory sentence per item — the
+  surface does not show one. The reasoning belongs in the woven frame and the `header`.
 - keep the list SHORT; order it by your judgment (intent + strategies + capacity), most-fitting first.
 
 ```json
@@ -382,7 +380,7 @@ Output **ONLY** the single fenced ```json block — nothing before or after. Use
   "woven_frame": "the 2-3 sentence woven frame, plain and warm",
   "header": "Today's fragmented — a short list to pull from, no fixed times. When a window opens, start at the top.",
   "items": [
-    {"project": "Project/thread name", "task": "plain action phrase June can act on", "why": "one sentence grounded in her actual goal — what this produces or moves", "ref": "T1"}
+    {"project": "Project/thread name", "task": "plain action phrase June can act on", "ref": "T1"}
   ],
   "still_here": [
     {"label": "thread or item name", "note": "the concrete reassurance — its rhythm / why deferred"}
@@ -669,9 +667,17 @@ def build_context(capacity=None, start_time=None, end_time=None, extra=None):
     period = period_ctx["period"]
     is_off, in_window = period_ctx["is_off"], period_ctx["in_window"]
 
+    import focus_period as fp
     now = dt.datetime.now().replace(second=0, microsecond=0)
     if start_time is None:
-        day_start = now.replace(hour=10, minute=0)
+        # Workday-START override (backend spec §17 — the field the object was missing). A period
+        # can now say "don't start me before 11" on a slow-morning stretch, the same way Workday
+        # end already said "work till 22:00 this sprint". Empty falls back to 10:00, the hardcoded
+        # default this replaces. Note this only moves the FLOOR: if June generates a plan at 14:00
+        # the day still starts now, never at the period's start time in the past.
+        sh, sm = ((fp.parse_hhmm(period["workday_start"], default=(10, 0))
+                   if period and period.get("workday_start") else (10, 0)))
+        day_start = now.replace(hour=sh, minute=sm)
         base = now if now >= day_start else day_start
         # Ceil to nearest 30 min so the plan runs on :00/:30 marks
         excess = base.minute % 30
@@ -681,7 +687,6 @@ def build_context(capacity=None, start_time=None, end_time=None, extra=None):
         # Workday-end override: a sprint period widens the day (e.g. till 22:00), a gentle one
         # narrows it. Falls back to 18:00. The scheduler already honors end_time. This restores
         # the addendum's "a period can be MORE, not less" — the field is now actually applied.
-        import focus_period as fp
         if period and period.get("workday_end"):
             wh, wm = fp.parse_hhmm(period["workday_end"])
             end_time = now.replace(hour=wh, minute=wm, second=0, microsecond=0)
@@ -1232,7 +1237,7 @@ def _group_block_project_items(items):
         if block is None:
             label = f"Work on {it.get('project') or ''}".rstrip()
             block = {"task": label, "name": label, "project": it.get("project"),
-                     "why": it.get("why"), "block": True, "project_id": pid,
+                     "block": True, "project_id": pid,
                      "arc": [dict(s) for s in (it.get("arc") or [])],
                      "chunk_min": it.get("chunk_min"), "duration_min": it.get("chunk_min"),
                      "shape": "arc" if it.get("arc") else "chunk",
@@ -1325,7 +1330,7 @@ def _retime_clock_plan(plan, tasks, all_anchors, start_time, end_time):
             # to contain an anchor word ("lunch meeting" keeps its id, so it stays).
             if not it.get("id") and _is_anchor_echo(name):
                 continue                       # a model-echoed meal/appt/chore — Python re-adds it
-            fi = dict(it)                       # carry task/project/why/id/held_back/description through
+            fi = dict(it)                       # carry task/project/id/held_back/description through
             fi["name"] = name                   # build_schedule keys on 'name'
             fi["duration_min"] = dur_by_id.get(it.get("id")) or it.get("duration_min")
             fi["access"] = access_by_id.get(it.get("id")) or []
@@ -1383,6 +1388,7 @@ def parse_plan(model_text):
         raise RuntimeError(f"model's JSON block did not parse: {e}")
     plan.setdefault("woven_frame", "")
     plan.setdefault("still_here", [])
+    _strip_why(plan)
     # Two shapes: a clock schedule (blocks[]) or a fragmented-day priority list (flat items[]).
     # Pin the shape definitively so the overlay renders the right branch (never guesses).
     if plan.get("shape") == "priority" or ("items" in plan and "blocks" not in plan):
@@ -1391,6 +1397,27 @@ def parse_plan(model_text):
     else:
         plan["shape"] = "clock"
         plan.setdefault("blocks", [])
+    return plan
+
+
+def _strip_why(plan):
+    """Drop any per-item `why` the model still composed (backend spec §14).
+
+    The surface stopped rendering a per-task/per-block "why today" line, so the field is text
+    nobody reads. The prompts no longer ask for it, but an LLM told not to emit a field will
+    sometimes emit it anyway — so the parse path is the choke point that keeps it out of the
+    stored payload, for both shapes. NOT a general-purpose scrub: it removes exactly this key
+    and touches nothing else.
+
+    ⚠ The WOVEN FRAME is untouched. That whole-day narrative is the one the surface keeps
+    (shown always-expanded), and so are `still_here` notes and each block's `framing`.
+    """
+    for block in plan.get("blocks") or []:
+        block.pop("why", None)
+        for item in block.get("items") or []:
+            item.pop("why", None)
+    for item in plan.get("items") or []:      # priority shape (flat)
+        item.pop("why", None)
     return plan
 
 

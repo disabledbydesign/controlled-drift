@@ -35,11 +35,10 @@ Output shape for each block:
 [1-2 sentences: what this block is for, energy/pacing note, any special framing]
 
 - [time] – [time] | [Project/thread: specific next action]
-  [one brief plain-language sentence: how this moves what she's working toward — do NOT name the goal, and use NO metaphors (say the plain thing, not a figure)]
-
 - [time] – [time] | [next item]
-  [...]
 ```
+
+**No per-item rationale.** Do not write a sentence under an item explaining how it moves what she's working toward — the surface does not render one, so it is text nobody reads. The upward-link to her goals belongs in the woven frame (section 1), which carries the whole day's reasoning; the block framing carries the rest.
 
 **Compose to June's Focus Period intent and active Strategies FIRST — they are authoritative.** If today's Focus Period says something about how to plan (low-spoon, gentle, foreground a route), that governs everything below. Her Strategy objects are how *she* wants work organized (e.g. "Go slow in the morning — gentle start or one deep-thinking anchor"); read them and compose accordingly. Where the generic notes below conflict with her intent or a strategy, honor her intent/strategy.
 

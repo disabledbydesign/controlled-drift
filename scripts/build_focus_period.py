@@ -26,12 +26,18 @@ def build_focus_period():
     # Plan-behavior overrides — each structured + Python-readable:
     p_out_fmt   = g.ensure_property("Output format", "select",
                                     ["Auto", "Clock schedule", "Priority list"])
-    p_wk_end    = g.ensure_property("Workday end", "text")   # "HH:MM" — widen for a sprint
+    # Workday bounds, both "HH:MM". End widens the day for a sprint or narrows it for a gentle
+    # week. Start is the companion added for backend spec §17 — the object had only an end, so
+    # the scheduler's day-bounds logic was end-only and a period could not say "not before 11"
+    # on a slow-morning stretch. Either empty = the system default (10:00 / 18:00).
+    p_wk_start  = g.ensure_property("Workday start", "text")
+    p_wk_end    = g.ensure_property("Workday end", "text")
     p_fg        = g.ensure_property("Foreground projects", "objects")
     p_paused    = g.ensure_property("Paused projects", "objects")
     key = g.ensure_type("Focus Period", "Focus Periods",
                         [p_start, p_end, p_intent, p_av_start, p_av_end, p_av_note,
-                         p_days_off, p_days_on, p_out_fmt, p_wk_end, p_fg, p_paused])
+                         p_days_off, p_days_on, p_out_fmt, p_wk_start, p_wk_end,
+                         p_fg, p_paused])
     print(f"[ok] Focus Period type ready: key={key}")
     return key
 

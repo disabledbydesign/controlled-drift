@@ -48,7 +48,13 @@ export function setVal(
 ): MutationResult {
   const res = updateNode(graph, id, (n) => ({ ...n, vals: { ...n.vals, [k]: v } }));
   if (!res.node) return noop(graph);
-  return { graph: res.graph, toast: 'Saved', ui: null, node: res.node };
+  return {
+    graph: res.graph,
+    toast: 'Saved',
+    ui: null,
+    node: res.node,
+    write: { op: 'patchVals', id, vals: { [k]: v } },
+  };
 }
 
 /**
@@ -85,7 +91,15 @@ export function toggleMulti(graph: Graph, id: string, k: string, opt: string): M
     return { ...n, vals: { ...n.vals, [k]: cur.join(', ') } };
   });
   if (!res.node) return noop(graph);
-  return { graph: res.graph, toast: 'Saved', ui: null, node: res.node };
+  // The persisted value is the JOINED string the model just computed, not the option tapped —
+  // a multi-select write replaces the whole set.
+  return {
+    graph: res.graph,
+    toast: 'Saved',
+    ui: null,
+    node: res.node,
+    write: { op: 'patchVals', id, vals: { [k]: res.node.vals[k] } },
+  };
 }
 
 /**
@@ -99,7 +113,13 @@ export function toggleMulti(graph: Graph, id: string, k: string, opt: string): M
 export function setTitle(graph: Graph, id: string, t: string): MutationResult {
   const res = updateNode(graph, id, (n) => ({ ...n, title: t }));
   if (!res.node) return noop(graph);
-  return { graph: res.graph, toast: null, ui: null, node: res.node };
+  return {
+    graph: res.graph,
+    toast: null,
+    ui: null,
+    node: res.node,
+    write: { op: 'patchTitle', id, title: t },
+  };
 }
 
 /**
@@ -119,7 +139,17 @@ export function clearVal(graph: Graph, id: string, k: string): MutationResult {
     return { ...n, vals: v };
   });
   if (!res.node) return noop(graph);
-  return { graph: res.graph, toast: 'Inheriting', ui: null, node: res.node };
+  // ⚠ NO ENDPOINT. `POST /api/object/{id}/clear-field` is contract §1 NEW and unbuilt, and the
+  // distinction it carries is the whole tri-state of spec §4: a property REMOVED inherits again,
+  // a property set to '' is an intentional "none". Patching '' here would silently destroy that,
+  // so this reports honestly instead of writing the wrong thing.
+  return {
+    graph: res.graph,
+    toast: 'Inheriting',
+    ui: null,
+    node: res.node,
+    write: { op: 'unsupported', id, what: 'inherit again (clear-field)' },
+  };
 }
 
 // ── structural ──────────────────────────────────────────────────────────────
@@ -144,6 +174,8 @@ export function del(graph: Graph, id: string): MutationResult {
     toast: 'Deleted · synced',
     ui: { detail: null, moveFor: null, menuFor: null, chipEdit: null },
     node: res.removed,
+    // Archive, not hard delete — recoverable in Anytype's bin (`api_write.delete_object`).
+    ...(res.removed ? { write: { op: 'archive' as const, id } } : null),
   };
 }
 
@@ -200,6 +232,7 @@ export function move(graph: Graph, id: string, toId: string): MutationResult {
     toast: 'Moved · synced',
     ui: { moveFor: null, menuFor: null, pickerFilter: '' },
     node: removed.removed,
+    write: { op: 'move', id, parentId: toId },
   };
 }
 
@@ -260,6 +293,10 @@ export function setType(graph: Graph, id: string, target: string): MutationResul
     toast: 'Type → ' + target + ' · fields kept',
     ui: null,
     node: res.node,
+    // ⚠ NO ENDPOINT. `POST /api/object/{id}/type` is contract §1 NEW and gated on §6 Q2 (does
+    // Anytype support an in-place type change, or is it create-copy-relink-delete?).
+    // `api_write.py`'s own docstring records the conversion seam as deliberately not built.
+    write: { op: 'unsupported', id, what: 'change the type' },
   };
 }
 
@@ -303,6 +340,7 @@ export function toggleDone(graph: Graph, id: string): MutationResult {
     toast: nv ? 'Done · synced' : 'Reopened',
     ui: null,
     node: res.node,
+    write: { op: 'complete', id, done: nv },
   };
 }
 
@@ -329,6 +367,9 @@ export function toggleActive(graph: Graph, id: string): MutationResult {
     toast: nv ? 'Paused — out of plan' : 'Active — in plan',
     ui: null,
     node: res.node,
+    // The seam where the polarity flips — contract §6 Q3. The UI stores `paused`; the endpoint
+    // takes `active`. Inverted HERE, once, rather than at the call sites.
+    write: { op: 'recurringActive', id, active: !nv },
   };
 }
 
@@ -405,6 +446,18 @@ export function addChild(
     toast: 'Created · editing',
     ui: { detail: id, addOpen: false, addParentFor: null, pickerFilter: '' },
     node: n,
+    // ⚠ `api_write.create_child` REFUSES an empty title (400) — an empty name matches every
+    // other empty-named object under `gsdo_objects.create`'s dedup-by-name, which is the
+    // BUILD_DOC §6 hazard at its worst. v4 creates with `title:''` and fills it in afterwards,
+    // so the placeholder below is what makes that flow legal. `api_write.py` flags this exact
+    // mismatch in its own docstring rather than papering over it.
+    write: {
+      op: 'create',
+      tempId: id,
+      level: lvl,
+      title: 'Untitled ' + type.toLowerCase(),
+      parentId: lvl === 'STRATEGY' ? null : (p?.id ?? null),
+    },
   };
 }
 
@@ -471,6 +524,11 @@ export function capture(
     // (`this.receipt`), and the caller composes it from `node` + the destination title.
     ui: { addText: '' },
     node: n,
+    // Creates a plain Task under the destination project. NOTE this is v4's local `capture()`,
+    // which does no weeding — the real sorter is `POST /api/capture`, an async LLM path that
+    // creates objects of its own. Wiring THAT is a separate decision (it writes several objects
+    // per call and has its own polling contract, §2.6), so this persists what v4 actually does.
+    write: { op: 'create', tempId: id, level: 'TASK', title: t, parentId: p.id },
   };
 }
 

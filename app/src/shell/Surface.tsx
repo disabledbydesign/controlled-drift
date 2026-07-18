@@ -3,6 +3,7 @@ import type { Theme, ThemeName } from '@tokens';
 import { AppShell } from './AppShell.tsx';
 import { DeskShell } from './DeskShell.tsx';
 import { useSurface } from './useSurface.ts';
+import type { DataSource } from './useAppState.ts';
 
 /**
  * The width at or above which the DESKTOP shell is used.
@@ -71,6 +72,8 @@ export interface SurfaceProps {
   T: Theme;
   name: ThemeName;
   setTheme: (n: ThemeName) => void;
+  /** See `DataSource` in `useAppState`. Omitted everywhere but the tests. */
+  source?: DataSource;
 }
 
 /**
@@ -89,8 +92,8 @@ export interface SurfaceProps {
  * `wide` still has to reach the components that fork on it (`PanelCtx.wide`, `DetailCtx.wide`),
  * so it is an input to `useSurface` — it just is not what decides who owns the state.
  */
-export function Surface({ T, name, setTheme }: SurfaceProps) {
+export function Surface({ T, name, setTheme, source }: SurfaceProps) {
   const wide = useIsDesktop();
-  const surface = useSurface({ T, name, setTheme, wide });
+  const surface = useSurface({ T, name, setTheme, wide, source });
   return wide ? <DeskShell T={T} surface={surface} /> : <AppShell T={T} surface={surface} />;
 }

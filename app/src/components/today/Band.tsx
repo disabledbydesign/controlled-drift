@@ -32,7 +32,18 @@ export function Band({ ctx, band, bandIndex }: BandProps) {
   const C = ctx.T.c;
   const hw = ctx.T.mode === 'hardware';
 
-  const label = hw ? (
+  /**
+   * A band with NO label renders NO header — not an empty one.
+   *
+   * ⚠ FOUND ON REAL DATA 2026-07-18. Every band in `seedPlan` is labelled, so this never came
+   * up on fixtures. June's live plan is PRIORITY-shaped, and the Schedule view still renders it
+   * through one unlabelled container band (`api/adapt.planFromLive`) — which made the hardware
+   * theme paint a bare `┌ ` corner glyph and a rule above the list, and the celestial theme a
+   * horizon dot with nothing beside it. Both read as a broken heading rather than as no heading.
+   */
+  const labelled = String(band.label ?? '').trim() !== '' || String(band.time ?? '').trim() !== '';
+
+  const label = !labelled ? null : hw ? (
     <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '9px' }}>
       <span
         style={{

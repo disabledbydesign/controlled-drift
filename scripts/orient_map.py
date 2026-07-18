@@ -51,6 +51,7 @@ Usage:
 import sys, os, textwrap
 sys.path.insert(0, os.path.dirname(__file__))
 import gsdo_anytype as g
+import resolve
 
 # Layout: "   What it is:  value" — labels left-aligned, values aligned at one column.
 # Wrapped continuation lines hang-indent to the value column so a wrap never
@@ -150,21 +151,22 @@ def _is_workstream_own(stream):
 def _is_workstream(stream, all_projects, _by_id=None):
     """A workstream is never rendered inline as a project/subproject (June, 2026-07-13,
     docs/map_design.md). Own checkbox wins; otherwise inherited from the nearest ancestor
-    that has it set — same walk-up-the-Parent-project-chain mechanism as Side inheritance
-    in scripts/daily_plan.py, so a newly nested sub-workstream needs no hand-tagging."""
+    that has it set, so a newly nested sub-workstream needs no hand-tagging.
+
+    The walk itself now lives in resolve.py — the one shared Parent-project resolver backend
+    spec §4 calls for, which daily_plan.py's Side and is_workstream inheritance also use. The
+    accessors are passed in because this module walks raw Anytype objects (parent id buried in
+    a properties list) rather than daily_plan's flat dicts. `absent_if_falsey` is what makes an
+    unticked checkbox defer upward instead of answering "deliberately not one"; see resolve.py.
+    """
     if _by_id is None:
         _by_id = {p["id"]: p for p in all_projects}
-    seen, cur = set(), stream
-    while True:
-        if _is_workstream_own(cur):
-            return True
-        parents = _objs(_props(cur), "gsdo_parent_project")
-        if not parents or cur["id"] in seen:
-            return False
-        seen.add(cur["id"])
-        cur = _by_id.get(parents[0])
-        if cur is None:
-            return False
+    hierarchy = resolve.Hierarchy(
+        _by_id.values(),
+        parent_id_of=lambda n: next(iter(_objs(_props(n), "gsdo_parent_project")), None),
+        get=lambda n, field: _is_workstream_own(n))
+    return bool(hierarchy.effective(stream, "is_workstream",
+                                    is_absent=resolve.absent_if_falsey).value)
 
 def _stream_order(stream):
     """Soft-sequence override. Read by name — key is auto-generated.

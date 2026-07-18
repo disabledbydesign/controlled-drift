@@ -104,6 +104,7 @@ def parse_focus_period(obj):
         "days_on": days_on,
         "days_off_error": off_err or on_err,   # surface a bad list to June, never silent
         "output_format": (sel.get("name") if isinstance(sel, dict) else sel) or "Auto",
+        "workday_start": _text(props, "Workday start") or None,
         "workday_end": _text(props, "Workday end") or None,
         # id/name pairs — the load path resolves ids -> current names against live projects
         "foreground_pairs": _objects_pairs(props, "Foreground projects"),
@@ -111,17 +112,22 @@ def parse_focus_period(obj):
     }
 
 
-def parse_hhmm(s):
-    """Parse 'HH:MM' -> (hour, minute). Used for the Workday-end override.
-    Returns (18, 0) on anything unparseable (the prior default end-of-day)."""
+def parse_hhmm(s, default=(18, 0)):
+    """Parse 'HH:MM' -> (hour, minute). Used for the Workday-start / Workday-end overrides.
+
+    Returns `default` on anything unparseable rather than raising: a typo in one clock field
+    should cost that field's override, not the whole day's plan. The default is a parameter
+    because the two bounds fall back to different times — end to 18:00, start to 10:00 — and a
+    start silently falling back to 18:00 would produce an empty day.
+    """
     try:
         h, m = str(s).strip().split(":")
         h, m = int(h), int(m)
         if 0 <= h <= 23 and 0 <= m <= 59:
             return h, m
-        return 18, 0
+        return default
     except (AttributeError, ValueError):
-        return 18, 0
+        return default
 
 
 # --- loading the active period + resolving calendar facts -------------------

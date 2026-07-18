@@ -1,4 +1,3 @@
-export { Placeholder } from './Placeholder.tsx';
 export { StructurePanel } from './StructurePanel.tsx';
 export { subtreeVis } from './MapScreen.tsx';
 export type { VisFilters } from './MapScreen.tsx';

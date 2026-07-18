@@ -16,6 +16,15 @@ EXPECTED = {
     "Recurring": ["Frequency", "Project link", "Context",
                   "Day of week", "Time of day", "Duration min"],
     "Strategy":  ["Strategy status", "What for", "Learning notes", "Context"],
+    # Focus Period is not one of the five GSDO core types, so it was never verified here — which
+    # is why `Workday start` (backend spec §17) being absent from the live type was invisible
+    # until someone read the builder. Listed now so the check fails loudly while the schema
+    # write is still pending June's approval. Built by scripts/build_focus_period.py.
+    "Focus Period": ["Period start", "Period end", "Intent",
+                     "Availability start", "Availability end", "Availability note",
+                     "Days off", "Days on", "Output format",
+                     "Workday start", "Workday end",
+                     "Foreground projects", "Paused projects"],
 }
 
 # Guard-critical formats (guard #3: capacity/affect signals must NEVER be scalars).

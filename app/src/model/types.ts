@@ -168,4 +168,49 @@ export interface MutationResult {
   toast: string | null;
   ui: Record<string, unknown> | null;
   node: ModelNode | null;
+  /**
+   * WHAT THIS MUTATION MEANS ON THE WIRE — see `WriteIntent`. Absent on a no-op and on the
+   * mutations that have no endpoint yet; present on every mutation that must persist.
+   */
+  write?: WriteIntent;
 }
+
+/**
+ * A mutation's network meaning, carried as DATA rather than performed here.
+ *
+ * ── why the intent travels with the result instead of the call site calling fetch ──
+ * There are ~30 mutation call sites across the components (`Field`, `ChipStrip`, `Row`,
+ * `Detail`, `RecurrenceCard`, `PickerPage`, `AddPanel`, `Lead`, `HeaderDone`, …) and every one
+ * of them already funnels through a single `ctx.apply(result)`. Putting `fetch` at those call
+ * sites would mean 30 places that each have to remember to await, roll back and report — which
+ * is precisely the shape of rule that gets forgotten, the same argument `useAppState` already
+ * makes for deriving the index instead of rebuilding it per call site.
+ *
+ * So the model layer stays PURE (it still computes the optimistic next graph and nothing else)
+ * and simply says what the write was. `useAppState.apply` is the one place that talks to the
+ * network, and the one place that can roll back when the server says the write did not land.
+ *
+ * ⚠ Two `op`s below have NO endpoint on the server today: `clearField`
+ * (`POST /api/object/{id}/clear-field`, contract §1) and `setType`
+ * (`POST /api/object/{id}/type`, contract §1 · §6 Q2 — it needs a live capability probe first,
+ * and `api_write.py` says in its own docstring that the conversion seam is deliberately not
+ * built). They are declared so the shape is complete and so `apply` can report them honestly as
+ * not-persisted rather than showing a false success. See `unsupported` in `useAppState`.
+ */
+export type WriteIntent =
+  /** `PATCH /api/object/{id}` `{vals}` — setVal, toggleMulti, and the recurrence editor. */
+  | { op: 'patchVals'; id: string; vals: Record<string, unknown> }
+  /** `PATCH /api/object/{id}` `{title}` — debounced; see `apply`. */
+  | { op: 'patchTitle'; id: string; title: string }
+  /** `POST /api/object/{id}/move` `{parent_id}`. */
+  | { op: 'move'; id: string; parentId: string }
+  /** `DELETE /api/object/{id}` — archives, and answers `{ok,id,archived}` with no object. */
+  | { op: 'archive'; id: string }
+  /** `POST /api/object` `{level,title,parent_id}` — the response id REPLACES the temp id. */
+  | { op: 'create'; tempId: string; level: string; title: string; parentId: string | null }
+  /** `POST /api/complete` / `POST /api/uncomplete` `{id}`. */
+  | { op: 'complete'; id: string; done: boolean }
+  /** `POST /api/recurring/active` `{id, active}` — note the UI stores the INVERSE, `paused`. */
+  | { op: 'recurringActive'; id: string; active: boolean }
+  /** No endpoint yet — contract §1. Carries why, so the failure message can say it. */
+  | { op: 'unsupported'; id: string; what: string };

@@ -16,6 +16,7 @@ export type {
   Chip,
   EffectiveValue,
   MutationResult,
+  WriteIntent,
 } from './types.ts';
 
 export {

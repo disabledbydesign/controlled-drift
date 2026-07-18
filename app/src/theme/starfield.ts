@@ -141,13 +141,6 @@ export function starfield({
   return layers.join(',');
 }
 
-/** Memoised canonical field — the default sky, generated once. */
-let cached: string | null = null;
-export function defaultStarfield(): string {
-  if (cached === null) cached = starfield();
-  return cached;
-}
-
 /*
  * Falloff note: the gallery's stars use `transparent 62%` (153 of 175 gradients);
  * the remaining 60%/70%/55% values belong to the ambient wash layers, not the stars.

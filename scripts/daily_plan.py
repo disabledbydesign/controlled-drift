@@ -20,6 +20,7 @@ from anytype_test import call
 import gsdo_anytype as g
 import grain
 import chunk_log
+import resolve
 import when_resolve
 from datetime_seam import recurring_items_for_today
 from neglect import active_untouched
@@ -35,21 +36,52 @@ def _prop_val(props_dict, key, kind):
     return p.get(kind) if p else None
 
 
+def _access_tags(raw):
+    """Multi-select tag dicts -> a list of tag names, preserving the absent/empty distinction
+    the §4 resolver depends on: None in stays None out (the property is not set on this object,
+    so inherit), while a present-but-empty list stays [] (a deliberate "no access conditions")."""
+    if raw is None:
+        return None
+    return [t.get("name") for t in raw if isinstance(t, dict)]
+
+
+def inherited_access(task, projects_by_name):
+    """The access conditions that apply to `task` — its own if it has any, else the ones its
+    linked project resolved to (that project's own value, or the nearest ancestor's).
+
+    This is the wire that makes Project-level `Access conditions` actually reach planning
+    (backend spec §4). The property was added to the Project type but nothing read it, so it
+    was behaviourally inert: June could tag a workstream "Involves-leaving-house" and no plan
+    changed. A task's OWN tags always win — that is the "override-when-it-differs" half.
+
+    Reads the already-resolved `project["access"]` rather than walking again; the walk ran once
+    at load. A project whose resolved value is an explicit empty contributes nothing and does
+    not block a second linked project from supplying one.
+    """
+    if task.get("access"):
+        return task["access"]
+    for name in task.get("linked_projects") or []:
+        project = projects_by_name.get(name)
+        if project and project.get("access"):
+            return list(project["access"])
+    return task.get("access") or []
+
+
 def _inherit_is_workstream(projects):
     """Propagate is_workstream down the parent chain: a subproject under a workstream is
-    workstream work even if its own checkbox is unset. Mirrors the Side-inheritance walk and
-    orient_map's `_is_workstream` ancestor logic. Idempotent; safe against parent cycles."""
-    by_id = {p["id"]: p for p in projects}
+    workstream work even if its own checkbox is unset. Idempotent; safe against parent cycles.
+
+    Now one call into the shared resolver (backend spec §4) instead of its own hand-rolled walk.
+    It passes `absent_if_falsey` because a checkbox has no unset state to read — an unticked box
+    comes back False, which has to mean "defer to the parent", not "deliberately not one". That
+    keeps this field's OR-up-the-chain behaviour exactly as it was; see resolve.py.
+    """
+    h = resolve.Hierarchy(projects)
     for p in projects:
         if p.get("is_workstream"):
             continue
-        seen, cur = set(), p
-        while cur.get("parent_project_id") in by_id and cur["id"] not in seen:
-            seen.add(cur["id"])
-            cur = by_id[cur["parent_project_id"]]
-            if cur.get("is_workstream"):
-                p["is_workstream"] = True
-                break
+        p["is_workstream"] = bool(
+            h.effective(p, "is_workstream", is_absent=resolve.absent_if_falsey).value)
 
 
 def synthetic_recurring_row(obj, proj_id_to_name, duration_min, as_needed):
@@ -159,6 +191,12 @@ def load_active_items(sid):
                               "engagement": engagement,
                               "engagement_notes": pvn("Engagement notes", "text"),
                               "side": side,
+                              # Block-grain access profile (backend spec §4). Same property the
+                              # Task carries, reused on Project so a workstream can state the
+                              # access conditions all its work shares. None (not []) when the
+                              # property is absent — that is what marks it "inherit" for the
+                              # resolver, and [] would read as a deliberate "none".
+                              "access": _access_tags(pv("gsdo_access_conditions", "multi_select")),
                               "goal_id": goal_id,
                               "goal_name": goal_name,
                               "is_workstream": bool((props.get("is_workstream") or {}).get("checkbox")),
@@ -170,14 +208,22 @@ def load_active_items(sid):
     # Side inheritance (June, 2026-07-13): a subproject's Side is read from its nearest
     # ancestor when unset, rather than duplicating the parent's value onto every subproject.
     # parent_project_id was already captured per project above; this just resolves the chain.
-    _by_id = {p["id"]: p for p in projects}
+    # One call into the shared resolver (backend spec §4) instead of a hand-rolled walk. The
+    # default presence rule is the right one here: a project with no Side tag reads None and
+    # defers upward, exactly as this walk did before it moved.
+    _hier = resolve.Hierarchy(projects)
+    _sides = {p["id"]: _hier.effective(p, "side").value for p in projects}
     for p in projects:
-        seen, cur = set(), p
-        while cur.get("side") is None and cur.get("parent_project_id") in _by_id and cur["id"] not in seen:
-            seen.add(cur["id"])
-            cur = _by_id[cur["parent_project_id"]]
-        if p.get("side") is None and cur is not p:
-            p["side"] = cur.get("side")
+        p["side"] = _sides[p["id"]]
+
+    # Access conditions inherit the same way (backend spec §4): a workstream's shared access
+    # profile reaches its subprojects without hand-tagging each one. Resolved ONCE here, in
+    # place — so `inherited_access` below reads a settled value instead of re-walking a chain
+    # whose links have already been overwritten. Deliberately NOT flattened to []: None still
+    # means "nothing up this chain said anything", which is not the same as an explicit "none".
+    _access = {p["id"]: _hier.effective(p, "access").value for p in projects}
+    for p in projects:
+        p["access"] = _access[p["id"]]
 
     # is_workstream inheritance (2026-07-14): a subproject under a workstream IS workstream
     # work, even if its own checkbox is unset — mirror the Side walk so the daily-plan grain
@@ -306,6 +352,14 @@ def load_active_items(sid):
             return [id_to_name.get(i) or n for i, n in pairs if (i in id_to_name) or n]
         period["foreground"] = _resolve(period.get("foreground_pairs", []))
         period["paused"] = _resolve(period.get("paused_pairs", []))
+    # Apply the project-level access profile to every task that has none of its own (spec §4).
+    # Done here, after both lists are fully built, so `task["access"]` is settled before any
+    # consumer reads it — the LLM context line, the errand-batching check and the capacity
+    # filters all read that one key and now see inherited tags too.
+    _projects_by_name = {p["name"]: p for p in projects}
+    for t in tasks:
+        t["access"] = inherited_access(t, _projects_by_name)
+
     weekly_off = fp.load_day_off_defaults()
     period_ctx = {"period": period,
                   "is_off": fp.is_day_off(period, weekly_off, today),
@@ -893,7 +947,7 @@ def blocks_from_scheduled(scheduled, framing_by_label=None):
     'Python places it in time' step (AI_LAYER_SPEC:69) applied AFTER the LLM composes the order.
 
     Each scheduled item is either a COMPOSED item (a real task the LLM chose — carries `_composed`,
-    plus task/project/why/id/held_back threaded by _resolve_ids) or an ANCHOR that build_schedule
+    plus task/project/id/held_back threaded by _resolve_ids) or an ANCHOR that build_schedule
     injected (meal, break, recurring). Composed items keep their display fields; anchors become plain
     rows (no id — matching the pre-existing behavior that meals/breaks/chores show no done-affordance).
     Emits the SAME `HH:MM – HH:MM` en-dash time-string contract format_schedule_blocks uses (three
@@ -924,7 +978,9 @@ def blocks_from_scheduled(scheduled, framing_by_label=None):
                 "time": time_str,
                 "task": it.get("task") or it.get("name"),
                 "project": it.get("project") if composed else None,
-                "why": it.get("why") if composed else None,
+                # No per-item `why` row (backend spec §14) — the surface stopped rendering one,
+                # so composing/threading it was tokens spent on text nobody reads. The whole-day
+                # woven frame is where the reasoning lives now.
                 # a real composed task keeps its own (false) interstitial flag; an anchor is an
                 # interstitial only when it's a Python-inserted break (meals/chores are not).
                 "interstitial": bool(it.get("interstitial")) if composed else bool(it.get("_break")),
