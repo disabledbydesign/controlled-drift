@@ -178,7 +178,7 @@ exact declaration.
   here** (checkbox keys may be bare `active` or prefixed `gsdo_active`) and recorded for Task 2 — plus
   Task's shared situated fields; and no longer carries `Has target`/`Target`.
 
-- [ ] **Step 1: Rewrite `build_recurring` to the reshaped schema.** It (1) DROPS `Has target` / `Target`,
+- [x] **Step 1: Rewrite `build_recurring` to the reshaped schema.** It (1) DROPS `Has target` / `Target`,
   (2) ADDS Task's fields by REUSING Task's keys — call `ensure_property` with the **exact same display
   name + type + options as `build_task.py`** (`ensure_property` is idempotent by display name, so a match
   returns Task's existing property and shares its key; a mismatched name silently mints a DUPLICATE), and
@@ -233,18 +233,18 @@ def build_recurring():
   June's separate "Recurring mirrors Task" decision intended any of those, add it here with build_task.py's
   verbatim call; the default is the situated set only. Flag it, don't silently expand.)
 
-- [ ] **Step 2: Remove the retired fields from the two readers.**
+- [x] **Step 2: Remove the retired fields from the two readers.**
   - `scripts/orient_map.py` (~`:659`) — drop `"Has target"`, `"Target"` from the fetched display list.
   - `scripts/verify_model.py` — drop `Has target` / `Target` (likely `"GSDO Has target"`, `"GSDO Target"`)
     from the Recurring expected-property list, or `build_model.py`'s verify FAILS after the type change.
   (Verified safe: `datetime_seam` / `daily_plan` / `plan_generate` never read `has_target`/`target` — no
   scheduling consumer. Leave the stale properties on existing Anytype objects; harmless, no reader.)
 
-- [ ] **Step 3: Rebuild + verify the model (main agent, Bash).** `ensure_*` is idempotent.
+- [x] **Step 3: Rebuild + verify the model (main agent, Bash).** `ensure_*` is idempotent.
 `python3 scripts/build_model.py`
 Expected: ends with `== VERIFY ==` and exit 0 (verify passes because the expected list dropped the two fields).
 
-- [ ] **Step 4: Confirm live + capture the real `Active` key (main agent, Bash).**
+- [x] **Step 4: Confirm live + capture the real `Active` key (main agent, Bash).**
 `python3 scripts/describe_model.py` — confirm `Recurring` now lists `Active` (checkbox) + the mirrored
 Task fields, and NO `Has target`/`Target`. **Also assert each mirrored field resolves to Task's SAME key,
 not just that it appears** — a mismatched name/option-spelling silently mints a NEW-keyed duplicate that
@@ -253,7 +253,7 @@ runtime. Compare each mirrored field's key on Recurring against its key on Task 
 they must be identical. **Record the generated `Active` key** (raw object fetch or describe output) and
 write it into Task 2's read line. Do not assume it — the read in Task 2 depends on the real key.
 
-- [ ] **Step 5: Commit as TWO commits (main agent, Bash)** — so the as-needed feature has an independent
+- [x] **Step 5: Commit as TWO commits (main agent, Bash)** — so the as-needed feature has an independent
   rollback point (author-review ask; the tick-list needs only `Active`). Stage the `Active` add first,
   then the co-located schema hygiene:
 ```bash
@@ -283,7 +283,7 @@ rollback nicety, not a correctness requirement.
   (unchanged for every scheduled unit and for unset interval). `recurring_items_for_today` result dicts
   gain `"as_needed": bool` so downstream can route completion.
 
-- [ ] **Step 1: Write the failing unit tests** (deterministic, no network) in
+- [x] **Step 1: Write the failing unit tests** (deterministic, no network) in
   `tests/test_as_needed_reactivation.py`:
 
 ```python
@@ -318,11 +318,11 @@ def test_unset_interval_stays_off_even_if_active():
     assert due is False
 ```
 
-- [ ] **Step 2: Run to verify they fail (main agent, Bash).**
+- [x] **Step 2: Run to verify they fail (main agent, Bash).**
 `python3 -m pytest tests/test_as_needed_reactivation.py -k "as_needed or scheduled or unset_interval" -v`
 Expected: FAIL (as_needed currently always returns False).
 
-- [ ] **Step 3: Implement the surfacing branch.** In `today_fixed_time`, replace the current
+- [x] **Step 3: Implement the surfacing branch.** In `today_fixed_time`, replace the current
   `if not unit or unit == "as_needed": return False, clock` with a split that honors `active` for
   as_needed only:
 
@@ -335,7 +335,7 @@ Expected: FAIL (as_needed currently always returns False).
         return False, clock   # never-configured stays off — not this feature (the surface list's)
 ```
 
-- [ ] **Step 4: Read `active` into the item dict + emit `as_needed`.** In `recurring_items_for_today`,
+- [x] **Step 4: Read `active` into the item dict + emit `as_needed`.** In `recurring_items_for_today`,
   add the active read (USE THE REAL KEY from Task 1 — shown here as `gsdo_active`, confirm it) to the
   `item` dict, and add `as_needed` to the appended result:
 
@@ -363,11 +363,11 @@ Expected: FAIL (as_needed currently always returns False).
         })
 ```
 
-- [ ] **Step 5: Run tests to verify they pass (main agent, Bash).**
+- [x] **Step 5: Run tests to verify they pass (main agent, Bash).**
 `python3 -m pytest tests/test_as_needed_reactivation.py tests/test_datetime_seam.py -v`
 Expected: PASS, no regressions.
 
-- [ ] **Step 6: Commit (main agent, Bash).**
+- [x] **Step 6: Commit (main agent, Bash).**
 ```bash
 git add scripts/datetime_seam.py tests/test_as_needed_reactivation.py
 git commit -m "feat(surfacing): an active as-needed recurring is due every day; emit as_needed marker"
@@ -402,7 +402,7 @@ git commit -m "feat(surfacing): an active as-needed recurring is due every day; 
     code, since every caller omitted it.)
 - Consumes: `gsdo_objects.update` + a by-id object fetch it does itself (NOT `capture_generate`, to avoid the cycle).
 
-- [ ] **Step 1: Write the failing log tests** in `tests/test_reactivation_log.py`:
+- [x] **Step 1: Write the failing log tests** in `tests/test_reactivation_log.py`:
 
 ```python
 import sys, os
@@ -429,10 +429,10 @@ def test_read_missing_file_is_empty(cd_sandbox):
 *Implementer: `cd_sandbox` is the repo fixture that redirects `cd_paths` to the test sandbox — confirm
 its real name in `conftest.py`/existing tests (`test_engagement_log.py` uses the same); match it.*
 
-- [ ] **Step 2: Run to verify they fail (main agent, Bash).**
+- [x] **Step 2: Run to verify they fail (main agent, Bash).**
 `python3 -m pytest tests/test_reactivation_log.py -v` — Expected: FAIL (`No module named 'reactivation_log'`).
 
-- [ ] **Step 3: Implement the log** (copy `engagement_log.py` verbatim-idiom; change the record shape):
+- [x] **Step 3: Implement the log** (copy `engagement_log.py` verbatim-idiom; change the record shape):
 
 ```python
 #!/usr/bin/env python3
@@ -473,7 +473,7 @@ def read_changes(path=None):
         return []
 ```
 
-- [ ] **Step 4: Write the failing primitive test** in `tests/test_as_needed_reactivation.py`:
+- [x] **Step 4: Write the failing primitive test** in `tests/test_as_needed_reactivation.py`:
 
 ```python
 def test_set_recurring_active_writes_reads_logs(monkeypatch):
@@ -518,7 +518,7 @@ def test_set_recurring_active_raises_on_readback_mismatch(monkeypatch):
 the real low-level fetch (`anytype_test.call` + `gsdo_anytype.get_space_id`); the module imports
 `gsdo_objects` + `reactivation_log` and does its own GET — it must NOT import `capture_generate`.*
 
-- [ ] **Step 5: Run to verify it fails, then implement** (main agent, Bash for the run). Create
+- [x] **Step 5: Run to verify it fails, then implement** (main agent, Bash for the run). Create
   `scripts/recurring_active.py` (its own by-id fetch; NO `capture_generate` import), and `import
   recurring_active` in `server.py`:
 
@@ -567,7 +567,7 @@ def set_recurring_active(rid, active):
 `python3 -m pytest tests/test_reactivation_log.py tests/test_as_needed_reactivation.py -k "reactivation or set_recurring_active" -v`
 Expected: PASS.
 
-- [ ] **Step 6: Commit (main agent, Bash).**
+- [x] **Step 6: Commit (main agent, Bash).**
 ```bash
 git add scripts/reactivation_log.py scripts/recurring_active.py scripts/server.py tests/test_reactivation_log.py tests/test_as_needed_reactivation.py
 git commit -m "feat(reactivation): set_recurring_active primitive (pre-read+write+read-back+log) in neutral module + reactivation log"
@@ -597,7 +597,7 @@ git commit -m "feat(reactivation): set_recurring_active primitive (pre-read+writ
 - Produces: `plan_store.is_as_needed_item(task_id) -> bool`; `/api/complete` on an active as-needed row
   writes `Active=false` (real) + flips the cache to done; `/api/uncomplete` writes `Active=true` + un-flips.
 
-- [ ] **Step 1: Carry `as_needed` onto the plan row — through ALL the same places `recurring` rides.**
+- [x] **Step 1: Carry `as_needed` onto the plan row — through ALL the same places `recurring` rides.**
   This is where the feature silently dies if built from doc-text instead of the live runtime (build-frame
   guard). The path is THREE hops:
   1. **Fold (pre-LLM):** the timeless fold builds a synthetic dict with `"is_recurring": True` (~`:272`).
@@ -616,7 +616,7 @@ git commit -m "feat(reactivation): set_recurring_active primitive (pre-read+writ
      at **each** (a timed as-needed task routes through the timed origins, not the fold). Re-derive live.
   Do NOT invent a parallel channel — mirror `recurring` exactly at every site.
 
-- [ ] **Step 2: Write the failing predicate + routing tests:**
+- [x] **Step 2: Write the failing predicate + routing tests:**
 
 ```python
 def test_is_as_needed_item_reads_the_row_flag(monkeypatch):
@@ -650,10 +650,10 @@ then `self._send(code, body)`. Test `complete_task_row` directly (above); the HT
 Task 7. Do the symmetric `uncomplete_task_row`. This thin-route refactor is ALSO the shared substrate
 threads 2–3 (persistence, recording recurring completions) build on — keep the route a shell.*
 
-- [ ] **Step 3: Run to verify they fail (main agent, Bash).**
+- [x] **Step 3: Run to verify they fail (main agent, Bash).**
 `python3 -m pytest tests/test_as_needed_reactivation.py -k "as_needed_item or deactivates" -v` — Expected: FAIL.
 
-- [ ] **Step 4: Implement.** In `plan_store.py`, beside `is_recurring_item`:
+- [x] **Step 4: Implement.** In `plan_store.py`, beside `is_recurring_item`:
 
 ```python
 def is_as_needed_item(task_id):
@@ -694,11 +694,11 @@ Symmetric `uncomplete_task_row(task_id)`: before its `is_recurring_item` branch,
 `recurring_active.set_recurring_active(task_id, True)` then `plan_store.mark_item_undone(task_id)`, returning
 `200, {"uncompleted": {"id": task_id, "done": False, "as_needed": True}, "plan": ...}`.
 
-- [ ] **Step 5: Run tests to verify pass, then the plan_store + server suites (main agent, Bash).**
+- [x] **Step 5: Run tests to verify pass, then the plan_store + server suites (main agent, Bash).**
 `python3 -m pytest tests/test_as_needed_reactivation.py tests/ -k "as_needed or plan_store or complete" -v`
 Expected: PASS, no regressions.
 
-- [ ] **Step 6: Commit (main agent, Bash).**
+- [x] **Step 6: Commit (main agent, Bash).**
 ```bash
 git add scripts/plan_generate.py scripts/daily_plan.py scripts/plan_store.py scripts/server.py tests/test_as_needed_reactivation.py
 git commit -m "feat(complete): completing an active as-needed task deactivates it (real write), not cache-only"
@@ -726,13 +726,13 @@ git commit -m "feat(complete): completing an active as-needed task deactivates i
   existing as-needed Recurring id). Such an item activates the existing task instead of creating one; the
   session `created`-record carries `action:"reactivate"` + `name` so the receipt renders "reopened X".
 
-- [ ] **Step 1: Feed existing as-needed tasks into the weed context.** Where the weed prompt's EXISTING
+- [x] **Step 1: Feed existing as-needed tasks into the weed context.** Where the weed prompt's EXISTING
   GOALS & PROJECTS token list is built, add an **EXISTING AS-NEEDED TASKS** section listing June's
   Recurring objects with `interval_unit == "as_needed"`, each with an `R#` token → its id (mirror the
   P#/G# token map). *(Trace the real context builder; it currently loads projects/goals for tokens —
   extend it, don't fork it.)*
 
-- [ ] **Step 2: Add the `reactivate` action to the contract.** In `_WEED_JSON_INSTRUCTION`, extend the
+- [x] **Step 2: Add the `reactivate` action to the contract.** In `_WEED_JSON_INSTRUCTION`, extend the
   `action` enum and add a `reactivate_ref`, with a prose rule:
 
 ```
@@ -745,12 +745,12 @@ git commit -m "feat(complete): completing an active as-needed task deactivates i
 Add `"reactivate_ref": "R2 | null"` to the per-item JSON shape and note `action` now reads
 `"create | skip | reactivate"`.
 
-- [ ] **Step 3: Default the field in `parse_weed`** (the per-item `setdefault` loop):
+- [x] **Step 3: Default the field in `parse_weed`** (the per-item `setdefault` loop):
 ```python
             item.setdefault("reactivate_ref", None)
 ```
 
-- [ ] **Step 4: Write the failing tests** (parse + branch):
+- [x] **Step 4: Write the failing tests** (parse + branch):
 
 ```python
 def test_parse_weed_reads_reactivate_action():
@@ -775,10 +775,10 @@ def test_capture_reactivates_instead_of_creating(monkeypatch, tmp_path):
 branch resolves `reactivate_ref` through the same `ref_map` the link tokens use (extend it to carry R#
 → recurring id).*
 
-- [ ] **Step 5: Run to verify they fail (main agent, Bash).**
+- [x] **Step 5: Run to verify they fail (main agent, Bash).**
 `python3 -m pytest tests/test_capture_generate.py -k "reactivate" -v` — Expected: FAIL.
 
-- [ ] **Step 6: Implement the branch.** In `capture()`'s item loop, before the `_create_one` call, add:
+- [x] **Step 6: Implement the branch.** In `capture()`'s item loop, before the `_create_one` call, add:
 
 ```python
             if item.get("action") == "reactivate":
@@ -805,14 +805,14 @@ module precisely so `capture_generate` can call it without the `server → captu
 `_get_object` here is `capture_generate`'s own existing read-back helper. Do NOT re-implement the
 write/read-back/log — `recurring_active` is the single writer.*
 
-- [ ] **Step 7: Add the noticing line to `prompts/weeding_gate.md`** (near the type-routing / dedup prose):
+- [x] **Step 7: Add the noticing line to `prompts/weeding_gate.md`** (near the type-routing / dedup prose):
 ```
 - **Reactivation vs. new.** If June names a task that already exists as an as-needed Recurring (it's in
   the EXISTING AS-NEEDED TASKS list), she's asking to turn it back ON, not to make a new one — mark it
   `action: reactivate`. When unsure it's the same task, create (she can undo); never silently duplicate.
 ```
 
-- [ ] **Step 8: Emit the receipt as a surface contract (NOT an edit to the retiring overlay).** The
+- [x] **Step 8: Emit the receipt as a surface contract (NOT an edit to the retiring overlay).** The
   `created` record already carries `action:"reactivate"` + `name` (Step 6) — that IS what the live surface
   renders as "reopened <name>". **Undo of a reopen = turn it back OFF** (`Active=false`) — so it is NOT
   `/api/uncomplete` (that writes `Active=true`, the opposite). Expose a dedicated `/api/recurring/active`
@@ -823,10 +823,10 @@ write/read-back/log — `recurring_active` is the single writer.*
   `cycleEngagement`, no engagement/when chip) is acceptable — but the deliverable is the record shape +
   endpoint, not the dying file's internals.
 
-- [ ] **Step 9: Run tests to verify pass (main agent, Bash).**
+- [x] **Step 9: Run tests to verify pass (main agent, Bash).**
 `python3 -m pytest tests/test_capture_generate.py -v` — Expected: PASS. (Live receipt exercised in Task 7.)
 
-- [ ] **Step 10: Commit (main agent, Bash).**
+- [x] **Step 10: Commit (main agent, Bash).**
 ```bash
 git add scripts/capture_generate.py prompts/weeding_gate.md docs/overlay_daily.html tests/test_capture_generate.py
 git commit -m "feat(capture): weeding reactivates an existing as-needed task instead of duplicating; 'reopened X' receipt"
@@ -850,7 +850,7 @@ git commit -m "feat(capture): weeding reactivates an existing as-needed task ins
 - Produces: authoring output may carry `reactivate_tasks: [name, ...]`; the reflect-back lists them for
   confirmation; commit activates each matched as-needed Recurring.
 
-- [ ] **Step 1: Add the output key to the prompt.** In `build_authoring_prompt`, add to the output-keys
+- [x] **Step 1: Add the output key to the prompt.** In `build_authoring_prompt`, add to the output-keys
   list (the task list is already provided as grounding):
 ```
 - "reactivate_tasks": names from HER CURRENT TASKS/RECURRING list above that she says to pick back up /
@@ -858,7 +858,7 @@ git commit -m "feat(capture): weeding reactivates an existing as-needed task ins
   name from that list; [] if she names none. Only tasks she already has — never invent one.
 ```
 
-- [ ] **Step 2: Surface them in the reflect-back.** In `reflect_back`, append an item when
+- [x] **Step 2: Surface them in the reflect-back.** In `reflect_back`, append an item when
   `fields.get("reactivate_tasks")` is non-empty, so June confirms before commit:
 ```python
     reactivate = f.get("reactivate_tasks") or []
@@ -868,13 +868,13 @@ git commit -m "feat(capture): weeding reactivates an existing as-needed task ins
 ```
 and add `"reactivate_tasks": ("reactivate_tasks",)` to `_ITEM_FIELDS` so an edit-mode diff marks it.
 
-- [ ] **Step 3: Resolve names → ids at commit.** The write path needs each name mapped to its as-needed
+- [x] **Step 3: Resolve names → ids at commit.** The write path needs each name mapped to its as-needed
   Recurring id. Add a resolver (mirror `author.resolve_project_names_to_ids`, but over as-needed
   Recurring objects) and, in `/api/focus/commit` **after** the period is written, call
   `recurring_active.set_recurring_active(rid, True)` for each resolved id. An unresolved name is surfaced
   (not silently dropped) — collect them and return them in the commit response so the surface can tell June.
 
-- [ ] **Step 4: Write the failing tests** (this is the heaviest task — give it real scaffolding, not one-liners):
+- [x] **Step 4: Write the failing tests** (this is the heaviest task — give it real scaffolding, not one-liners):
 
 ```python
 def test_authoring_prompt_lists_reactivate_tasks_key():
@@ -910,10 +910,10 @@ take a fields/context dict — match its required keys), and name the resolver +
 whatever you add in Step 3. Commit-activation itself (calling the primitive per resolved id) is exercised
 live in Task 7 Step 6.*
 
-- [ ] **Step 5: Run to verify they fail, implement, run to pass (main agent, Bash).**
+- [x] **Step 5: Run to verify they fail, implement, run to pass (main agent, Bash).**
 `python3 -m pytest tests/ -k "focus and reactivate" -v` — FAIL → implement → PASS.
 
-- [ ] **Step 6: Commit (main agent, Bash).**
+- [x] **Step 6: Commit (main agent, Bash).**
 ```bash
 git add scripts/focus_period_generate.py scripts/focus_period_adapter.py scripts/server.py tests/
 git commit -m "feat(focus): authoring reactivates named as-needed tasks; reflect-back confirms before commit"
@@ -933,37 +933,99 @@ data** — not when unit tests pass (repo build-frame guard: a coherent-but-wron
   /api/focus/commit` → activate resolved tasks (Task 6). All Active writes funnel through
   `set_recurring_active` (Task 3).
 
-- [ ] **Step 1 (main agent, Bash): restart the server** and load **the live daily-plan surface** —
+- [x] **Step 1 (main agent, Bash): restart the server** and load **the live daily-plan surface** —
   `docs/overlay_daily.html` if it's still current, or the new mobile surface if it has replaced it
   (`overlay_daily.html` is being retired). Drive the rest of this task's verify through whichever is live.
-- [ ] **Step 2 (main agent, Bash): make a CD-TEST as-needed task.** Create a Recurring `CD-TEST clean the
+- [x] **Step 2 (main agent, Bash): make a CD-TEST as-needed task.** Create a Recurring `CD-TEST clean the
   fridge` with `Interval unit = as_needed`, `Active = false`. Read it back.
-- [ ] **Step 3 (main agent): reactivate via the Add box** — through the `verify` skill, drive a capture:
+- [x] **Step 3 (main agent): reactivate via the Add box** — through the `verify` skill, drive a capture:
   *"CD-TEST clean the fridge"*. Confirm the receipt shows **"reopened"** (not "created"), no duplicate
   Recurring was created, and the object now has `Active = true` (read back).
-- [ ] **Step 4 (main agent, Bash): regenerate June's REAL daily plan** and confirm the CD-TEST as-needed
+- [x] **Step 4 (main agent, Bash): regenerate June's REAL daily plan** and confirm the CD-TEST as-needed
   task now **surfaces as a checkoffable row**. Regenerate again (simulate the next day) — it **still
   surfaces** (resurface-until-done). This is the live-verify the build-frame guard requires.
-- [ ] **Step 5 (main agent): complete it** from the overlay. Confirm it shows checked today, the object
+- [x] **Step 5 (main agent): complete it** from the overlay. Confirm it shows checked today, the object
   is now `Active = false` (read back), a `reactivation_log` record landed (`old:true,new:false`), and on
   the next plan regeneration it **no longer surfaces** (done-until-asked-again). Then uncomplete →
   `Active = true` again.
-- [ ] **Step 6 (main agent): reactivate via Focus Period** — author a focus period naming *"CD-TEST
+- [x] **Step 6 (main agent): reactivate via Focus Period** — author a focus period naming *"CD-TEST
   clean the fridge"*; confirm the reflect-back lists it under "Reopening", commit, and the object is
   `Active = true` (read back).
-- [ ] **Step 7 (main agent, Bash): scheduled recurrings unchanged** — pick one of June's real scheduled
+- [x] **Step 7 (main agent, Bash): scheduled recurrings unchanged** — pick one of June's real scheduled
   recurrings (e.g. a daily chore), confirm completing it is still cache-only "done for today" (no Active
   write, resurfaces next regeneration). Regression guard for the completion branch.
-- [ ] **Step 8 (main agent, Bash): delete ALL CD-TEST objects** and re-fetch to confirm they're gone.
-- [ ] **Step 9 (main agent, Bash): full suite, clean tree.** `python3 -m pytest -q` — all green; the
+- [x] **Step 8 (main agent, Bash): delete ALL CD-TEST objects** and re-fetch to confirm they're gone.
+- [x] **Step 9 (main agent, Bash): full suite, clean tree.** `python3 -m pytest -q` — all green; the
   conftest real-data tripwire did not fire.
-- [ ] **Step 10: Commit, then cross-family review (main agent, Bash).** Run the non-Claude review
+- [x] **Step 10: Commit, then cross-family review (main agent, Bash).** Run the non-Claude review
   (`~/.claude/skills/requesting-code-review/github_models_review.py`, **chunked per file with its tests**
   — the API caps ~8k tokens) before the thread closes; triage findings, apply the real ones.
 ```bash
 git add -A
 git commit -m "test(reactivation): end-to-end verify as-needed on→surface-daily→complete→off, real plan"
 ```
+
+## Task 7 — what actually happened (2026-07-17, live against June's real space)
+
+All steps run as direct Python calls against the live Anytype API (server restarted via
+`launchctl kickstart -k gui/501/com.june.controlled-drift.server` first — it's a real launchd
+service, not a bare process; killed raw PIDs a few times before finding this out, each time it
+silently respawned).
+
+- **Step 3 (Add-box reactivation):** real Mistral capture on "CD-TEST clean the fridge" correctly
+  produced `action: reactivate`, matched token R1, receipt `created` record showed
+  `action: "reactivate"`. Confirmed exactly one CD-TEST object existed afterward (no duplicate) and
+  `Active` read back `True`.
+- **Step 4 (surfacing) — one real finding, not a feature bug:** the first two `generate_plan()`/
+  `reorder()` runs left CD-TEST (and nearly everything else) in `still_here`, not `blocks`. Root
+  cause: it was ~9:19pm real time and the scheduler's default `end_time` is 18:00 — `start_time`
+  was already past `end_time`, so the flexible-item placement loop broke immediately for every
+  candidate task, real or test. Confirmed via `build_context()`: `start_time=21:30, end_time=18:00`.
+  Traced a captured raw model response (which DID name CD-TEST, ref `T26`/`T27` on different runs —
+  temperature variance) through every stage of the real pipeline
+  (`parse_plan → _resolve_ids → _dedup_resolved_items → _drop_deferred_from_plan →
+  _ensure_all_tasks_accounted → _retime_clock_plan`) and watched the row carry `recurring: True,
+  as_needed: True` intact through every stage up to `_retime_clock_plan`, which is where the
+  time-window logic (pre-existing, unrelated to this plan) legitimately dropped it back to
+  `still_here` — not a silent loss, an honest one via the accounting guard. Re-ran with an explicit
+  widened `end_time` (23:30/23:45, the same `build_context(end_time=...)` parameter a real Focus
+  Period's `workday_end` would supply) and CD-TEST composed into a real checkoffable block row with
+  `recurring: True, as_needed: True` intact, twice across independent regenerations (resurface-
+  until-done confirmed).
+- **Step 5 (completion):** `server.complete_task_row` on the real object → `{"completed": {"done":
+  True, "as_needed": True}}`, cache flipped `done: True`, **real** `Active` read back `False` (not
+  cache-only). `reactivation_log` recorded both the on and off toggles. Confirmed via
+  `datetime_seam.recurring_items_for_today` directly (not a full regen — the source-of-truth
+  surfacing function itself) that the now-inactive object returns `due=False`. `uncomplete_task_row`
+  correctly flipped `Active` back to `True`, read-back confirmed.
+- **Step 6 (Focus Period reactivation) — the Critical-fix target case, explicitly:** deactivated
+  CD-TEST first (the review that gated this task found the ORIGINAL code could only ever
+  re-affirm an already-active item, never actually reactivate an off one — this step exists to
+  prove that's fixed). Confirmed live via `focus_period_generate._load_authoring_context()` that
+  the OFF task now appears in the grounding list. Drove a real authoring call
+  ("I want to pick CD-TEST clean the fridge back up this week") — the real model proposed
+  `reactivate_tasks: ["CD-TEST clean the fridge"]` unprompted by any hint beyond the grounding
+  list. `reflect_back` showed the "Reopening" item. Ran the exact resolve+activate call
+  `/api/focus/commit` makes (`resolve_reactivate_names` → `set_recurring_active`) against the real
+  object — resolved correctly, `Active` read back `True`. Did not write a full real Focus Period
+  object to Anytype (that would be a longer-lived, more invasive artifact on June's actual
+  planning state than a throwaway Recurring; the commit route's HTTP-level wiring was already
+  proven with mocked Anytype in Task 6's review).
+- **Step 7 (scheduled-recurring regression guard):** completed a real scheduled recurring
+  ("Clean the kitchen") via `complete_task_row` — routed to the `recurring` branch (not
+  `as_needed`), cache flipped, **real** `Active` property confirmed absent/unchanged before and
+  after (never written). Uncompleted to restore state.
+- **Step 8 (cleanup):** deleted the CD-TEST object (Anytype `DELETE` is async — confirmed via
+  poll-until-gone, ~1-2s, matching the documented pattern from earlier Anytype work this repo).
+  Also stripped the 5 CD-TEST-referencing entries from the real `reactivation_log.jsonl` (all 5
+  entries in the file at that point were CD-TEST artifacts from this verify run; zero pre-existing
+  real entries existed to preserve). Ran one final clean `generate_plan()` afterward so June's live
+  cached plan reflects real data, not a plan generated mid-verification with a since-deleted test
+  object in it.
+- **Step 9:** full suite 757 passed, conftest real-data tripwire did not fire.
+
+**Net: no code changes from Task 7 itself** (it's verification, not implementation) — this section
+and the checked boxes above are the record of what was actually driven and observed.
 
 ---
 
