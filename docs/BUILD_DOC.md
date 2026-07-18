@@ -124,6 +124,15 @@ directs, reviews, approves — she does not generate. Never use the AskUserQuest
   properties*. Creating something whose name matches an existing object silently no-ops the fields.
   Tracked in `docs/create_vs_update_design.md`.
 - **Anytype schema tag/property DELETE is async** — poll until gone; `find_property` caches.
+- **⚠ `POST /spaces/{sid}/search` RETURNS A BROKEN SUBSET.** A `query:""` search returned 99 Tasks
+  and 1 Page from a space that actually holds **296 objects across 9 types** — no Goals, no
+  Projects, no Strategies. It silently under-reports rather than erroring, so "0 results" from it
+  means nothing. **Always use `gsdo_anytype.fetch_all_objects(sid)`**, which pages
+  `GET /spaces/{sid}/objects`. This cost two wrong claims to June in one session (that she had no
+  Strategy objects, and that Focus Period was not a type).
+- **`describe_model.py` shows only the five core types.** It is the right tool for the GSDO schema
+  and the wrong tool for "does this type exist" — Focus Period, Page, Note and Bookmark are all
+  live and absent from its output.
 - **Objects-relations read back as bare id STRINGS**, under `"objects"` not `"object"`. This caused a
   load-bearing bug where task→project links always read empty.
 - **Anytype normalizes datetimes** — compare dates parsed, not as strings.
@@ -177,13 +186,43 @@ already landed several sections**, and re-deriving from the spec alone would dup
 | §3 `Active` flag | ✅ schema live | Plus a `Fixed appointment` checkbox the parallel thread added. Scheduler wiring not audited. |
 | §4 block-level attrs | 🔶 **PARTIAL** | Project has `Affective` + `Block chunk min`. **`Access conditions` is MISSING on Project.** The shared `effective()` resolver on the Python side is unaudited (the TypeScript one exists in `app/src/model/fields.ts`). |
 | §6 access-condition options | ❌ **NOT DONE** | Live tags are only the original three. Missing `Requires-deep-thinking`, `Involves-bureaucracy`, `Induces-pain`. |
-| §9 Strategy | 🔶 **PARTIAL** | Live: `Strategy status`, `Applies when`, `What for`, `Learning notes`, `Context`. Spec wants `Directive` + `Notes`. **Open: is `Directive` a new field or a rename of `What for`?** (api_contract_v2 open question 4 — needs June.) Also `Applies when` may be missing options. |
-| §17 Focus Period | ⚠️ **not an Anytype type** | The live model has exactly five types (Goal/Project/Task/Recurring/Strategy). Focus Period is stored elsewhere — check `focus_store.py` before assuming `workday_start` is a schema change. |
+| §9 Strategy | ✅ **DECIDED 2026-07-18 — no schema change** | See "Strategy decision" below. |
+| §17 Focus Period | ⬜ likely a real schema change | ⚠ **CORRECTION 2026-07-18:** Focus Period IS an Anytype type with **7 live objects**. An earlier note here said it was not — that came from reading `describe_model.py`, which reports only the five core types. `workday_start` is probably a genuine schema addition. Verify with `fetch_all_objects`, not `describe_model.py`. |
 | §1 write layer · §5 type conversion · §14 Today deltas · §11 logging | ⬜ not started | The bulk of Track B. |
 | Four API gaps | ⬜ not started | `GET /api/schema` (load-bearing), structured map endpoint, static-asset route, CORS. |
 | Authorship stamping | ⬜ not started | June's call: do it NOW, not later — the log is worthless retroactively. |
 
-**⚠ HUMAN-GATED AND PENDING: `Excitement level` is still LIVE on Project.** The source edit
+### Strategy — DECIDED 2026-07-18 (June: "use the existing strategy data structure")
+
+**Do NOT add a `Directive` field. The mockup drifted from the data model; the data model wins.**
+
+June has **12 real Strategy objects**. What they actually use:
+
+| Live field | Real usage across the 12 |
+|---|---|
+| `name` | The rule, in her words. Always present. |
+| `What for` | **Carries BOTH the trigger AND the instruction** — e.g. *"When planning days that involve leaving the house. Weigh the cumulative spoon-cost of errands, not just count."* Used on essentially all of them. |
+| `Context` | Elaboration, origin, distinctions from neighbouring strategies. Heavily used (~10 of 12). |
+| `Strategy status` | Set to `Active` throughout. |
+| `Applies when` | **Barely used — 1 of 12.** |
+| `Learning notes` | Appears unused. |
+
+Mapping the mockup onto this:
+- mockup `title` → `name`
+- mockup `directive` → **`What for`** (that is empirically where her instructions live)
+- mockup `when` → `Applies when` (exists, rarely populated)
+- mockup has **no place for `Context`**, which she uses more than anything except `name`
+
+⚠ **So the mockup UNDER-SERVES Strategy**: it shows three fields where her real data works in four-to-five, and omits the one she writes in most. The Strategies tab (Task 6) must surface `Context` and `Learning notes` as well, or the port would hide data she has already written.
+
+Not a blocker, noted: `Applies when` (select) and `What for` (text) both nominally answer "when does this apply". The redundancy predates the mockup. Cutting one is a separate, later question.
+
+### ✅ DONE — `Excitement level` retired live (2026-07-18)
+
+June authorised it; `build_project.py` was run and the unlink **confirmed by read-back**. The live
+Project type no longer carries it. Historical note below for why it was pending.
+
+**⚠ WAS HUMAN-GATED: `Excitement level` on Project.** The source edit
 landed 2026-07-17 (`build_project.py` no longer creates it, and has a retire block that unlinks
 it), but the script was deliberately **not run** — schema writes against June's space are hers to
 approve. Until she runs it, the live type and the builder disagree. This is the expected state,
