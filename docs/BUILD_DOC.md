@@ -265,3 +265,45 @@ not a defect; it just needs her go-ahead.
 
 **Deferred, do not build:** data-health count line (declined), global capture hotkey (declined),
 calendar sync (parked post-v1), Needs-Clarifying collapse (§13, revisit when a real use appears).
+
+### Field semantics — where they are surfaced (2026-07-18)
+
+`scripts/field_semantics.py` is the single definition. It is surfaced at every seam an agent
+touches before writing:
+
+| Seam | How |
+|---|---|
+| `describe_model.py` | one line of meaning inline per field |
+| `cd_mcp_server.py` | routing brief appended to all three write tools + a `field_meaning` tool |
+| `gsdo_objects.py` | docstring pointer; raises on the one objectively-invalid case |
+| **`~/.claude/skills/drift/SKILL.md`** | routing table + "never write your own reasoning into her fields" |
+
+⚠ **The drift skill is NOT version-controlled** (pre-existing gap, flagged in
+`docs/handoff_2026-07-11_build-protocol-and-self-describe.md`, Anytype task captured). The
+2026-07-18 edit adding field routing lives on one machine only. Re-apply it if the skill is
+ever restored from elsewhere.
+
+⚠ **`field_semantics.py` does NOT yet cover Focus Period** — 41 fields, none of them its 12
+(`Period start/end`, `Intent`, `Availability start/end/note`, `Days off`, `Days on`,
+`Output format`, `Workday end`, `Foreground projects`, `Paused projects`). Cause: the agent
+worked from `describe_model.py`, which filters to the five core types. Same blind spot that
+produced two false claims to June. Note `Workday end` exists but `Workday start` does not,
+confirming backend spec §17.
+
+### Strategy `What for` — DECIDED 2026-07-18: do NOT split
+
+June's workflow: the trigger selects relevant strategies, the instruction applies a specific
+one, `Applies when` is the machine-matchable layer. She asked whether separating trigger from
+instruction is worth it or overengineering.
+
+Not worth it, at this scale. Two-stage retrieval pays off when reading the whole candidate set
+is expensive; her 12 strategies total ~2,400 characters and the model reads them all in one
+call either way. Splitting one text field into two that both land in the same prompt changes
+the labels, not the information — organizational schema helps *retrieval*, not *context
+assembly*. And separated, each half reads worse for a human; she reads these.
+
+**The cheap filter already exists and is empty:** `Applies when` is populated on 1 of 12
+objects. Populating it is free and gets the selection benefit with no schema change.
+
+**Revisit if** strategy selection becomes its own LLM call against a much larger set (~50+).
+That is the signal — not a field count.
