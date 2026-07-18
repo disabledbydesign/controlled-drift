@@ -95,3 +95,44 @@ def test_open_block_emitted_only_when_wellbeing_work_exists():
     assert block is not None
     assert block["fixed_time"] is None and block["_open_block"] is True
     assert "choice" in block["name"].lower()          # it's HER choice, not a picked task
+
+
+def test_daily_life_plus_hobby_stays_schedulable():
+    """A task linked to BOTH a Daily-life project and a Fun/hobby one must STAY in the plan.
+
+    Regression: NON_HOBBY_SIDES was an allow-list that had to be exhaustively maintained, and
+    "Daily life" (added 2026-07-13 — medical, household, self-care, social) was never added to
+    it. Such a task was classified as pure hobby and silently dropped. Latent when found; this
+    pins the fix so it cannot come back.
+    """
+    from daily_plan import partition_by_side
+    projects = [
+        {"name": "medical", "side": "Daily life"},
+        {"name": "Crafts", "side": "Fun / hobby"},
+    ]
+    tasks = [{"name": "order supplies", "linked_projects": ["medical", "Crafts"]}]
+    schedulable, hobby = partition_by_side(tasks, projects)
+    assert [t["name"] for t in schedulable] == ["order supplies"]
+    assert hobby == []
+
+
+def test_a_future_unknown_side_also_stays_schedulable():
+    """Never hidden when unsure — a Side value nobody has taught the code about must not exclude."""
+    from daily_plan import partition_by_side
+    projects = [
+        {"name": "Something New", "side": "Admin"},   # a side that does not exist today
+        {"name": "Crafts", "side": "Fun / hobby"},
+    ]
+    tasks = [{"name": "a task", "linked_projects": ["Something New", "Crafts"]}]
+    schedulable, hobby = partition_by_side(tasks, projects)
+    assert [t["name"] for t in schedulable] == ["a task"]
+
+
+def test_pure_hobby_is_still_excluded():
+    """The actual behaviour must be unchanged: hobby-only work still gets held out."""
+    from daily_plan import partition_by_side
+    projects = [{"name": "Crafts", "side": "Fun / hobby"}]
+    tasks = [{"name": "leatherworking", "linked_projects": ["Crafts"]}]
+    schedulable, hobby = partition_by_side(tasks, projects)
+    assert schedulable == []
+    assert [t["name"] for t in hobby] == ["leatherworking"]

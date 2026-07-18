@@ -1057,7 +1057,11 @@ def include_hobby_block():
 # name, so a renamed option has to be listed here or the match silently stops firing. "Obligation"
 # was renamed to "Work" on 2026-07-18 (backend spec §12); the old name is kept alongside the new one
 # so any not-yet-refreshed cache, fixture or export still classifies correctly.
-NON_HOBBY_SIDES = ("Work", "Obligation", "Wellbeing")
+HOBBY_SIDE = "Fun / hobby"
+
+# Kept for documentation and for callers that want the explicit list. NOT used as the gate —
+# see the inversion in partition_by_side below and the reason it changed.
+NON_HOBBY_SIDES = ("Work", "Obligation", "Wellbeing", "Daily life")
 
 
 def partition_by_side(tasks, projects):
@@ -1082,7 +1086,19 @@ def partition_by_side(tasks, projects):
             schedulable.append(t)  # necessary rest always stays, whatever it's linked to
             continue
         sides = [side_by_name.get(pn) for pn in (t.get("linked_projects") or [])]
-        is_hobby = any(s == "Fun / hobby" for s in sides) and not any(s in NON_HOBBY_SIDES for s in sides)
+        # A task is hobby-excluded only if it has a hobby side AND NO OTHER NAMED SIDE.
+        #
+        # ⚠ FIXED 2026-07-18. This used to ask `not any(s in NON_HOBBY_SIDES)` — an allow-list that
+        # had to be exhaustively maintained, and was NOT: "Daily life" was added as a fourth Side on
+        # 2026-07-13 and never added to the tuple. So a task linked to BOTH a Daily-life project
+        # (medical, household, self-care, social) and a Fun/hobby one was classified as pure hobby
+        # and silently held out of the plan. Latent, not active — zero tasks matched when found.
+        #
+        # The inversion also matches this function's own documented principle, which the allow-list
+        # contradicted: "Unlinked or unknown-side tasks stay schedulable — never hidden when unsure."
+        # Any side that is not the hobby one now keeps a task schedulable, so a Side value added in
+        # future cannot silently start excluding work.
+        is_hobby = any(s == HOBBY_SIDE for s in sides) and not any(s and s != HOBBY_SIDE for s in sides)
         (hobby_excluded if is_hobby else schedulable).append(t)
     return schedulable, hobby_excluded
 
