@@ -109,3 +109,25 @@ def test_complete_doubly_flagged_row_routes_as_needed_not_recurring(monkeypatch)
     assert "deact" in calls                     # took the real-deactivation path
     assert body["completed"].get("as_needed") is True
     assert body["completed"].get("recurring") is not True  # did NOT take the cache-only branch
+
+
+# --- recurring_active.as_needed_objects (shared filter, review fix 2026-07-17) --------------
+# Task 6's review found the Focus-Period grounding gap: two independent, drifted copies of this
+# filter (one per entry point) let one path silently diverge from another. This is now the single
+# shared source both entry points (and the fixed authoring grounding) read from.
+
+def test_as_needed_objects_includes_inactive_ones():
+    # The whole point: an OFF as-needed task must still be found (it's the reactivation target).
+    import recurring_active as ra
+    off = {"id": "r1", "name": "Clean the fridge", "type": {"key": "gsdo_recurring"},
+           "properties": [{"key": "interval_unit", "select": {"name": "as_needed"}},
+                          {"key": "active", "checkbox": False}]}
+    assert ra.as_needed_objects([off]) == [off]
+
+
+def test_as_needed_objects_excludes_scheduled_recurring_and_other_types():
+    import recurring_active as ra
+    scheduled = {"id": "r2", "name": "Take meds", "type": {"key": "gsdo_recurring"},
+                 "properties": [{"key": "interval_unit", "select": {"name": "day"}}]}
+    project = {"id": "p1", "name": "Take meds", "type": {"key": "gsdo_project"}}  # name collision
+    assert ra.as_needed_objects([scheduled, project]) == []

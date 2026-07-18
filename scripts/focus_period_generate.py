@@ -16,6 +16,7 @@ import gsdo_anytype as g
 import plan_generate
 import daily_plan
 import grain
+import recurring_active
 
 
 def _load_authoring_context():
@@ -34,7 +35,16 @@ def _load_authoring_context():
     as a "Work on X" block (already covered by the project name above) or is excluded from the
     plan outright (Fun/hobby, workstreams) — including those task names here would just be
     dev-backlog noise (confirmed live 2026-07-16: 35 of 182 tasks belonged to Build Controlled
-    Drift alone, the app's own dev project, which is Side=Fun/hobby)."""
+    Drift alone, the app's own dev project, which is Side=Fun/hobby).
+
+    As-needed Recurring names are merged in SEPARATELY from the fetch above, regardless of
+    current Active state (Task 6 review, 2026-07-17): daily_plan.load_active_items only folds an
+    as_needed Recurring into `tasks` when it's "due today" — and for an as_needed item, due IS
+    its Active state (datetime_seam.today_fixed_time). So an OFF task — the one June needs to
+    NAME to reactivate — was structurally invisible to the authoring prompt's grounding list,
+    meaning reactivate_tasks could only ever re-affirm an already-active task, never actually
+    reactivate one. A second, targeted fetch avoids reshaping load_active_items' broader "due
+    today" contract just for this one grounding need."""
     sid = g.get_space_id()
     goals, projects, tasks, *_rest = daily_plan.load_active_items(sid)
     project_list = [p["name"] for p in projects if p.get("name") and not p.get("is_workstream")]
@@ -43,6 +53,10 @@ def _load_authoring_context():
     task_list = [t["name"] for t in tasks
                  if t.get("name") and (not t.get("linked_projects")
                                         or any(pn in discrete_ok for pn in t["linked_projects"]))]
+    all_objects = g.fetch_all_objects(sid)
+    for o in recurring_active.as_needed_objects(all_objects):
+        if o.get("name") and o["name"] not in task_list:
+            task_list.append(o["name"])
     return project_list, goal_list, task_list
 
 

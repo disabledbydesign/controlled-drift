@@ -99,9 +99,9 @@ def test_parse_weed_defaults_reactivate_ref_to_none():
 # --- as-needed reactivation candidates in the weed context (Task 5) --------
 
 def test_as_needed_recurrings_filters_by_interval_unit():
-    as_needed = {"id": "r1", "name": "Clean the fridge",
+    as_needed = {"id": "r1", "name": "Clean the fridge", "type": {"key": "gsdo_recurring"},
                  "properties": [{"key": "interval_unit", "select": {"name": "as_needed"}}]}
-    daily = {"id": "r2", "name": "Take meds",
+    daily = {"id": "r2", "name": "Take meds", "type": {"key": "gsdo_recurring"},
              "properties": [{"key": "interval_unit", "select": {"name": "day"}}]}
     out = cg._as_needed_recurrings([as_needed, daily])
     assert out == [as_needed]
@@ -192,7 +192,7 @@ def test_capture_creates_links_and_skips(tmp_path, monkeypatch):
 def test_capture_reactivates_instead_of_creating(tmp_path, monkeypatch):
     # A matched as-needed task activates the EXISTING Recurring — gsdo_objects.create must NOT be
     # called for it, and the receipt shows action:"reactivate" so the surface can render "reopened X".
-    recurrings = [{"id": "rid-fridge", "name": "Clean the fridge",
+    recurrings = [{"id": "rid-fridge", "name": "Clean the fridge", "type": {"key": "gsdo_recurring"},
                    "properties": [{"key": "interval_unit", "select": {"name": "as_needed"}},
                                   {"key": "active", "checkbox": False}]}]
     canned = json.dumps({"opening": "x", "capacity_read": None, "groups": [

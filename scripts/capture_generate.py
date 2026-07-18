@@ -101,14 +101,11 @@ def _as_needed_recurrings(recurrings):
     """Recurring objects whose Interval unit is as_needed — the reactivation candidates the weed
     context offers the model, regardless of current Active state (an OFF one is exactly the case
     to reactivate; an already-ON one is still a valid re-tap the model can route to `reactivate`
-    rather than silently duplicate)."""
-    out = []
-    for r in recurrings:
-        props = {p.get("key"): p for p in r.get("properties", [])}
-        unit = (props.get("interval_unit") or {}).get("select") or {}
-        if unit.get("name") == "as_needed":
-            out.append(r)
-    return out
+    rather than silently duplicate). Delegates to recurring_active.as_needed_objects — the SINGLE
+    shared filter every reactivation entry point reads from (Task 6 review, 2026-07-17: two
+    independently-implemented copies of this exact filter let Focus-Period authoring's grounding
+    silently diverge from this one and drop the off case entirely)."""
+    return recurring_active.as_needed_objects(recurrings)
 
 
 def _build_as_needed_ref_table(as_needed):

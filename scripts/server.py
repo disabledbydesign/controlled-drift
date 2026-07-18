@@ -192,6 +192,30 @@ def uncomplete_task_row(task_id):
     return 200, {"uncompleted": confirmed, "plan": plan or {"empty": True}}
 
 
+def _reactivate_named_tasks(reactivate_names, objects):
+    """Resolve + activate the as-needed tasks a Focus Period's `reactivate_tasks` named, shared by
+    /api/focus/commit (new period) and /api/focus/update (edit-confirm an existing one) — both
+    write a period via the same reflect_back template, which shows the same 'Reopening' item on
+    either path, so both must actually honor it. Returns (unresolved_names, failed_activations);
+    both empty when there was nothing to do. Never raises — resolution/activation problems are
+    signal for the caller to surface, not a reason to fail the period write that already
+    succeeded."""
+    if not reactivate_names:
+        return [], []
+    try:
+        resolved_ids, unresolved = focus_period_adapter.resolve_reactivate_names(
+            reactivate_names, objects=objects)
+    except Exception as e:
+        return [], [{"error": str(e)}]
+    failed = []
+    for rid in resolved_ids:
+        try:
+            recurring_active.set_recurring_active(rid, True)
+        except Exception as e:
+            failed.append({"id": rid, "error": str(e)})
+    return unresolved, failed
+
+
 # A generation (the LLM call) takes ~60-110s — far longer than a phone browser will hold a
 # connection open, so it must NOT block the HTTP request (that's the "build my plan from bed"
 # timeout: the phone gives up, the server finishes into a dead socket). Instead we kick the
@@ -845,17 +869,8 @@ class Handler(BaseHTTPRequestHandler):
             # Reactivate any as-needed tasks she named this period ("keep the dishes going") — the
             # period write already succeeded, so a reactivation problem is surfaced alongside the
             # success, never silently dropped and never rolling back the period itself.
-            reactivate_names = fields.get("reactivate_tasks") or []
-            unresolved = []
-            reactivate_failed = []
-            if reactivate_names:
-                resolved_ids, unresolved = focus_period_adapter.resolve_reactivate_names(
-                    reactivate_names, objects=data)
-                for rid in resolved_ids:
-                    try:
-                        recurring_active.set_recurring_active(rid, True)
-                    except Exception as e:
-                        reactivate_failed.append({"id": rid, "error": str(e)})
+            unresolved, reactivate_failed = _reactivate_named_tasks(
+                fields.get("reactivate_tasks") or [], data)
             focus_store.clear()
             resp = {"ok": True, "id": oid, "name": name}
             if unresolved:
@@ -924,8 +939,19 @@ class Handler(BaseHTTPRequestHandler):
             except Exception as e:
                 self._send(500, {"error": f"read-back failed: {e}"})
                 return
+            # Same reactivation step /api/focus/commit takes — an edit can also name a task to
+            # pick back up ("also start the dishes again"), and reflect_back's Reopening item
+            # shows on the edit path too (it's the same deterministic template both routes call),
+            # so this route must honor what it already confirmed rather than silently dropping it.
+            unresolved, reactivate_failed = _reactivate_named_tasks(
+                fields.get("reactivate_tasks") or [], data)
             focus_store.clear()
-            self._send(200, {"ok": True, "id": oid, "name": name})
+            resp = {"ok": True, "id": oid, "name": name}
+            if unresolved:
+                resp["reactivate_unresolved"] = unresolved
+            if reactivate_failed:
+                resp["reactivate_failed"] = reactivate_failed
+            self._send(200, resp)
             return
 
         self._send(404, {"error": f"no route {self.path}"})

@@ -75,6 +75,12 @@ def _task_obj(oid, name, linked_project_ids=None):
     return {"id": oid, "type": {"key": "task"}, "name": name, "properties": props}
 
 
+def _recurring_obj(oid, name, interval_unit="as_needed", active=False):
+    return {"id": oid, "type": {"key": "gsdo_recurring"}, "name": name,
+            "properties": [{"key": "interval_unit", "select": {"name": interval_unit}},
+                           {"key": "active", "checkbox": active}]}
+
+
 def test_load_authoring_context_filters_workstreams_hobby_and_block_tasks(monkeypatch):
     monkeypatch.setattr(fpg.g, "get_space_id", lambda: "sid")
     monkeypatch.setattr(dp.g, "fetch_all_objects", lambda sid: [
@@ -93,3 +99,18 @@ def test_load_authoring_context_filters_workstreams_hobby_and_block_tasks(monkey
     assert projects == ["Daily Chore Project", "Big Work Project", "Hobby Project"]  # workstream out
     assert goals == ["Stay a scholar-builder"]
     assert tasks == ["Water the plants", "Orphan errand"]
+
+
+def test_load_authoring_context_includes_off_as_needed_recurring(monkeypatch):
+    # THE fix (Task 6 review, 2026-07-17): daily_plan.load_active_items only folds an as_needed
+    # Recurring into `tasks` when it's "due today" — which for as_needed IS its Active state — so
+    # an OFF task (the one June needs to NAME to reactivate) was structurally invisible to the
+    # authoring prompt's grounding list. It must now be merged in regardless of Active state.
+    monkeypatch.setattr(fpg.g, "get_space_id", lambda: "sid")
+    monkeypatch.setattr(dp.g, "fetch_all_objects", lambda sid: [
+        _recurring_obj("r1", "Clean the fridge", interval_unit="as_needed", active=False),  # OFF
+        _recurring_obj("r2", "Water the garden", interval_unit="as_needed", active=True),   # ON
+    ])
+    _projects, _goals, tasks = fpg._load_authoring_context()
+    assert "Clean the fridge" in tasks    # the fix: an OFF as-needed task is now visible
+    assert "Water the garden" in tasks    # an already-active one still visible (was already fine)

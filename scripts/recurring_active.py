@@ -23,6 +23,30 @@ def _active_of(obj):
     return (by_name.get("Active") or {}).get("checkbox")
 
 
+def as_needed_objects(objects):
+    """Recurring objects whose Interval unit is as_needed, from a raw Anytype objects list —
+    REGARDLESS of current Active state. An OFF one is exactly the reactivation target (Decision
+    4: 'match her words to her existing as-needed tasks'), so this must never filter by Active —
+    a caller that only wants active/inactive ones filters the returned list itself. The single
+    shared source for every reactivation entry point's grounding/matching (Add-box weeding,
+    Focus-Period authoring) — previously duplicated per-caller, which let one caller's grounding
+    context silently diverge from another's (Task 6 review finding, 2026-07-17: the Focus-Period
+    authoring prompt's task grounding came from daily_plan.load_active_items' 'due today' filter,
+    which for an as_needed item IS its Active state — so an OFF task could never be named for
+    reactivation through that path at all)."""
+    out = []
+    for o in objects:
+        t = o.get("type")
+        tk = t.get("key") if isinstance(t, dict) else t
+        if tk != "gsdo_recurring":
+            continue
+        props = {p.get("key"): p for p in o.get("properties", [])}
+        unit = (props.get("interval_unit") or {}).get("select") or {}
+        if unit.get("name") == "as_needed":
+            out.append(o)
+    return out
+
+
 def set_recurring_active(rid, active):
     """Read Active's PRE-state, write the new value, read it BACK BY DISPLAY NAME to prove it persisted,
     then log the (old → new) toggle. `active` is a bool; returns the new state. Reads its own before-state

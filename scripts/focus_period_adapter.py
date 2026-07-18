@@ -20,6 +20,7 @@ import sys, os, datetime as dt
 sys.path.insert(0, os.path.dirname(__file__))
 import gsdo_anytype as g
 import focus_period_author as author
+import recurring_active
 
 _MONTHS = ["", "Jan", "Feb", "Mar", "Apr", "May", "Jun",
            "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"]
@@ -109,16 +110,8 @@ def resolve_reactivate_names(names, objects=None):
     `objects` may be passed (already-fetched, e.g. by the commit route) to avoid a second fetch."""
     if objects is None:
         objects = g.fetch_all_objects(g.get_space_id())
-    by_name = {}
-    for o in objects:
-        t = o.get("type")
-        tk = t.get("key") if isinstance(t, dict) else t
-        if tk != "gsdo_recurring" or not o.get("name"):
-            continue
-        props = {p.get("key"): p for p in o.get("properties", [])}
-        unit = (props.get("interval_unit") or {}).get("select") or {}
-        if unit.get("name") == "as_needed":
-            by_name[o["name"]] = o["id"]
+    by_name = {o["name"]: o["id"] for o in recurring_active.as_needed_objects(objects)
+              if o.get("name")}
     resolved, unresolved = [], []
     for n in (names or []):
         if n in by_name:
