@@ -970,3 +970,54 @@ as-is — it is the working precedent, and it is load-bearing at runtime, not on
 `scripts/surface_template.html` · `docs/overlay_daily.html`. Retire only once §5's absorbed
 capabilities are confirmed present in the new surface — including the export-diff fallback, which
 spec §1 explicitly keeps.
+
+---
+
+# RESOLVED 2026-07-17 — retiring-surface capabilities (supersedes open question 7)
+
+Open question 7 listed seven capabilities as "couldn't locate in v4." That list was built by
+keyword search across dense `createElement` markup and **three of its seven entries were wrong.**
+Verified directly against `design/mockups/review-reorganize-mobile-v4.html`:
+
+## Already in v4 — do NOT rebuild
+
+**Hide-done.** v4 has `isInactive(n)`, and it is *level-aware* — strictly better than the old
+surface's single "Hide done" checkbox (`surface_template.html:267`):
+
+```js
+isInactive(n){ const v=n.vals||{}; switch(n.level){
+  case 'GOAL':      return ['Parked','Achieved'].includes(v.status);
+  case 'TASK':      return !!v.done||['Done','Parked'].includes(v.status);
+  case 'RECURRING': return !!v.paused;
+  case 'STRATEGY':  return v.status==='Retired';
+  default:          return v.engagement==='Done'||['Parked','Inactive'].includes(v.status);
+} }
+```
+
+**Title filter.** Present, with the *identical* placeholder to the old surface — `Filter by title…`
+(v4 ×3, `surface_template.html:266`). Not missing.
+
+**Inline primary field.** v4's chip row (`chipsFor(n)`) covers this. Closed as already-handled.
+
+## Retired by June's decision (2026-07-17)
+
+- **Notes-to-Claude** + `patternNotes`
+- **Expand / collapse all**
+
+## Build — genuinely absent
+
+1. **Cross-tab search.** The old surface was ONE tree, so one box searched everything. v4 splits
+   structure across three tabs (Map / Routines / Strategies), each filtering only itself. Build a
+   search that spans all three and indicates which tab each hit lives in. (This is the only real
+   difference; the filter itself is unchanged.)
+
+2. **Orphan buckets — load-bearing, do not drop.** `review_surface.py:234-247` renders catch-all
+   sections for unparented objects: `⚠ NO PROJECT — orphan tasks`, `⚠ NO PROJECT — orphan
+   recurring items`, `⚙ Workstreams with no parent project`, plus projects with no goal.
+   **Why it matters:** capture and weeding produce unfiled objects, and in a pure
+   Goal→Project→Task tree an unfiled task renders NOWHERE — it silently does not exist. The
+   buckets are what stop objects vanishing. Needs a backend counterpart: the tree endpoint must
+   return unparented objects rather than only the rooted tree.
+
+3. **Data-health line.** `review_surface.py:263-268` — counts of orphan tasks, orphan recurrings,
+   projects with no goal, workstream total. One line, pairs with the buckets.
