@@ -666,7 +666,6 @@ def build_context(capacity=None, start_time=None, end_time=None, extra=None):
     extra_rec = _persisted_recurring_rows(all_undone, tasks, projects)  # missed non-appointment recurrings
     tasks = tasks + extra_rec
     rollover_ids = {u["id"] for u in task_roll} | {r["id"] for r in extra_rec}
-    undone_yest = task_roll   # kept for the (about-to-be-removed) narration block; see Task 6
     period = period_ctx["period"]
     is_off, in_window = period_ctx["is_off"], period_ctx["in_window"]
 
@@ -791,14 +790,6 @@ def build_context(capacity=None, start_time=None, end_time=None, extra=None):
         context_block += ("\n\n## No active focus period\n"
                           "- There's no configuration for this stretch. If today's plan feels "
                           "off, June may want to set a focus period — offer it, gently, once.")
-    if undone_yest:
-        roll = ("\n\n## Carried over from yesterday (not marked done)\n"
-                "These were on yesterday's plan and weren't completed. Decide which GENUINELY should "
-                "carry into today — a missed call, an errand that still needs doing — and place those. "
-                "Let go the ones that were fine to skip; not everything should roll forward.\n")
-        for u in undone_yest:
-            roll += f"  - {u['name']}\n"
-        context_block += roll
     full_context = context_block + "\n" + schedule_block
     # Return schedulable (not all tasks): wellbeing work is the open block, so it isn't
     # individually accounted / surfaced / ref-tokened downstream (never-pick-her-threads).
