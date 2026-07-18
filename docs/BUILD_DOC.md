@@ -366,3 +366,97 @@ objects. Populating it is free and gets the selection benefit with no schema cha
 
 **Revisit if** strategy selection becomes its own LLM call against a much larger set (~50+).
 That is the signal — not a field count.
+
+---
+
+## 9. Error-catching structure — because dispositions do not survive a session
+
+June, 2026-07-18: *"I'd rather have a structure that catches errors and issues than a disposition
+you carry that gets lost across each session and whether one of us remembers to do it. No one
+gets everything perfect the first shot."*
+
+This section exists because on 2026-07-18 several real defects were caught by an instance who
+*happened to remember* being burned an hour earlier. That is not a mechanism. Below, each pattern
+is written as a **rule with a place it fires**, so it survives a context clear.
+
+### 9.1 A negative result is not evidence of absence
+**Fires: any time you are about to report that something does not exist.**
+
+Cost when skipped: two false claims to June in one session — that she had no Strategy objects (she
+has 12) and that Focus Period was not a type (it is, with 7 objects). Both from queries that
+returned nothing without anyone checking whether the query worked.
+
+- `POST /spaces/{sid}/search` **silently returns a broken subset**. Use `fetch_all_objects`.
+- `describe_model.py` used to show only five types. Now discovers, but the lesson stands: know
+  whether your tool is filtered before reading its silence as data.
+- Before writing "X is missing / unused / not read", state HOW you checked and whether that method
+  could have missed it. A grep for a symbol is weak; reading the function is strong.
+
+### 9.2 Claims about the mockup in durable comments must be verifiable
+**Fires: writing any comment asserting what v4 does.**
+
+Six confident-but-false comments shipped in one build: a cited function (`filterMoveTree`) that
+does not exist; a claim that the `dnd` branch was unreachable when v4:747 reaches it; a caption
+"to remove" that was never in v4. None are typechecked or tested, and each misleads the next
+reader — who greps, finds nothing, and cannot tell whether the code or the comment is wrong.
+
+- Cite a **line number** you actually looked at, or write **"unverified"**. Both are fine. A
+  confident unsourced assertion is not.
+
+### 9.3 Token corrections must name the ELEMENT the evidence came from
+**Fires: any change to `design/tokens/tokens.ts`.**
+
+Four tokens were "corrected" against gallery evidence about a different element: `disabled` (from
+a text glyph and a chip border, applied to checkboxes), `topAccentGlow` (from a tab underline),
+`field` (from recurrence chips and a button — the gallery has ZERO inputs or textareas), and `ctl`
+(from status chips, applied to a card, which rendered as an ellipse).
+
+The method was the fault: mine values from a line range, attribute them to the token under review.
+Gallery line ranges always hold several kinds of element.
+
+- A correction comment must say **what element** the value was read from, not just the line — e.g.
+  "gallery L153, the unset *Parked chip*". If the element kind does not match the token's use, it
+  is not evidence.
+- Three of the four were caught only by LOOKING at the running app. Radii and colours need a
+  visual check on a real surface; `ctl` was inspected, judged "not obviously wrong", and was wrong.
+
+### 9.4 Dead paths are not ported
+**Fires: porting anything from v4.**
+
+Removed on this basis: `renderApp`/`header`/`tab`, `typeSection`, `menuStrip`, `editRow`,
+`fmtChunk`, `fRow`, `daysOffDisp`, `st.focusEditField`. An unwired component is the built-but-dead
+shape §3 exists to prevent, and a port of dead code with *inferred* placement is worse than its
+absence — the next reader may trust the placement.
+
+- Defined-but-never-called in v4 → say so, do not port.
+
+### 9.5 A test that falls back is worse than no test
+**Fires: writing a test.**
+
+One test asserted the classifier and fell back when the real call failed — green, and proving
+nothing. Drive the real function. If the fixture shape is wrong, fix the fixture.
+
+### 9.6 If a human is the audience, the format is human
+**Fires: producing anything June will read.**
+
+A migration log shipped as JSONL for her review; she cannot read it. `scripts/migration_report.py`
+and `scripts/semantics_report.py` are the pattern: grouped, one visual block per item, the original
+quoted, a checkbox and a notes line, judgment calls surfaced first.
+
+### 9.7 Her data does not go to a git remote
+**Fires: `git add` on anything generated from her objects.**
+
+Two review sheets quoting her medical and financial task detail were committed before anyone
+noticed. Caught pre-push; the history was scrubbed. `scripts/data/` and the generated review sheets
+are gitignored **by pattern** so future output is covered without anyone remembering.
+
+### 9.8 What is still only a disposition
+Named honestly, because pretending otherwise is the failure this section is about:
+
+- **Calibrating a review-gate brief** — how hard to push, what a real finding looks like versus
+  padding. Currently tacit. Partial mitigation: the gate briefs in this session's git history are
+  worked examples.
+- **Noticing that an inherited doc claim is stale.** Four "built-but-dead" field claims from
+  2026-07-11 were stale by 2026-07-18. §9.1 covers the query case; it does not cover "this doc is
+  old". The **§3 fifth clause** (a change to what reads a field updates its entry) is the
+  structural answer, but it only works going forward.
