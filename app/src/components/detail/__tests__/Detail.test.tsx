@@ -81,7 +81,7 @@ function block(container: HTMLElement, label: string): HTMLElement {
 const TASK_UNDER_CRAFTS = 'we7liy';
 const CRAFTS = 'znqg2i';
 
-describe('the three states of an inheritable field (backend spec §4)', () => {
+describe('the two states of an inheritable field — inherited, or set here', () => {
   it('state 1 — key ABSENT: shows which ancestor the value comes from', () => {
     const { container } = open(TASK_UNDER_CRAFTS);
     const b = block(container, 'Access conditions');
@@ -99,7 +99,7 @@ describe('the three states of an inheritable field (backend spec §4)', () => {
     expect(b.textContent).toContain('Nothing to inherit from a parent yet');
   });
 
-  it('state 2 — key PRESENT but EMPTY: reads as a deliberate none, NOT as inheritance', () => {
+  it('key PRESENT but EMPTY: shows the editor, NOT the inherit box — an empty selection is a valid value', () => {
     const graph = freshGraph();
     const idx = index(graph);
     const n = idx.byId.get(TASK_UNDER_CRAFTS) as ModelNode;
@@ -110,7 +110,13 @@ describe('the three states of an inheritable field (backend spec §4)', () => {
     );
     const b = block(container, 'Access conditions');
 
-    expect(b.textContent).toContain('Set here as none — not inherited.');
+    // June 2026-07-18: "Selecting no options is a valid shape (if leaving the house isn't
+    // checked, it doesn't involve leaving the house)." So an empty SET field is ordinary —
+    // the editor renders, the inherit box does not, and nothing editorialises about it.
+    // v4 has no such text either; an earlier pass added it and it was removed.
+    expect(b.textContent).not.toContain('Inheriting from');
+    expect(b.textContent).not.toContain('Nothing to inherit');
+    expect(b.textContent).toContain('Involves leaving house'); // the option list, i.e. the editor
     // The three things that make it a DIFFERENT render from state 1:
     expect(b.textContent).not.toContain('Inheriting from');
     expect([...b.querySelectorAll('div')].filter((d) => d.style.borderStyle === 'dashed')).toHaveLength(0);

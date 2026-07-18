@@ -18,45 +18,28 @@ export interface InheritRowProps {
 /**
  * v4 `inheritRow(n,vk,label,hint,buildEditor)` (~488).
  *
- * ── WHAT THE THREE STATES ARE (backend spec §4) ──────────────────────────────
- * The key's PRESENCE on the node, not its truthiness, is what carries meaning:
+ * ── TWO STATES, not three (June, 2026-07-18) ────────────────────────────────
+ * A field is either INHERITED from an ancestor, or SET HERE. That is the whole model, and the
+ * `Inherit | Custom` segments already carry it.
  *
- *   1. key ABSENT           → inherit from the nearest ancestor that has the key
- *   2. key PRESENT, empty   → an intentional "none set HERE". Not inheritance.
- *   3. key PRESENT, a value → the node's own value
+ * **An empty value on a SET field is a normal, valid shape — not a special case.** June:
+ * "Selecting no options is a valid shape (if leaving the house isn't checked, it doesn't
+ * involve leaving the house)." So `Custom` with nothing checked simply means none of the
+ * options apply. It needs no explanation and gets none.
  *
- * `isOwnValue(n,vk)` distinguishes 1 from 2-and-3 (`hasOwnProperty`). `effective(idx,n,vk)`
- * answers "what would I inherit" — it starts at the PARENT, never at `n`, and stops at the
- * first ancestor that HAS the key, so an ancestor whose value is an intentional empty returns
- * `{val:'', from:<that ancestor>}` — a different answer from "nothing inherited",
- * `{val:'', from:null}`. All four resulting renders are visually distinct:
+ * ⚠ An earlier pass added a line reading "Set here as none — not inherited." under that case,
+ * describing it as an honest third state. It was REMOVED: v4 has no such text (its inheritRow
+ * renders exactly two branches — the dashed box, or the editor), and it editorialised an
+ * ordinary state as if it were unusual.
  *
- *   absent + ancestor has a value  → dashed italic box, "Inheriting from Crafts — …"
- *   absent + ancestor set it empty → dashed italic box, "Inheriting from Crafts — none set"
- *   absent + no ancestor has it    → dashed italic box, "Nothing to inherit from a parent yet"
- *   present but empty              → the EDITOR, `Custom` segment lit, + "Set here as none"
- *   present with a value           → the EDITOR, `Custom` segment lit
+ * The underlying DATA model still has the distinction that backend spec §4 turns on, and the
+ * segments are what express it:
+ *   · key ABSENT   → inheriting. `Inherit` lit. Dashed box naming the ancestor, or
+ *                    "Nothing to inherit from a parent yet".
+ *   · key PRESENT  → set here. `Custom` lit, editor shown — whether the value is empty or not.
  *
- * ── THE ONE ADDITION TO v4 ───────────────────────────────────────────────────
- * v4 distinguishes present-but-empty from inheriting only by which segment button is lit and
- * whether the editor or the dashed box is showing. That is real, but it is a difference the
- * eye has to reconstruct from two weak signals. The plan (Task 5) requires the two be
- * "distinguishable to the user", so the non-inheriting branch adds ONE line of text when the
- * node's own value is empty: `Set here as none — not inherited.` Nothing else is added, and
- * the styling matches v4's own `hint` line so it reads as part of the same control.
- *
- * ── WHERE THIS MAY BE USED ───────────────────────────────────────────────────
- * ⚠ Only for keys in `INHERIT` (`access`, `blockMin`, `affective`) AND only when
- * `hasSchedulableAncestor(n)`. v4:572 pairs the two conditions and `Field` reproduces that
- * gate. Rendering this for any other field shows an inheritance story that is not true, with
- * no visual signal that it is not true.
- *
- * ── the two segment buttons ──────────────────────────────────────────────────
- * `Inherit` → `clearVal(id,vk)`, which DELETES the key (state 1).
- * `Custom`  → `setVal(id,vk, (inheriting ? eff.val : n.vals[vk]) || '')` — v4's expression
- * verbatim. Pressing Custom while inheriting COPIES the inherited value down onto the node,
- * so the switch does not lose what was showing; pressing it with an own value is a no-op
- * write. `|| ''` is what makes "Custom with nothing inherited" land in state 2.
+ * `Inherit` calls `clearVal`, which DELETES the key. It must never write '' — that would set
+ * the field here and silently stop the ancestor walk.
  */
 export function InheritRow({ ctx, n, vk, label, hint, editor }: InheritRowProps) {
   const { T, graph, idx, apply } = ctx;
@@ -91,9 +74,8 @@ export function InheritRow({ ctx, n, vk, label, hint, editor }: InheritRowProps)
     </button>
   );
 
-  // v4's `n.vals[vk]` read for the Custom branch, and for the added empty-note below.
+  // v4's `n.vals[vk]` read for the Custom branch.
   const own = n.vals[vk];
-  const ownIsEmpty = !inheriting && (own === '' || own === null || own === undefined);
 
   const body = inheriting ? (
     <div
@@ -143,12 +125,6 @@ export function InheritRow({ ctx, n, vk, label, hint, editor }: InheritRowProps)
         </div>
       </div>
       {body}
-      {/* THE ADDITION described in the header comment — the honest third state. */}
-      {ownIsEmpty ? (
-        <div style={{ fontSize: '11px', color: C.dimmer, lineHeight: 1.4, marginTop: '6px' }}>
-          Set here as none — not inherited.
-        </div>
-      ) : null}
       {hint ? (
         <div style={{ fontSize: '11px', color: C.dimmer, lineHeight: 1.4, marginTop: '6px' }}>
           {hint}
