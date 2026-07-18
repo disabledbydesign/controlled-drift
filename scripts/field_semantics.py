@@ -629,6 +629,270 @@ FIELDS = {
                   "the space as a legacy property."],
         "source": "AI_LAYER_SPEC.md §2 Recurring table note",
     },
+
+    # ---- Focus Period -----------------------------------------------------
+    # A SIXTH live type, absent from describe_model.py (which filters to the five core types) and
+    # therefore missing from this module until 2026-07-18. Its design reasoning was recovered from
+    # docs/focus_configuration_addendum.md (session 23, 2026-07-01) + the build plan
+    # docs/superpowers/plans/2026-07-02-focus-configuration-layer.md + scripts/build_focus_period.py,
+    # and migrated into AI_LAYER_SPEC.md §2. The governing principle for every field here:
+    # the STRUCTURED knob is the instruction Python executes; the FREE TEXT is the meaning the LLM
+    # reads. Never add a field to capture a feeling or a nuance — that belongs in the free text.
+    # `observed` lines below are counted against the 7 live objects on 2026-07-18.
+
+    "Period start": {
+        "types": ("Focus Period",),
+        "means": "The date this stretch of time begins. Together with `Period end` it defines when "
+                 "the period is ACTIVE — the plan loads the period whose range contains today.",
+        "not_this": "A narrower free window inside the period — that is `Availability start`.",
+        "instead": {"a narrower free window inside the period": "Availability start"},
+        "usage": ["Python resolves every calendar fact; the agent must never infer a date or "
+                  "weekday. Authoring passes today's date as a deterministic anchor so 'Saturday' "
+                  "resolves to a real date."],
+        "source": "docs/focus_configuration_addendum.md (Focus Period field table); "
+                  "docs/superpowers/plans/2026-07-02-focus-configuration-layer.md Task 1.1; "
+                  "AI_LAYER_SPEC.md §2 Focus Period table",
+        "observed": "Populated on all 7 live periods. On 4 of the 7 it EQUALS `Period end` — a "
+                    "single day — although the design assumes a week-long stretch (one object is "
+                    "even named 'Week of Jul 14' with start == end == 2026-07-14). Design and use "
+                    "disagree about the grain; reported, not reconciled.",
+    },
+
+    "Period end": {
+        "types": ("Focus Period",),
+        "means": "The date this stretch lapses. Its purpose beyond bounding the range: a lapsed "
+                 "period is what triggers the prompt to re-author, so the configuration cannot go "
+                 "silently stale — the exact failure this type exists to fix.",
+        "not_this": "A deadline for any piece of work.",
+        "instead": {"a deadline": "Due date (Task) or Deadline (Project)"},
+        "usage": ["Lapsed periods are KEPT, never deleted — history is data for the learning loops "
+                  "and a record of how June's phases actually went.",
+                  "When no period is active the plan appends a gentle lapse-nudge rather than "
+                  "silently planning without a configuration."],
+        "source": "docs/focus_configuration_addendum.md ('Gaps the plan must address' — staleness, "
+                  "history is a free win); docs/superpowers/plans/"
+                  "2026-07-02-focus-configuration-layer.md Task 3.3 / Decision 7",
+        "observed": "Populated on all 7 live periods.",
+    },
+
+    "Intent": {
+        "types": ("Focus Period",),
+        "means": "What this stretch of time is about, in June's own words. The primary carrier of "
+                 "the period's meaning — read by the planning LLM as framing.",
+        "not_this": "Anything the structured fields already hold as an executable instruction "
+                    "(which projects are in front, the day's end time, which days are off).",
+        "instead": {"which projects are in front": "Foreground projects",
+                    "when the day ends": "Workday end",
+                    "which days are off or on": "Days off / Days on"},
+        "usage": [
+            "NEVER reworded by the generator — it is her words (backend spec §17).",
+            "This is where the nuance lives, on purpose. The system does not meet June's "
+            "variability by predicting circumstances and adding a field for each; the fields are "
+            "deliberately minimal and the intelligence is in the READING. If you find yourself "
+            "wanting a new field to capture a feeling or a nuance, that is the signal it belongs "
+            "here instead.",
+            "She authors it by SAYING it — the AI structures it and reflects it back for her to "
+            "confirm or edit. She never fills a form.",
+        ],
+        "source": "docs/focus_configuration_addendum.md ('Where the nuance actually lives', "
+                  "'How June inputs it'); docs/review_reorganize_backend_spec.md §17",
+        "observed": "Populated on all 7 live periods and consistently rich — several sentences "
+                    "carrying capacity, framing and explicit planning instructions (e.g. 'Dev, "
+                    "creative, and hobby work is open time June chooses herself - do NOT schedule "
+                    "specific hobby tasks'). The most heavily used field on the type.",
+    },
+
+    "Availability start": {
+        "types": ("Focus Period",),
+        "means": "The start of a NARROWER free window inside the period — caregiving days, mornings "
+                 "only. Empty means the whole period is available.",
+        "not_this": "The period's own bounds — those are `Period start` / `Period end`.",
+        "instead": {"the period's own bounds": "Period start / Period end"},
+        "usage": ["Structured so Python can test 'is today in the window' deterministically, with "
+                  "no natural-language parsing (focus_period.in_availability_window).",
+                  "Feeds the output-shape choice: on `Auto`, being inside the window is what makes "
+                  "the plan render as a priority list instead of a clock schedule.",
+                  "The dates carry only WHEN. What the window MEANS goes in `Availability note`."],
+        "source": "docs/focus_configuration_addendum.md (Focus Period field table + 'Reframe'); "
+                  "docs/review_reorganize_backend_spec.md §17; scripts/focus_period.py",
+        "observed": "Populated on 3 of 7 live periods, always paired with `Availability end`.",
+    },
+
+    "Availability end": {
+        "types": ("Focus Period",),
+        "means": "The end of the narrower free window inside the period.",
+        "not_this": "The period's own bounds — those are `Period start` / `Period end`.",
+        "instead": {"the period's own bounds": "Period start / Period end"},
+        "usage": ["Set together with `Availability start`; the window test needs both."],
+        "source": "docs/focus_configuration_addendum.md (Focus Period field table); "
+                  "docs/review_reorganize_backend_spec.md §17; scripts/focus_period.py",
+        "observed": "Populated on 3 of 7 live periods, always paired with `Availability start`.",
+    },
+
+    "Availability note": {
+        "types": ("Focus Period",),
+        "means": "What the availability window MEANS — 'caregiving; fragmented time; survival-first "
+                 "in whatever windows exist; no deep-focus blocks.' The dates say when; this says "
+                 "what to do about it, and this is what the planner actually reads.",
+        "not_this": "A number, a rating, or anything compressed. Never a restatement of the dates.",
+        "instead": {},
+        "usage": [
+            "June: 'this note IS the mechanism… nuance lives here, not in the enum — the "
+            "anti-flattening path.' The meaning is never flattened into the dates.",
+            "A period may describe as MANY availability shapes as it needs here; the single "
+            "structured window exists only for Python's is-today-affected test.",
+            "The framing is neutral OVERRIDES, not reductions — a sprint week is MORE availability, "
+            "not less. Do not write it as though every period shrinks the day.",
+        ],
+        "source": "docs/focus_configuration_addendum.md (Focus Period field table, June's note; "
+                  "'Reframe: drop the negative reduced framing'); "
+                  "docs/review_reorganize_backend_spec.md §17",
+        "observed": "Populated on 4 of 7 live periods. All 4 describe REDUCED or fragmented "
+                    "availability ('Limited spoon', 'Fragmented or reduced availability due to "
+                    "moving assistance'). The 'a period can be MORE' half of the reframe has no "
+                    "live use — consistent with `Workday end` being unpopulated on all 7.",
+    },
+
+    "Days off": {
+        "types": ("Focus Period",),
+        "means": "Dates in this period that are forced OFF, overriding the weekly default "
+                 "(Sat/Sun, from settings.json). A structured list of ISO dates.",
+        "not_this": "Natural language ('the weekend', 'my birthday'). Python must parse it without "
+                    "interpreting text.",
+        "instead": {"why the day is off, or what it means": "Intent / Availability note"},
+        "usage": [
+            "Structured, not natural language — deterministically testable, honoring the "
+            "regex-burn lesson (no NL scanning anywhere in the calendar path).",
+            "Precedence in focus_period.is_day_off: an explicit `Days on` date wins first, then "
+            "`Days off`, then the weekly default.",
+            "The point is to break the planner's hidden assumption that EVERY day is a full work "
+            "day — a wrong default for June.",
+            "A malformed list must surface to June, never be silently dropped: a silently-ignored "
+            "day off that plans a workday is quietly punitive.",
+        ],
+        "source": "docs/focus_configuration_addendum.md (Focus Period field table, `days_off` row + "
+                  "June's weekly-default recommendation); docs/superpowers/plans/"
+                  "2026-07-02-focus-configuration-layer.md Tasks 2.1/2.2 + step 2 of Task 3.3; "
+                  "scripts/build_focus_period.py",
+        "observed": "UNPOPULATED on all 7 live periods (2026-07-18) — only `Days on` is used. "
+                    "Encoding note: the build plan's tests use a JSON array; "
+                    "focus_period_adapter._csv writes comma-separated and every live value is "
+                    "comma-separated. focus_period._parse_date_list accepts both, so nothing is "
+                    "broken, but the plan's stated shape is not the one in the data.",
+    },
+
+    "Days on": {
+        "types": ("Focus Period",),
+        "means": "Dates in this period that are forced to be WORK days, overriding a weekly default "
+                 "that would otherwise make them off (e.g. working a Saturday). A structured list "
+                 "of ISO dates.",
+        "not_this": "Natural language. Same deterministic-parsing constraint as `Days off`.",
+        "instead": {"why the day is on, or what it means": "Intent / Availability note"},
+        "usage": ["Highest precedence in focus_period.is_day_off — a `Days on` date beats both "
+                  "`Days off` and the weekly default.",
+                  "Only meaningful for a day the weekly default would otherwise mark off; writing "
+                  "an already-working weekday here is harmless but says nothing."],
+        "source": "docs/focus_configuration_addendum.md (Focus Period field table, June's "
+                  "'overridable both ways per day'); docs/superpowers/plans/"
+                  "2026-07-02-focus-configuration-layer.md Task 2.2; scripts/build_focus_period.py",
+        "observed": "Populated on 4 of 7 live periods, comma-separated. Only ONE of those 4 carries "
+                    "a real override (Sat 2026-07-18); the other 3 list days that are ALREADY work "
+                    "days under the Sat/Sun default — redundant, not wrong. Separately: "
+                    "docs/review_reorganize_backend_spec.md §17 still calls this field 'stubbed in "
+                    "the UI but not yet a committed field — leave OPEN'. That is stale: it is a "
+                    "committed field, parsed and populated. Reported, not reconciled.",
+    },
+
+    "Output format": {
+        "types": ("Focus Period",),
+        "means": "The shape the day's plan is rendered in: Auto / Clock schedule / Priority list. "
+                 "A per-period override of how the plan looks, not of what is in it.",
+        "not_this": "A priority, a capacity level, or how hard June is working.",
+        "instead": {"how much capacity this stretch has": "Availability note / Intent"},
+        "usage": [
+            "A clock-time schedule literally cannot express 'a couple of hours, whenever they "
+            "come' — forcing it is an instance of June's own output-format-bias principle, where "
+            "the wrong output shape distorts the result. Priority list is the answer to that: a "
+            "priority-ordered short list to pull from when a window opens.",
+            "The priority-list shape is ADHD-friendly by design — few items, plain language, no "
+            "clock pressure, a clear 'when you get a window, do this next.'",
+            "`Auto` resolves from STRUCTURED inputs only (focus_period.resolve_output_shape): "
+            "priority iff today is inside the availability window. The capacity nuance is the "
+            "model's to read from free text, never Python's to scan.",
+        ],
+        "source": "docs/focus_configuration_addendum.md ('When the day has no fixed shape, the plan "
+                  "changes shape too'); docs/review_reorganize_backend_spec.md §17; "
+                  "scripts/focus_period.py resolve_output_shape",
+        "observed": "Populated on 6 of 7 live periods: Auto x4, Clock schedule x1, Priority list x1.",
+    },
+
+    "Workday end": {
+        "types": ("Focus Period",),
+        "means": "The clock time 'HH:MM' the workday ends for this period. Empty means the system "
+                 "default (18:00).",
+        "not_this": "A deadline, and not a statement about capacity.",
+        "instead": {"what this stretch feels like or demands": "Intent / Availability note"},
+        "usage": ["Designed to be pushed WIDER for a sprint (working till 10, 11, midnight) or "
+                  "narrower for a gentle week — June asked for this explicitly. It is the field "
+                  "that carries the 'a period can be MORE, not less' half of the design.",
+                  "Wired into the scheduler's end time, overriding the hardcoded default."],
+        "source": "docs/focus_configuration_addendum.md ('Workday bounds' under the overrides "
+                  "list); docs/superpowers/plans/2026-07-02-focus-configuration-layer.md Task 3.3",
+        "observed": "UNPOPULATED on all 7 live periods (2026-07-18) — the widening case the field "
+                    "was built for has never been used. Separately, "
+                    "docs/review_reorganize_backend_spec.md §17 specifies a companion "
+                    "`workday_start` and flags it as NEW; the live type has only this end field and "
+                    "the scheduler's day-bounds logic is still end-only. Unbuilt, not dropped.",
+    },
+
+    "Foreground projects": {
+        "types": ("Focus Period",),
+        "means": "The projects June has put IN FRONT for this stretch — overriding their enduring "
+                 "per-project `Engagement` while the period is active.",
+        "not_this": "A permanent change to how she engages the project. When the period lapses the "
+                    "project's own Engagement returns.",
+        "instead": {"a lasting change to how she engages a project": "Engagement",
+                    "the specifics of what that engagement means": "Engagement notes"},
+        "usage": [
+            "This is the short-term layer of a two-layer model: the Project holds the enduring "
+            "default, the period overrides it while active, and when the two contradict THE PERIOD "
+            "WINS (June's decision).",
+            "Drives REAL selection by object id — not a prose hint handed to the LLM.",
+            "A sprint is expressed here, as a foreground action for a period. It is deliberately "
+            "NOT a stored Engagement value (`Sprint` was retired 2026-07-16) and never a Goal-level "
+            "state.",
+        ],
+        "source": "docs/focus_configuration_addendum.md ('Two layers' + precedence + 'Foreground "
+                  "overrides'); docs/superpowers/plans/2026-07-02-focus-configuration-layer.md "
+                  "Task 3.2; AI_LAYER_SPEC.md §2 Project `engagement` retirement note",
+        "observed": "Populated on all 7 live periods (1-4 projects each) — with `Intent`, the most "
+                    "used field on the type. NOTE: a field with this same display name also exists "
+                    "on the live Goal type, where no doc explains what it means; that one stays in "
+                    "UNDEFINED as 'Foreground projects (on Goal)'.",
+    },
+
+    "Paused projects": {
+        "types": ("Focus Period",),
+        "means": "Projects held OUT of plan generation entirely while this period is active — an "
+                 "explicit stop, not a de-prioritization.",
+        "not_this": "Everything that is merely not foreground. Non-foreground is NOT paused: those "
+                    "projects stay present and are simply scheduled after the foreground ones.",
+        "instead": {"a project that is just not in front right now": "leave it out of both lists"},
+        "usage": [
+            "Pausing must be RARE — explicit-stop only. Default is an empty list. It requires June "
+            "having said something like 'stop X this period'.",
+            "The first LLM authoring run over-paused, pausing every non-foreground project, which "
+            "DROPS their tasks from the plan. The authoring prompt was tuned to require an "
+            "explicit stop; that correction is the reason this rule exists.",
+            "Pickers filter to 'pausable' projects — only those that would normally populate the "
+            "plan (not Backburner/Done engagement, not Parked/Inactive status).",
+        ],
+        "source": "docs/superpowers/plans/2026-07-02-focus-configuration-layer.md "
+                  "('Learned from first real use', commit 2a85dbd); "
+                  "docs/review_reorganize_backend_spec.md §17",
+        "observed": "UNPOPULATED on all 7 live periods (2026-07-18) — consistent with the "
+                    "pause-is-rare rule holding in practice after the prompt was tuned.",
+    },
 }
 
 
@@ -680,6 +944,18 @@ HINTS = {
     "Time of day": "HH:MM. When set, this is a fixed anchor the day flows around.",
     "Fixed appointment": "A missed one returns on its own schedule instead of persisting.",
     "Frequency": "Legacy — use Interval unit and Interval count.",
+    "Period start": "The day this stretch of time begins.",
+    "Period end": "The day it lapses. Lapsing is what prompts June to write the next one.",
+    "Intent": "What this stretch is about, in June's words. The nuance goes here, not in new fields.",
+    "Availability start": "Start of a narrower free window inside the period. Empty = the whole period.",
+    "Availability end": "End of that narrower free window.",
+    "Availability note": "What the window means for planning — the part the planner actually reads.",
+    "Days off": "Dates forced off, overriding the weekly default. ISO dates, never words.",
+    "Days on": "Dates forced to be work days, overriding the weekly default. ISO dates, never words.",
+    "Output format": "The plan's shape: Auto, a clock schedule, or a priority list to pull from.",
+    "Workday end": "HH:MM the day ends. Push it later for a sprint, earlier for a gentle week.",
+    "Foreground projects": "Projects in front this period. Overrides their Engagement while it's active.",
+    "Paused projects": "Projects stopped this period. Rare — only when June explicitly says to stop one.",
 }
 
 
@@ -702,9 +978,11 @@ UNDEFINED = {
               "found defining what it means or what reads it.",
     "Day of month": "A number on Recurring. The interval model in AI_LAYER_SPEC.md §2 does not "
                     "mention it; no other doc found defines it.",
-    "Foreground projects": "An objects field on Goal. The name matches Focus Period's foreground "
-                           "concept, and the Focus Period adapter writes a field of this name — but "
-                           "no doc found explains what it means ON A GOAL. Not defined here.",
+    "Foreground projects (on Goal)": "An objects field of this name also exists on the live Goal "
+                                     "type. On Focus Period it is defined (see FIELDS); ON A GOAL "
+                                     "no doc found explains what it means, and re-searched "
+                                     "2026-07-18 during the Focus Period recovery. Not defined "
+                                     "here. Same shape as `Goal status (on Project)` below.",
     "Applies when": "A select on Strategy (Always / Low energy / Overwhelmed / Sprint / Stuck). It "
                     "exists and its options are documented "
                     "(docs/review_reorganize_backend_spec.md §12), but docs/BUILD_DOC.md §8 records "
