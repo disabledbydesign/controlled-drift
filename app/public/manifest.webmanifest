@@ -1,0 +1,9 @@
+{
+  "name": "Controlled Drift",
+  "short_name": "Drift",
+  "display": "standalone",
+  "background_color": "#060512",
+  "theme_color": "#060512",
+  "start_url": "/app/",
+  "scope": "/app/"
+}
