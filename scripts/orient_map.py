@@ -656,7 +656,7 @@ _AGENT_FIELDS = {
     "gsdo_recurring": {
         "always": ["Interval unit"],
         "if_set": ["Interval count", "Day of week", "Day of month", "Time of day",
-                   "Has target", "Target", "Duration min", "Context"],
+                   "Duration min", "Context"],
     },
 }
 

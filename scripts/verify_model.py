@@ -12,7 +12,7 @@ EXPECTED = {
     "task":      ["Duration min", "Needs clarifying", "Task status", "Blocked on", "Affective",
                   "Access conditions", "Access notes", "AI autonomous", "Last surfaced", "Scheduled",
                   "Context", "Due date", "Linked Projects"],   # Due date / Linked Projects = built-ins (replace custom Deadline/Project link)
-    "Recurring": ["Frequency", "Has target", "Target", "Project link", "Context",
+    "Recurring": ["Frequency", "Project link", "Context",
                   "Day of week", "Time of day", "Duration min"],
     "Strategy":  ["Strategy status", "What for", "Learning notes", "Context"],
 }

@@ -71,6 +71,21 @@ def link_properties_to_type(type_id, property_keys):
         if st not in (200, 201):
             raise RuntimeError(f"link properties to type {type_id} failed: {st} {b}")
 
+def unlink_properties_from_type(type_id, property_keys):
+    """Remove properties from a type's linked-properties list. Unlike link_properties_to_type
+    (additive merge), this sends a replace-style PATCH with the retired keys excluded — the API
+    treats the `properties` array as authoritative, not a union. Property definitions and any
+    values already stored on objects are untouched; this only unlinks them from the type's field
+    list (retiring a field, not deleting data)."""
+    sid = get_space_id()
+    t = call("GET", f"/spaces/{sid}/types/{type_id}")[1].get("type", {})
+    remove = set(property_keys)
+    keep = [p for p in t.get("properties", []) if p.get("key") not in remove]
+    if len(keep) != len(t.get("properties", [])):
+        st, b = call("PATCH", f"/spaces/{sid}/types/{type_id}", {"properties": keep})
+        if st not in (200, 201):
+            raise RuntimeError(f"unlink properties from type {type_id} failed: {st} {b}")
+
 def fetch_all_objects(sid, page_size=100):
     """Paginate through all objects in the space. Returns the full list."""
     objects = []
