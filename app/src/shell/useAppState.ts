@@ -71,6 +71,29 @@ export interface UiState {
    */
   collapsed: Readonly<Record<string, true>>;
 
+  // ── desktop render path (Task 10) ──────────────────────────────────────────
+  // Both are v4's own state fields, declared in its initial bag at v4:78
+  // (`focus:null,deskPath:[],widths:{}`).
+  /**
+   * The ids the DESKTOP Finder browser is drilled into, outermost first — v4's `st.deskPath`.
+   * `deskPath.length + 1` columns render: the roots, then one column of children per id.
+   *
+   * Deliberately SEPARATE from `focus`, which is the phone Map's single-column drill-in. v4
+   * keeps both and never syncs them, so switching widths mid-session does not carry a
+   * position across. Ported as-is.
+   */
+  deskPath: readonly string[];
+  /**
+   * Pane widths in px, keyed by pane — v4's `st.widths`, read through `w(key, default)` so an
+   * unresized pane has no entry at all rather than a stored default. Written only by the
+   * desktop divider drag; clamped to 220–700 there.
+   *
+   * ⚠ All Finder columns share the ONE key `deskcol`, so dragging any divider resizes every
+   * column together. That is v4's shape (v4:751 passes `'deskcol'` for every handle), not an
+   * oversight here.
+   */
+  widths: Readonly<Record<string, number>>;
+
   // These three are emitted by mutations that ALREADY SHIP (mutations.ts:145 `move`,
   // :201 `move`, :406 `addChild`). They were missing here, and the `as Partial<UiState>`
   // cast in `apply()` suppressed the error — so the keys would have landed in the bag at
@@ -230,6 +253,8 @@ const INITIAL_UI: UiState = {
   filterOpen: false,
   dragOverId: null,
   collapsed: {},
+  deskPath: [],
+  widths: {},
   moveFor: null,
   addParentFor: null,
   pickerFilter: '',

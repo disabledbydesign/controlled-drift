@@ -74,6 +74,15 @@ export interface PanelUi {
    * the parent projects `recurringBody` groups under.
    */
   collapsed: Readonly<Record<string, true>>;
+  /**
+   * Which ids the DESKTOP Finder browser is drilled into — v4's `st.deskPath` (Task 10).
+   *
+   * The panels read it in exactly one place: `addContextParent` (v4:372), whose `_wide` branch
+   * asks "what am I currently inside?" of the desktop column path instead of the phone's
+   * `focus`. It is on `PanelUi` rather than passed to that one function so the wide and phone
+   * branches read from the same bag, as they do in v4.
+   */
+  deskPath: readonly string[];
   /** Routines cadence filter — v4's `st.recFilter`. */
   recFilter: 'all' | 'asneeded' | 'scheduled';
   /** Strategies "When" filter: 'all' or one of `OPTS.strategyState`. v4's `st.stratWhen`. */
@@ -95,4 +104,17 @@ export interface PanelCtx {
   up: (patch: Partial<PanelUi>) => void;
   /** v4's mutate-then-`bump()`; here, the one seam mutations go through. */
   apply: (result: MutationResult) => void;
+  /**
+   * v4's `this._wide` — true only inside `deskApp()` (v4:730), false in `renderShell()` (929)
+   * and `structurePanel()` (959).
+   *
+   * v4 reads it in three places, all of them LAYOUT, never behaviour: `addContextParent` (372)
+   * picks its default parent from `deskPath` instead of `focus`, `detail()` (587) swaps the
+   * "‹ Back" text button for the bordered "✕ Close" pill, and `pickerPage()` (626) becomes a
+   * centred modal over a scrim instead of a full-bleed slide-in.
+   *
+   * It is a prop, not a fork: the same components render on both paths. `DetailCtx` already
+   * carries the same flag for the same reason.
+   */
+  wide?: boolean;
 }

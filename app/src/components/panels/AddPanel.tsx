@@ -15,22 +15,30 @@ export function validAddParent(type: string, n: ModelNode | null): boolean {
 }
 
 /**
- * v4 `addContextParent()` (~372), phone branch only.
+ * v4 `addContextParent()` (~372) — BOTH branches (the `_wide` one landed with Task 10).
  *
  * v4's own comment: "Where a new child lands by default: whatever you're currently inside."
- * So: the node the Map is drilled into, else the node open in the detail editor — and only if
+ * So: the node you are drilled into, else the node open in the detail editor — and only if
  * that node can HOLD children (TASK / RECURRING / STRATEGY are leaves and are rejected).
  *
- * v4's full expression is
- *   `this._wide ? (pick(st.deskPath.at(-1)) || pick(st.detail)) : (pick(st.focus) || pick(st.detail))`
- * The `_wide` branch is the desktop shell (Task 10) and is not ported here; this is the phone
- * branch only.
+ * v4 verbatim:
+ *   `this._wide ? (pick(st.deskPath[st.deskPath.length-1]) || pick(st.detail))
+ *               : (pick(st.focus) || pick(st.detail))`
+ *
+ * "Currently inside" means different state on the two paths and that is the whole fork: the
+ * phone Map drills through `focus`, the desktop Finder through the LAST id of `deskPath`.
+ * Neither reads the other's field, so the default parent is right on whichever path is
+ * mounted.
  */
 export function addContextParent(ctx: PanelCtx): ModelNode | null {
-  const pick = (id: string | null): ModelNode | null => {
+  const pick = (id: string | null | undefined): ModelNode | null => {
     const d = id ? node(ctx.idx, id) : undefined;
     return d && !['TASK', 'RECURRING', 'STRATEGY'].includes(d.level) ? d : null;
   };
+  if (ctx.wide) {
+    const path = ctx.ui.deskPath;
+    return pick(path.length ? path[path.length - 1] : null) || pick(ctx.ui.detail);
+  }
   return pick(ctx.ui.focus) || pick(ctx.ui.detail);
 }
 

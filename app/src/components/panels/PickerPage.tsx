@@ -2,7 +2,7 @@ import type { ReactNode } from 'react';
 import { Badge } from '../atoms/index.ts';
 import { addChild, move, node } from '../../model/index.ts';
 import type { ModelNode } from '../../model/index.ts';
-import { NAV } from './types.ts';
+import { NAV, PANEL } from './types.ts';
 import type { PanelCtx } from './types.ts';
 
 interface PickItem {
@@ -44,11 +44,14 @@ interface PickItem {
  * deep in the tree are visible without hunting. Clearing the filter returns to the manual
  * expansion state.
  *
- * The `wide` (desktop, centred modal) branch of v4's panel is Task 10 and is not ported; this
- * is the phone branch — a full-bleed slide-in.
+ * ── two shells over one body (v4:619 + v4:626) ──────────────────────────────
+ * `wide` (the desktop path) makes this a CENTRED MODAL: a fixed 480px card, capped at 82% of
+ * the height, over a `rgba(0,0,0,.55)` scrim that closes on click, entering with `panelin`.
+ * The phone keeps v4's full-bleed slide-in with no scrim. Only the wrapper differs — the
+ * header, the filter, the rows and every rule above are shared, as in v4.
  */
 export function PickerPage({ ctx }: { ctx: PanelCtx }) {
-  const { T, graph, idx, ui, up, apply } = ctx;
+  const { T, graph, idx, ui, up, apply, wide } = ctx;
   const C = T.c;
   if (!ui.moveFor && !ui.addParentFor) return null;
 
@@ -185,20 +188,38 @@ export function PickerPage({ ctx }: { ctx: PanelCtx }) {
   const close = () =>
     up({ moveFor: null, addParentFor: null, pickerFilter: '', pickerExpanded: {} });
 
-  return (
-    <div style={{ position: 'absolute', inset: 0, zIndex: 45 }}>
-      <div
-        style={{
-          position: 'absolute',
-          inset: 0,
-          background: T.pane,
-          backdropFilter: T.paneBlur,
-          WebkitBackdropFilter: T.paneBlur,
-          display: 'flex',
-          flexDirection: 'column',
-          animation: 'slidein ' + NAV,
-        }}
-      >
+  // v4:619 — the card itself. `wide` is a fixed-width centred sheet; the phone is full-bleed.
+  const panel = (
+    <div
+      style={
+        wide
+          ? {
+              position: 'relative',
+              width: '480px',
+              maxHeight: '82%',
+              background: T.pane,
+              backdropFilter: T.paneBlur,
+              WebkitBackdropFilter: T.paneBlur,
+              border: '1px solid ' + C.border,
+              borderRadius: T.r.card,
+              display: 'flex',
+              flexDirection: 'column',
+              boxShadow: '0 24px 60px rgba(0,0,0,.55)',
+              overflow: 'hidden',
+              animation: 'panelin ' + PANEL,
+            }
+          : {
+              position: 'absolute',
+              inset: 0,
+              background: T.pane,
+              backdropFilter: T.paneBlur,
+              WebkitBackdropFilter: T.paneBlur,
+              display: 'flex',
+              flexDirection: 'column',
+              animation: 'slidein ' + NAV,
+            }
+      }
+    >
         <div
           style={{
             padding: '12px 16px',
@@ -291,8 +312,30 @@ export function PickerPage({ ctx }: { ctx: PanelCtx }) {
               No destinations
             </div>
           )}
-        </div>
       </div>
     </div>
+  );
+
+  // v4:626 — the wrapper. Both are `position:absolute; inset:0; zIndex:45`; only the desktop
+  // one centres the card and lays a click-to-close scrim underneath it.
+  return wide ? (
+    <div
+      style={{
+        position: 'absolute',
+        inset: 0,
+        zIndex: 45,
+        display: 'flex',
+        alignItems: 'center',
+        justifyContent: 'center',
+      }}
+    >
+      <div
+        onClick={close}
+        style={{ position: 'absolute', inset: 0, background: 'rgba(0,0,0,.55)' }}
+      />
+      {panel}
+    </div>
+  ) : (
+    <div style={{ position: 'absolute', inset: 0, zIndex: 45 }}>{panel}</div>
   );
 }

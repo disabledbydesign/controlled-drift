@@ -32,8 +32,17 @@ const U_DAYS: Record<string, number> = { day: 1, week: 7, month: 30, quarter: 91
  *
  * Rows use `hideBadge` (the whole tab is one type, so the badge would be noise) and `noMenu`.
  * `flat:true` is passed by v4 and is a dead parameter there — see `RowOptions`.
+ *
+ * `bare` — v4's desktop path calls `recurringBody()` DIRECTLY (v4:756), with no
+ * `structurePanel` wrapper around it, because the desktop toolbar already carries the search
+ * box and the `+` button that `MapControls` provides on the phone. Everything this tab needs
+ * beyond that (its own filter chips) is inside the body, which is why v4 can drop the wrapper
+ * without losing a control. Verified by reading v4:756: `tab==='routines'?this.recurringBody():
+ * this.strategiesBody()` inside a plain scrolling div.
+ *
+ * A prop rather than a second component — same library, two layouts.
  */
-export function RoutinesScreen({ ctx }: { ctx: PanelCtx }) {
+export function RoutinesScreen({ ctx, bare = false }: { ctx: PanelCtx; bare?: boolean }) {
   const { T, graph, idx, ui, up } = ctx;
   const C = T.c;
   const q = ui.search.trim().toLowerCase();
@@ -180,5 +189,6 @@ export function RoutinesScreen({ ctx }: { ctx: PanelCtx }) {
     </div>,
   );
 
+  if (bare) return <>{body}</>;
   return <StructurePanel ctx={ctx}>{body}</StructurePanel>;
 }

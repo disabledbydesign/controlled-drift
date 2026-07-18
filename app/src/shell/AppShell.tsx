@@ -1,13 +1,9 @@
-import { useEffect, useMemo, useRef } from 'react';
-import type { Theme, ThemeName } from '@tokens';
+import { useMemo, useRef } from 'react';
+import type { Theme } from '@tokens';
 import { appBg, TopAccent } from '../components/atoms/index.ts';
 import { DetailOverlay } from '../components/detail/index.ts';
-import type { DetailCtx } from '../components/detail/index.ts';
 import { FocusOverlay } from '../components/focus/index.ts';
-import type { FocusCtx } from '../components/focus/index.ts';
 import { PickerPage } from '../components/panels/index.ts';
-import type { PanelCtx } from '../components/panels/index.ts';
-import type { TodayCtx } from '../components/today/index.ts';
 import { starfield } from '../theme/starfield.ts';
 import {
   AddScreen,
@@ -17,17 +13,20 @@ import {
   StrategiesScreen,
   TodayScreen,
 } from '../screens/index.ts';
-import type { AddCtx, SettingsCtx } from '../screens/index.ts';
 import { AppHeader } from './AppHeader.tsx';
 import { AppTabs } from './AppTabs.tsx';
 import { navAnimation, navDir, STRUCTURE_TABS } from './tabs.ts';
 import type { AppTab } from './tabs.ts';
-import { useAppState } from './useAppState.ts';
+import type { Surface as SurfaceType } from './useSurface.ts';
 
 export interface AppShellProps {
   T: Theme;
-  name: ThemeName;
-  setTheme: (n: ThemeName) => void;
+  /**
+   * The app state and every screen context — built ONCE by `Surface` and handed to whichever
+   * shell is mounted. Not built here, so that crossing the desktop breakpoint mid-session
+   * swaps the layout without resetting what the user was doing. See `Surface.tsx`.
+   */
+  surface: SurfaceType;
 }
 
 /**
@@ -41,19 +40,25 @@ export interface AppShellProps {
  * LAST in the tree and paints `position:absolute; inset:0; zIndex:30` over the whole frame —
  * including the tab bar — which is why the shell root is `position:relative`.
  *
- * `pickerPage()` (Task 6) and `toast()` (Task 11) are still absent, and deliberately absent
- * rather than stubbed — a stub that renders nothing looks identical to a missing one and
- * hides the gap.
+ * `pickerPage()` is mounted (Task 6). `toast()` (Task 11) is still absent, and deliberately
+ * absent rather than stubbed — a stub that renders nothing looks identical to a missing one
+ * and hides the gap.
+ *
+ * ── the contexts moved out (Task 10) ────────────────────────────────────────
+ * The five context objects this file used to build now live in `useSurface`, because the
+ * DESKTOP shell needs the identical ones. v4 does not have this problem: `renderShell` and
+ * `deskApp` are methods on one component, so they share one `this` and it cannot fork. Two
+ * components have to be given that single `this` explicitly or it becomes two copies that
+ * drift. Nothing about the phone path changed — the definitions only moved.
  *
  * ── theme ────────────────────────────────────────────────────────────────────
  * `T` arrives as a prop and is passed down. Nothing below this file calls `useTheme()`:
  * that hook owns a `useState`, so a second call would fork the theme and the switcher would
  * only move one copy. Same rule as `components/atoms/index.ts` states for the atoms.
  */
-export function AppShell({ T, name, setTheme }: AppShellProps) {
+export function AppShell({ T, surface }: AppShellProps) {
   const C = T.c;
-  const st = useAppState();
-  const tab = st.ui.tab;
+  const { st, tab, goTab, detailCtx, panelCtx, focusCtx, todayCtx, addCtx, settingsCtx } = surface;
 
   // The starfield is generated once from a fixed seed, so the sky does not re-scatter on
   // every render or every tab change. Celestial only — appBg() ignores it in hardware.
@@ -73,140 +78,15 @@ export function AppShell({ T, name, setTheme }: AppShellProps) {
   // This is the same principle as the stale-index fix in useAppState: make the wrong thing
   // impossible rather than documenting a rule someone has to remember. Whatever changes the
   // tab, the direction is right, because it is computed from the tab itself.
+  //
+  // This animation is the PHONE grammar and stays here: v4's `deskApp` has no per-tab entry
+  // animation at all (verified — no `animation:` on any of its containers), because panes
+  // dock and undock rather than sliding a whole screen in.
   const nav = useRef<{ tab: AppTab; dir: 'fwd' | 'back' }>({ tab, dir: 'fwd' });
   if (nav.current.tab !== tab) {
     nav.current = { tab, dir: navDir(nav.current.tab, tab) };
   }
   const dir = nav.current.dir;
-
-  // v4:954 clears the same transient UI on every tab change, so a menu or panel left open on
-  // one tab does not reappear over another. As an effect keyed on `tab` this fires however
-  // the tab changed — the clear was previously inside `goTab` and shared the bypass above.
-  const { up } = st;
-  useEffect(() => {
-    up({ detail: null, menuFor: null, chipEdit: null, addOpen: false, filterOpen: false });
-  }, [tab, up]);
-
-  /**
-   * v4's `detail()` context. `flash` is v4's `flash(msg)` with no model change behind it —
-   * the title and note textareas already wrote per keystroke, so the blur has nothing left to
-   * persist and the toast is the only effect. Routing it through `apply` with the CURRENT
-   * graph reuses the one toast seam without a second state field; the unchanged reference
-   * means React skips the re-render of everything below it.
-   */
-  const detailCtx: DetailCtx = {
-    T,
-    graph: st.graph,
-    idx: st.idx,
-    schema: st.schema,
-    ui: st.ui,
-    up: st.up,
-    apply: st.apply,
-    flash: (msg: string) => st.apply({ graph: st.graph, toast: msg, ui: null, node: null }),
-  };
-
-  /**
-   * The context the three structure tabs, their panels and every `Row` share — v4's `this`,
-   * minus the parts only `detail()` reads. `UiState` satisfies `PanelUi` structurally; if the
-   * two drift, this line stops compiling, which is the intended alarm.
-   */
-  const panelCtx: PanelCtx = {
-    T,
-    graph: st.graph,
-    idx: st.idx,
-    schema: st.schema,
-    ui: st.ui,
-    up: st.up,
-    apply: st.apply,
-  };
-
-  const goTab = (next: AppTab) => {
-    if (next === tab) return;
-    up({ tab: next });
-  };
-
-  /**
-   * v4's `this` as the focus-period methods read it (Task 9).
-   *
-   * `openEditor` / `closeEditor` are callbacks rather than `up` fields because they write
-   * `detail`, which is shell-wide routing state — same reasoning as `openDetail` below.
-   *
-   * ⚠ `closeEditor` is v4's Back (888) and v4's post-save reset (926), which are the SAME
-   * patch. It discards `focusReflect` without saving. That is `ux_consistency_review` #4 and
-   * it is preserved deliberately — see `components/focus/types.ts`.
-   */
-  const focusCtx: FocusCtx = {
-    T,
-    graph: st.graph,
-    periods: st.periods,
-    ui: st.ui,
-    up: st.up,
-    applyPeriods: st.applyPeriods,
-    openEditor: (view, editId, reflect) =>
-      st.up({
-        detail: '__focus__',
-        focusView: view,
-        focusEditId: editId,
-        focusReflect: reflect,
-        // v4:836 clears the draft when opening the author flow and leaves it alone on edit.
-        ...(view === 'author' ? { focusDraft: '' } : null),
-      }),
-    closeEditor: () =>
-      st.up({
-        detail: null,
-        focusView: 'list',
-        focusEditId: null,
-        focusReflect: null,
-        focusDraft: '',
-      }),
-  };
-
-  /**
-   * v4's `this` as the Today methods read it (Task 7).
-   *
-   * `openDetail` and `goTab` are callbacks rather than `up` fields on purpose: `detail`,
-   * `returnFrom` and `tab` are shell-wide routing state, and putting them in `TodayUi` would
-   * let any component in the tab write them. See `components/today/types.ts`.
-   */
-  const todayCtx: TodayCtx = {
-    T,
-    graph: st.graph,
-    idx: st.idx,
-    plan: st.plan,
-    periods: st.periods,
-    focus: focusCtx,
-    ui: st.ui,
-    up: st.up,
-    apply: st.apply,
-    applyPlan: st.applyPlan,
-    flash: (msg: string) => st.apply({ graph: st.graph, toast: msg, ui: null, node: null }),
-    openDetail: (id: string) => st.up({ detail: id, returnFrom: 'today' }),
-    goTab: (t) => goTab(t),
-  };
-
-  /**
-   * v4's `this` as `captureTab()` / `logTab()` read it (Task 8). `openDetail` mirrors Today's:
-   * v4 writes `up({detail:r.id,_returnFrom:'add'})` from the receipt's edit button (v4:1121),
-   * and `returnFrom` makes the detail pane's back button say "Add".
-   */
-  const addCtx: AddCtx = {
-    T,
-    graph: st.graph,
-    idx: st.idx,
-    ui: st.ui,
-    up: st.up,
-    apply: st.apply,
-    openDetail: (id: string) => st.up({ detail: id, returnFrom: 'add' }),
-    flash: (msg: string) => st.apply({ graph: st.graph, toast: msg, ui: null, node: null }),
-  };
-
-  /**
-   * Settings reads the UI bag for the backend choice and the plan-content toggle, and takes
-   * the THEME from this component's props — i.e. from the single `useTheme()` in `App.tsx`.
-   * Passing `setTheme` through rather than letting Settings call the hook is what keeps one
-   * theme for the whole surface; see `screens/SettingsScreen.tsx`.
-   */
-  const settingsCtx: SettingsCtx = { T, name, setTheme, ui: st.ui, up: st.up };
 
   const body =
     tab === 'today' ? (

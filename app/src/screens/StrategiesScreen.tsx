@@ -30,8 +30,17 @@ import { StructurePanel } from './StructurePanel.tsx';
  * `What for` and `Context` — and `Context` has no home in the mockup at all, while
  * `Applies when` (the `when` chip here) is populated on 1 of 12. This port reproduces the
  * mockup; surfacing `Context` and `Learning notes` is a design change and hers to approve.
+ *
+ * `bare` — v4's desktop path calls `strategiesBody()` DIRECTLY (v4:756), with no
+ * `structurePanel` wrapper around it, because the desktop toolbar already carries the search
+ * box and the `+` button that `MapControls` provides on the phone. Everything this tab needs
+ * beyond that (its own filter chips) is inside the body, which is why v4 can drop the wrapper
+ * without losing a control. Verified by reading v4:756: `tab==='routines'?this.recurringBody():
+ * this.strategiesBody()` inside a plain scrolling div.
+ *
+ * A prop rather than a second component — same library, two layouts.
  */
-export function StrategiesScreen({ ctx }: { ctx: PanelCtx }) {
+export function StrategiesScreen({ ctx, bare = false }: { ctx: PanelCtx; bare?: boolean }) {
   const { T, graph, schema, ui, up } = ctx;
   const C = T.c;
   const q = ui.search.trim().toLowerCase();
@@ -236,5 +245,6 @@ export function StrategiesScreen({ ctx }: { ctx: PanelCtx }) {
     );
   }
 
+  if (bare) return <>{body}</>;
   return <StructurePanel ctx={ctx}>{body}</StructurePanel>;
 }

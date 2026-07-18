@@ -1,12 +1,15 @@
 import { useEffect, useState } from 'react';
 import { useTheme } from './theme/useTheme.ts';
-import { AppShell } from './shell/AppShell.tsx';
+import { Surface } from './shell/Surface.tsx';
 import { CheckPage } from './CheckPage.tsx';
 
 /**
  * Entry point.
  *
- * The app is the shell. The token acceptance page — the surface June compares against
+ * The app is the shell — `Surface`, which owns the state and picks the phone or desktop
+ * layout from the viewport width (see `shell/Surface.tsx` for the breakpoint and why).
+ *
+ * The token acceptance page — the surface June compares against
  * `design/mockups/color-system.html` §5a/§5c — is NOT deleted; it moves to `/check`, because
  * it stays the fidelity reference for the whole port and every later task needs it reachable.
  *
@@ -38,5 +41,5 @@ export function App() {
   }, []);
 
   if (check) return <CheckPage />;
-  return <AppShell T={T} name={name} setTheme={setTheme} />;
+  return <Surface T={T} name={name} setTheme={setTheme} />;
 }

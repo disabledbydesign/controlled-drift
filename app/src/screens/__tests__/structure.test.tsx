@@ -44,6 +44,7 @@ const BASE_UI: PanelUi = {
   confirmDelete: null,
   dragOverId: null,
   collapsed: {},
+  deskPath: [],
   recFilter: 'all',
   stratWhen: 'all',
   stratStatus: 'all',
