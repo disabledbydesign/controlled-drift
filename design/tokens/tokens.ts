@@ -68,7 +68,17 @@ export interface ThemeColors {
   dim2: string;
   /** NEW — dimmest readable neutral (placeholders, "off" numerals, meta labels). */
   dimmest: string;
-  /** NEW — non-text disabled strokes (empty checkbox, unchecked glyph, dead status dot). */
+  /**
+   * NEW — the stroke on an UNSET chip (gallery L153, the "Parked" chip) and the unchecked `☐`
+   * text glyph (L60).
+   *
+   * ⚠ CORRECTED 2026-07-18. This previously read "empty checkbox, unchecked glyph, dead status
+   * dot" — an extrapolation not supported by RECONCILIATION.md, which sources this token only
+   * from L60 and L153. A component author trusted the wrong docstring and applied it to the
+   * checkbox, rendering the most-repeated control in the app visibly fainter than the gallery.
+   * The empty CHECKBOX stroke is `dimmer` (celestial `#6f6480`, gallery 5a) / `dimmest`
+   * (hardware `#5f6a86`, gallery 5c). Do not use `disabled` for checkboxes.
+   */
   disabled: string;
 }
 
@@ -265,7 +275,11 @@ const celEffects: ThemeEffects = {
   glassBorder: '1px solid rgba(255,255,255,0.06)',                 // gallery L139
   topAccent: 'linear-gradient(90deg,#ef92bd,#d58fd8,#5fc6d6)',     // gallery L140 — v4 started from C.rose (#f2a6c8), gallery starts from sig (#ef92bd)
   topAccentHeight: '2px',                                          // gallery L140
-  topAccentGlow: '0 8px 14px -8px rgba(239,146,189,0.8)',          // gallery L44 (v4 used `0 0 12px rose99`)
+  // ⚠ CORRECTED 2026-07-18 → 'none'. Was '0 8px 14px -8px rgba(239,146,189,0.8)', mined from
+  // gallery L44 — which is the ACTIVE-TAB UNDERLINE, a different element. The trusted top-accent
+  // bar (5a L140) is `height:2px;background:linear-gradient(...)` with no shadow at all. The old
+  // value put a pink bloom under the bar that the gallery does not have.
+  topAccentGlow: 'none',                                           // gallery L140 carries no glow
   star: celStar,                                                   // gallery L139 — 9-star recipe; see RECONCILIATION §Ambiguities
   ambient: celAmbient,                                             // gallery L34
   glowSm: (c) => `0 0 7px ${alpha(c, 0.6)}`,                        // gallery L160-164
