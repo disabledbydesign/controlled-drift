@@ -161,10 +161,33 @@ Surface rebuild — replaces `overlay_daily.html` AND `surface_template.html`/`s
 Controlling doc: `docs/handoff_2026-07-17_surface_rebuild.md`. Contract: `docs/api_contract_v2.md`.
 
 - ✅ Phase 0 — tokens reconciled, API contract, app scaffolded, fixtures extracted
-- 🔄 Track A — port v4 components against fixtures
-- 🔄 Track B — spec build order §2 → §1 → §5 → §3/§4 → §17 → §11 → §14 → §15, plus the four gaps
+- 🔄 Track A — Tasks 1 (atoms) ✅, 2 (model) ✅, 3 (shell/wire-in) ✅ — each through a review gate
+- 🔄 Track B — see the live audit below
 - ⬜ Phase 2 — integrate, live-verify on real Anytype data
 - ⬜ Phase 3 — laptop app (PWA first), retire old surfaces **only on June's judgment**
+
+### Track B — live schema audit, 2026-07-18
+
+Run `python3 scripts/describe_model.py` before building any of this; a **parallel thread has
+already landed several sections**, and re-deriving from the spec alone would duplicate work.
+
+| Spec | State | Notes |
+|---|---|---|
+| §2 Recurring mirrors Task | ✅ **LIVE** | Recurring has all 7 mirrored fields; `Has target`/`Target` gone. Built by the parallel thread (c0850ad). |
+| §3 `Active` flag | ✅ schema live | Plus a `Fixed appointment` checkbox the parallel thread added. Scheduler wiring not audited. |
+| §4 block-level attrs | 🔶 **PARTIAL** | Project has `Affective` + `Block chunk min`. **`Access conditions` is MISSING on Project.** The shared `effective()` resolver on the Python side is unaudited (the TypeScript one exists in `app/src/model/fields.ts`). |
+| §6 access-condition options | ❌ **NOT DONE** | Live tags are only the original three. Missing `Requires-deep-thinking`, `Involves-bureaucracy`, `Induces-pain`. |
+| §9 Strategy | 🔶 **PARTIAL** | Live: `Strategy status`, `Applies when`, `What for`, `Learning notes`, `Context`. Spec wants `Directive` + `Notes`. **Open: is `Directive` a new field or a rename of `What for`?** (api_contract_v2 open question 4 — needs June.) Also `Applies when` may be missing options. |
+| §17 Focus Period | ⚠️ **not an Anytype type** | The live model has exactly five types (Goal/Project/Task/Recurring/Strategy). Focus Period is stored elsewhere — check `focus_store.py` before assuming `workday_start` is a schema change. |
+| §1 write layer · §5 type conversion · §14 Today deltas · §11 logging | ⬜ not started | The bulk of Track B. |
+| Four API gaps | ⬜ not started | `GET /api/schema` (load-bearing), structured map endpoint, static-asset route, CORS. |
+| Authorship stamping | ⬜ not started | June's call: do it NOW, not later — the log is worthless retroactively. |
+
+**⚠ HUMAN-GATED AND PENDING: `Excitement level` is still LIVE on Project.** The source edit
+landed 2026-07-17 (`build_project.py` no longer creates it, and has a retire block that unlinks
+it), but the script was deliberately **not run** — schema writes against June's space are hers to
+approve. Until she runs it, the live type and the builder disagree. This is the expected state,
+not a defect; it just needs her go-ahead.
 
 **Deferred, do not build:** data-health count line (declined), global capture hotkey (declined),
 calendar sync (parked post-v1), Needs-Clarifying collapse (§13, revisit when a real use appears).
