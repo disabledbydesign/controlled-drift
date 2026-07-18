@@ -25,7 +25,7 @@ from datetime_seam import recurring_items_for_today
 from neglect import active_untouched
 from scheduler import schedule, DEFAULT_DURATION_MIN
 from surface_log import log_surfaced_batch
-from plan_corrections_log import log_correction
+from corrections_log import log_correction
 
 
 # --- Data loading -----------------------------------------------------------

@@ -138,12 +138,12 @@ def test_a_malformed_override_file_raises_rather_than_being_ignored(tmp_path):
 
 
 def test_a_revision_is_logged_through_the_existing_corrections_log(tmp_path):
-    """Learning-loop signal: before/after, routed through plan_corrections_log, not a new log."""
+    """Learning-loop signal: before/after, routed through corrections_log, not a new log."""
     import cd_paths
-    import plan_corrections_log  # noqa: F401  (the log this routes through)
+    import corrections_log  # noqa: F401  (the log this routes through)
     fs.set_override("Blocked on", {"hint": "what I'm waiting on"},
                     path=str(tmp_path / "ov.json"))
-    lines = [json.loads(l) for l in open(cd_paths.data_file("plan_corrections.jsonl"))
+    lines = [json.loads(l) for l in open(cd_paths.data_file("corrections.jsonl"))
              if l.strip()]
     rec = [r for r in lines if r["kind"] == "field_semantics"][-1]
     assert rec["before"]["field"] == "Blocked on"

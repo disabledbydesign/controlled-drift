@@ -23,7 +23,7 @@ sys.path.insert(0, os.path.dirname(__file__))
 import gsdo_anytype as g
 import daily_plan as dp
 from surface_log import log_surfaced_batch
-from plan_corrections_log import log_correction
+from corrections_log import log_correction
 import plan_store
 import session_store
 import cd_paths

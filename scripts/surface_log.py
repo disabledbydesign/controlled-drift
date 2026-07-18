@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Append-only surface history. Mirrors plan_corrections_log pattern.
+"""Append-only surface history. Mirrors corrections_log pattern.
 
 When the daily plan surfaces an item (updates last_surfaced in Anytype), it also
 appends here — because last_surfaced is a single overwriting field. Without this log,

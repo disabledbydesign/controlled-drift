@@ -878,14 +878,14 @@ def clear_override(name, path=None):
 def _log_revision(field, before, after):
     """Route the revision through the EXISTING corrections log — no thirteenth log module.
 
-    `plan_corrections_log.log_correction(kind, before, after)` is the repo's generic
+    `corrections_log.log_correction(kind, before, after)` is the repo's generic
     before/after correction record and is the only existing log whose shape matches an edit with
     a before and an after. ⚠ Its file is named for PLAN corrections, so a schema-semantics
     revision is a widening of its scope, not a natural fit — flagged for June rather than
     resolved by adding a new log (backend spec §11 / repo rule: never invent a new log).
     """
-    import plan_corrections_log
-    plan_corrections_log.log_correction("field_semantics",
+    import corrections_log
+    corrections_log.log_correction("field_semantics",
                                         {"field": field, **before},
                                         {"field": field, **after})
 

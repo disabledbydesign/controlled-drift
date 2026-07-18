@@ -1,7 +1,7 @@
-# tests/test_plan_corrections_log.py
+# tests/test_corrections_log.py
 import sys, os, json, tempfile, datetime as dt
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "scripts"))
-from plan_corrections_log import log_correction
+from corrections_log import log_correction
 
 def test_appends_one_jsonl_line(tmp_path):
     path = tmp_path / "corr.jsonl"
