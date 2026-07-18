@@ -23,11 +23,19 @@ recorded, and which one is right is your call.
 
 **Access conditions** — Live tags are only the original three. docs/BUILD_DOC.md Track B records backend-spec §6's Requires-deep-thinking / Involves-bureaucracy / Induces-pain as NOT DONE. Also: `Access conditions` is missing on Project.
 
+>> June: We want to build the new tags.
+
 **Access notes** — Unpopulated across the entire live space (2026-07-18). Per the spec this is where unnamed barriers accumulate to feed tag promotion, so nothing is currently prompting for it. Recorded as an observation, not asserted as a bug. docs/structural_diagnosis_2026-07-11.md also lists access_notes among fields nothing reads.
+
+>> June: Keep this - hopefully surfacing the fields and their semantic purpose will help with this. 
 
 **Affective** — The leak lives here. Of 14 populated Affective values in the live space, the agent-written ones are status/findings, not affect. Spec and observed use disagree; the spec is the rule and the data is what needs fixing. Separately, docs/structural_diagnosis_2026-07-11.md noted Affective drove no selection as of that date; RE-VERIFIED 2026-07-18, it IS read in the plan path now (2 refs). That half of the claim is STALE; the leak above is current.
 
+>> June: We want to fix this - it sounds like the problem was that the python puts the LLM's reasoning output into the context field, whereas the reasoning field should land in the write log
+
 **Barriers** — docs/structural_diagnosis_2026-07-11.md lists Barriers among fields nothing reads; the route assessment names 'barriers never resurface' as the missing piece — the field, not the definition.
+
+>> June: Keep this - its pending further design
 
 **Deadline** — docs/structural_diagnosis_2026-07-11.md: loaded but never displayed or ordered on, as of that date. ⚠ RE-VERIFIED 2026-07-18 against current code: this claim is STALE — the field IS read in the plan path now. Read at 3 sites.
 
@@ -37,13 +45,21 @@ recorded, and which one is right is your call.
 
 **Goal status** — Also appears on the live Project type. The specs define it only for Goal; no documented meaning for a Project's Goal status was found. See UNDEFINED.
 
+>> June: Yes, im not sure what the goal status is either, other than perhaps a mechanism for allowing us to retire goals?
+
 **Horizon** — docs/review_reorganize_backend_spec.md §12 lists a wider live option set (Chapter · Milestone · Short-term · Medium-term · Long-term · Ongoing).
 
 **Learning notes** — Appears unused across her 12 live Strategy objects (docs/BUILD_DOC.md §8).
 
+>> June: This seems like it would be useful to build on later, although im not sure what the original plan for it was. 
+
 **Relevant docs** — RE-VERIFIED 2026-07-18: still not read by the plan path — but that is the WRONG TEST, same as AI autonomous. June: agent-facing. An agent working the task should read these paths first. Checked: not exposed by cd_mcp_server.py, not mentioned in the drift skill. Never connected to its consumer.
 
+>> June: Need to be fixed
+
 **Side** — docs/review_reorganize_backend_spec.md §12 proposes renaming Obligation → Work; not applied live as of 2026-07-18.
+
+>> June: Yes, lets rename to work. And let's also make sure that the LLM-facing semantic explination includes what these do in terms of the UI/UX.
 
 **What for** — In June's 12 real Strategy objects this field carries BOTH the trigger AND the instruction — e.g. 'When planning days that involve leaving the house. Weigh the cumulative spoon-cost of errands, not just count.' Used on essentially all of them (docs/BUILD_DOC.md §8 Strategy decision). Broader than the spec's trigger-only definition; reported, not reconciled.
 
@@ -55,12 +71,32 @@ Nothing was invented for these. A made-up rationale sitting next to real ones wo
 worse than an obvious gap, because it would look just as authoritative.
 
 - **Active** — A checkbox on Recurring created by scripts/build_recurring.py. No spec or design doc found defining what it means or what reads it.
+
+>> June: Recurring as needed, scheduled, or both? It is probably a tick we use to determine whether or not it surfaces in the daily plan or not. 
+
 - **Applies when** — A select on Strategy (Always / Low energy / Overwhelmed / Sprint / Stuck). It exists and its options are documented (docs/review_reorganize_backend_spec.md §12), but docs/BUILD_DOC.md §8 records that it is barely used (1 of 12 Strategies) and NOMINALLY OVERLAPS `What for`, with the redundancy explicitly unresolved. No settled meaning to state.
+
+>> June: Applies when should trigger in specific coded conditions - when I click this button in the UI, here's what you should do. Or something like that? 
+
 - **Day of month** — A number on Recurring. The interval model in AI_LAYER_SPEC.md §2 does not mention it; no other doc found defines it.
+
+>> June: Should be straightforward for an agent.
+
 - **Foreground projects** — An objects field on Goal. The name matches Focus Period's foreground concept, and the Focus Period adapter writes a field of this name — but no doc found explains what it means ON A GOAL. Not defined here.
+
+>> June: Answer these questions by looking at focus period's interactions in the UI/UX - what does the field *do* - then draft semantic explinations for the field based on that, in terms of what the LLM needs to know to use this field correctly. 
+
 - **Goal status (on Project)** — The live Project type carries a `Goal status` select. The specs define Goal status only for Goal. Whether this is intentional or a schema leak is not documented.
+
+>> June: Is it in the mockup? I think this might be leak.
+
 - **Last surfaced** — A date on Task. docs/orchestrator_flags_2026-07-11.md describes it as the neglect/staleness input, and reports it NON-FUNCTIONAL end to end (written only by an interactive CLI path June doesn't use; 5 of 137 tasks had it, none newer than 2026-06-18). Its intended semantics were never written down as a field definition, so none is given here.
+
+>> June: if this is a valuable field, we can update the system to keep updating it outside the CLI path. But the llm wouldn't write to this path, right? That would be updated by python?
+
 - **Needs clarifying** — A checkbox on Task and Recurring. `Needs Clarifying` exists as a STATUS value with a documented meaning, but no doc found explains what the separate checkbox means or how it relates to the status. docs/review_reorganize_backend_spec.md §13 has it as an OPEN question ('reconsider whether it earns its place').
+
+>> June: Yeah, this may be relevent for the agent-facing interface. Need more usage data to know for sure. But it belongs in the same family of considerations as AI autonomous - essentially telling agents, "dont act on this, it can be raised, but it needs clarifying or design or something"
 
 ---
 
@@ -69,6 +105,8 @@ worse than an obvious gap, because it would look just as authoritative.
 ### Barriers
 
 The strategic/decisional 'I don't know how to…' struggle — genuine open QUESTIONS, not undone chores. 'As a PhD I'm overqualified — never know how to handle it.'
+
+>> June: A note on LLM facing langauge - if you give one specific example, the model may replicate your example in its output for the text fields. which is tricky because your example is clarifying. 
 
 **Not this:** A concrete thing being waited for (that is `Blocked on`) and an access barrier (that is `Access conditions` / `Access notes`).
 
