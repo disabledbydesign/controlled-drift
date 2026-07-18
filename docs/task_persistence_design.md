@@ -1,5 +1,17 @@
 # Task persistence (unfinished items stay until done) — design
 
+> **REVISION 2026-07-17 — one rail + build plan written.** Threads 2 (persistence) and 3 (record
+> recurring completions) are ONE mechanism: `completion_log` is the single durable record of what June
+> actually finished; every completion path writes to it; rollover reads real state instead of guessing
+> from cadence. Two behaviors ride it — **persist** (unfinished stays until done: one-off tasks already
+> do via `rollover_ids`; missed non-appointment recurrings get re-injected daily) and **wait-for-cadence**
+> (a `Fixed appointment` recurring — the opt-out flag, June's name — that is missed returns on its own
+> schedule). The opt-out flag is named **"Fixed appointment"** (checkbox on Recurring, default unset =
+> persist). Combined build plan: `docs/superpowers/plans/2026-07-17-completion-rail-persistence.md`
+> (7 tasks + live-verify, grounded in real seams). Gel with the new UI: the review surface's recurring
+> toggle is `paused`↔`Active` *membership* (thread-1 surface), NOT per-occurrence done — the two gestures
+> stay distinct; the `paused`→`Active` write-back polarity is flagged for reconciliation.
+
 **Status:** design SETTLED with June 2026-07-17, approved to build. Not yet built.
 Sits alongside `docs/as_needed_reactivation_design.md` — both use the same "surface every day until
 done" rail. Replaces the current LLM-narrated "carried over from yesterday" rollover behavior.
