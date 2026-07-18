@@ -74,7 +74,7 @@ Everything after this renders *into* the shell. Nothing downstream is "done" unt
 
 - [ ] Port `row()` 436 + `lead()` 385, consuming Task-1 atoms and Task-2 `chipsFor`
 - [ ] Indentation expresses depth; hue does NOT (gallery: nested children carry status glyph colors only)
-- [ ] Expand/collapse via `toggleCollapse` 676
+- [x] ⚠ **PLAN ERROR, corrected 2026-07-18.** This line said "expand/collapse via `toggleCollapse` 676" and conflated two different v4 behaviours. **v4's Map is a DRILL-IN, not a nested tree:** `treeBody` (630) renders every row at `depth:0`, and the chevron sets `st.focus` and swaps the panel behind a breadcrumb — verified, v4 passes `depth:0` at every `row()` call site but one. `toggleCollapse` (676) is real but belongs to the **Routines** tab's grouping headers. Task 4 built a nested tree to give "indentation expresses depth" somewhere to show; `Row` itself is unaffected and correct. **Task 6 restores the drill-in.**
 - [ ] Render a real fixture tree inside the Map tab — **wire-in, not a storybook**
 - [ ] **Live check:** screenshot both themes against gallery 4a/4c
 - [ ] **Review gate** · commit
@@ -94,6 +94,9 @@ Everything after this renders *into* the shell. Nothing downstream is "done" unt
 - [ ] `treeBody` 630 → Map · `recurringBody` 677 → Routines · `strategiesBody` 651 → Strategies
 - [ ] `filterMenu` 359, `addPanel` 374, `chipStrip` 464, `menuStrip` 477, `mapControls` 967
 - [ ] `pickerPage` 603 — move/re-parent target picker, driven by `moveFor`/`addParentFor`
+- [ ] ⚠ **Restore the Map's DRILL-IN behaviour** (v4 `treeBody` 630 + breadcrumb), replacing Task 4's interim nested tree. Rows render at `depth:0`; the chevron sets `st.focus`. Task 4's interim "Hide inactive" strip is replaced by the real `mapControls` (967).
+- [ ] ⚠ **Keep `pickerPage`'s `exclude` set** (v4:605 — walks the moved node's subtree and skips those ids). Dropping it makes `move()`'s cycle guard REACHABLE, and that guard is a silent dead end: no toast, no `ui` patch, so `moveFor` never clears and the picker sits open with no feedback.
+- [ ] `sideOf` (v4:329) is unported in `model/` — needed for the Side filter's ancestor walk. Add it there, not in the component layer (it needs the index).
 - [ ] **Live check:** filter each tab, move an object, add a child, convert a type
 - [ ] **Review gate** · commit
 

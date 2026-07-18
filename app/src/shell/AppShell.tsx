@@ -85,7 +85,9 @@ export function AppShell({ T, name, setTheme }: AppShellProps) {
     ) : tab === 'add' ? (
       <AddScreen T={T} />
     ) : tab === 'map' ? (
-      <MapScreen T={T} idx={st.idx} />
+      // Task 4 wire-in: the Map tab now renders the real fixture tree through `Row`, so it
+      // needs the graph and the state seam, not just the index.
+      <MapScreen T={T} graph={st.graph} idx={st.idx} ui={st.ui} up={st.up} apply={st.apply} />
     ) : tab === 'routines' ? (
       <RoutinesScreen T={T} idx={st.idx} />
     ) : tab === 'strategies' ? (

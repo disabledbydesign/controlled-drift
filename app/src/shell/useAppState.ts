@@ -3,6 +3,7 @@ import { defaultSchema, seed, seedPlan, seedStrategies } from '../fixtures/index
 import type { Plan } from '../fixtures/index.ts';
 import { applySchema, index } from '../model/index.ts';
 import type { DerivedSchema, Graph, GraphIndex, MutationResult } from '../model/index.ts';
+import type { ChipEditTarget } from '../components/rows/index.ts';
 import type { AppTab } from './tabs.ts';
 
 /**
@@ -37,9 +38,29 @@ export interface UiState {
   sideFilter: string;
   todayShape: 'schedule' | 'priority';
   menuFor: string | null;
-  chipEdit: string | null;
+  /**
+   * WHICH field of WHICH row has its option strip open.
+   *
+   * ⚠ Type CORRECTED 2026-07-18 (Task 4). This was `string | null`, but v4 stores an object:
+   * `up({chipEdit:{id:n.id,field:chip.field}})` at row() 438, read back as
+   * `st.chipEdit.id===n.id` (row 437) and `this.st.chipEdit.field` (chipStrip 464). A bare id
+   * cannot say WHICH chip on the row was tapped, and a row carries up to two. Every existing
+   * assignment in this repo is `chipEdit: null`, so widening the type breaks nothing.
+   */
+  chipEdit: ChipEditTarget | null;
   addOpen: boolean;
   filterOpen: boolean;
+  /**
+   * id of the row a drag is currently hovering over — v4's `st.dragOverId`, read by row()'s
+   * drop-target branch (440-446). v4 never declares it in the initial state bag; it appears
+   * only via `up()`. Declared here because the bag is strictly typed.
+   */
+  dragOverId: string | null;
+  /**
+   * Which nodes are COLLAPSED — v4's `st.collapsed` (78), toggled by `toggleCollapse` (676).
+   * Absent id = expanded, so the tree opens expanded and the map stays small.
+   */
+  collapsed: Readonly<Record<string, true>>;
 
   // These three are emitted by mutations that ALREADY SHIP (mutations.ts:145 `move`,
   // :201 `move`, :406 `addChild`). They were missing here, and the `as Partial<UiState>`
@@ -67,6 +88,8 @@ const INITIAL_UI: UiState = {
   chipEdit: null,
   addOpen: false,
   filterOpen: false,
+  dragOverId: null,
+  collapsed: {},
   moveFor: null,
   addParentFor: null,
   pickerFilter: '',
