@@ -40,7 +40,7 @@ export interface RowOptions {
   badgeAbove?: boolean;
   /**
    * ⚠ v4 DESTRUCTURES `flat` and `directEdit` in row()'s signature and then NEVER READS
-   * EITHER in the body — verified by reading lines 436-462 whole. Three call sites pass
+   * EITHER in the body — verified by reading lines 436-462 whole. Two call sites pass
    * `flat:true` (672, 692) believing it does something. They are dead parameters in v4.
    * Ported as accepted-and-ignored so those call sites port across unchanged rather than
    * becoming type errors; flagged rather than silently dropped or silently implemented.
@@ -132,9 +132,16 @@ export function Row({
 
   // ── drag to re-parent ──────────────────────────────────────────────────────
   // A GOAL is a root and a STRATEGY lives outside the hierarchy, so neither can be moved;
-  // only container levels can receive a drop. NOTE: no call site in v4 passes `dnd:true`, so
-  // this whole branch is unreachable there. Ported anyway — it is real, complete behaviour,
-  // and Task 6's picker work is the obvious place it becomes reachable.
+  // only container levels can receive a drop.
+  //
+  // ⚠ CORRECTED 2026-07-18 (review gate). This previously asserted "no call site in v4 passes
+  // `dnd:true`, so this whole branch is unreachable there" — WRONG. v4:747, `deskApp`'s Map
+  // panel row, passes `dnd:true` (with sel/noMenu/badgeAbove). Drag-to-reparent is a LIVE path
+  // in v4's DESKTOP Map, so this lands in Task 10, not Task 6.
+  //
+  // Carry forward to Task 11: an invalid drop no-ops SILENTLY — the guard fires here and again
+  // inside move() (mutations.ts:191), neither with feedback. That is v4's own shape, but it is
+  // exactly the reachable-but-silent case the toast should cover.
   const movable = dnd && n.level !== 'GOAL' && n.level !== 'STRATEGY';
   const dropTarget =
     dnd && ['GOAL', 'PROJECT', 'SUBPROJECT', 'WORKSTREAM'].includes(n.level);
@@ -210,7 +217,10 @@ export function Row({
           <Chip
             T={T}
             c={c}
-            onClick={() => {
+            onClick={(e) => {
+              // v4:452/455 — `e.stopPropagation()` BEFORE onChip. Without it the chipsBelow
+              // strip, which is a child of the row's tap target, fires onTap as well.
+              e.stopPropagation();
               onChip(c.field);
             }}
           />
@@ -305,7 +315,9 @@ export function Row({
                 <Chip
                   T={T}
                   c={c}
-                  onClick={() => {
+                  onClick={(e) => {
+                    // v4:455 — see the note on the inline chip row above.
+                    e.stopPropagation();
                     onChip(c.field);
                   }}
                 />

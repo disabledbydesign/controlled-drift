@@ -1,4 +1,5 @@
-import { defineConfig } from 'vite';
+// vitest/config re-exports Vite's defineConfig with the `test` key typed in.
+import { defineConfig } from 'vitest/config';
 import react from '@vitejs/plugin-react';
 import { resolve } from 'node:path';
 
@@ -41,5 +42,11 @@ export default defineConfig({
     outDir: 'dist',
     emptyOutDir: true,
     sourcemap: true,
+  },
+
+  // Component tests need a DOM. Model-layer tests are pure and unaffected.
+  test: {
+    environment: 'jsdom',
+    globals: false,
   },
 });

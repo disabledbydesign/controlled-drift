@@ -1,3 +1,4 @@
+import type { MouseEvent } from 'react';
 import { chipBorder, chipFill } from '@tokens';
 import type { Theme } from '@tokens';
 
@@ -14,7 +15,14 @@ export interface ChipProps {
   T: Theme;
   c: ChipValue;
   /** Present ⇒ the chip is a live control (pointer cursor, `data-mkeep`). */
-  onClick?: (() => void) | undefined;
+  /**
+   * ⚠ Takes the EVENT. v4:452/455 both call `e.stopPropagation()` before `onChip(c)`, because
+   * in the `chipsBelow` branch the chip strip is a child of the row's own tap target — without
+   * the stop, one tap fires both the chip handler and the row handler. This was typed
+   * `() => void`, which made `stopPropagation` untypeable from any caller and silently dropped
+   * v4's behaviour. Widened 2026-07-18 (review gate).
+   */
+  onClick?: ((e: MouseEvent) => void) | undefined;
 }
 
 /**
