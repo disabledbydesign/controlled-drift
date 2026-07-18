@@ -5,13 +5,21 @@ import sys, os, datetime as dt
 import pytest
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "scripts"))
 from focus_period_adapter import (to_write_properties, missing_required, reflect_back,
-                                  period_to_fields, _fmt_range, _csv)
+                                  period_to_fields, resolve_reactivate_names, _fmt_range, _csv)
 
 PROJECTS = [
     {"id": "p1", "name": "Academic positions", "type": {"key": "gsdo_project"}},
     {"id": "p2", "name": "Industry positions", "type": {"key": "gsdo_project"}},
     {"id": "p3", "name": "Reframe paper", "type": {"key": "gsdo_project"}},
     {"id": "g1", "name": "Material survival", "type": {"key": "gsdo_goal"}},  # not a project
+]
+
+AS_NEEDED_OBJECTS = [
+    {"id": "rid-fridge", "name": "Clean the fridge", "type": {"key": "gsdo_recurring"},
+     "properties": [{"key": "interval_unit", "select": {"name": "as_needed"}}]},
+    {"id": "rid-daily", "name": "Take meds", "type": {"key": "gsdo_recurring"},
+     "properties": [{"key": "interval_unit", "select": {"name": "day"}}]},  # scheduled, not as-needed
+    {"id": "p1", "name": "Academic positions", "type": {"key": "gsdo_project"}},  # different type
 ]
 
 
@@ -141,6 +149,28 @@ def test_paused_and_workday_only_shown_when_present():
     assert "paused" in keys and "workday_end" in keys
 
 
+def test_reflect_back_emits_reopening_when_reactivate_tasks_present():
+    r = reflect_back(_fields(reactivate_tasks=["Clean the fridge", "Do the dishes"]))
+    reopening = [i for i in r["items"] if i["key"] == "reactivate_tasks"]
+    assert reopening and reopening[0]["label"] == "Reopening"
+    assert reopening[0]["display"] == "Clean the fridge, Do the dishes"
+
+
+def test_reflect_back_omits_reopening_when_absent():
+    r = reflect_back(_fields())
+    assert "reactivate_tasks" not in {i["key"] for i in r["items"]}
+    r_empty = reflect_back(_fields(reactivate_tasks=[]))
+    assert "reactivate_tasks" not in {i["key"] for i in r_empty["items"]}
+
+
+def test_reflect_back_marks_reopening_changed_in_edit_mode():
+    original = _fields(reactivate_tasks=[])
+    edited = _fields(reactivate_tasks=["Clean the fridge"])
+    r = reflect_back(edited, original=original)
+    reopening = next(i for i in r["items"] if i["key"] == "reactivate_tasks")
+    assert reopening["changed"] is True
+
+
 # --- Task 4: period_to_fields (stored period -> editable fields) --------------
 
 def test_period_to_fields_converts_dates_and_resolved_names():
@@ -195,3 +225,30 @@ def test_reflect_without_original_has_no_changed_flags():
     r = reflect_back(_fields())
     assert r["is_edit"] is False
     assert all("changed" not in i for i in r["items"])
+
+
+# --- resolve_reactivate_names (Task 6: commit-time activation resolver) -----
+
+def test_resolve_reactivate_names_maps_known_as_needed_names():
+    resolved, unresolved = resolve_reactivate_names(["Clean the fridge"], objects=AS_NEEDED_OBJECTS)
+    assert resolved == ["rid-fridge"] and unresolved == []
+
+
+def test_resolve_reactivate_names_surfaces_unknown_not_raises():
+    resolved, unresolved = resolve_reactivate_names(
+        ["Clean the fridge", "Nonexistent"], objects=AS_NEEDED_OBJECTS)
+    assert resolved == ["rid-fridge"] and unresolved == ["Nonexistent"]
+
+
+def test_resolve_reactivate_names_excludes_scheduled_recurring_and_other_types():
+    # "Take meds" is Recurring but interval_unit=day (scheduled, not as-needed) — must NOT resolve.
+    # "Academic positions" is a Project, same name-collision risk as the link-token guard in Task 5.
+    resolved, unresolved = resolve_reactivate_names(
+        ["Take meds", "Academic positions"], objects=AS_NEEDED_OBJECTS)
+    assert resolved == []
+    assert set(unresolved) == {"Take meds", "Academic positions"}
+
+
+def test_resolve_reactivate_names_empty_list_is_a_noop():
+    resolved, unresolved = resolve_reactivate_names([], objects=AS_NEEDED_OBJECTS)
+    assert resolved == [] and unresolved == []

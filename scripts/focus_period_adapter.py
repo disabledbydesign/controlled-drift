@@ -18,6 +18,7 @@ deterministic.
 """
 import sys, os, datetime as dt
 sys.path.insert(0, os.path.dirname(__file__))
+import gsdo_anytype as g
 import focus_period_author as author
 
 _MONTHS = ["", "Jan", "Feb", "Mar", "Apr", "May", "Jun",
@@ -99,6 +100,34 @@ def to_write_properties(fields, objects=None):
     return name, props
 
 
+def resolve_reactivate_names(names, objects=None):
+    """Resolve as-needed-Recurring display names -> Anytype ids for commit-time activation.
+
+    Unlike resolve_project_names_to_ids, an unmatched name is NOT an error — it's surfaced back
+    to the caller instead (a mis-heard/renamed task is real signal June should see, not a reason
+    to fail or silently drop the rest of the commit). Returns (resolved_ids, unresolved_names).
+    `objects` may be passed (already-fetched, e.g. by the commit route) to avoid a second fetch."""
+    if objects is None:
+        objects = g.fetch_all_objects(g.get_space_id())
+    by_name = {}
+    for o in objects:
+        t = o.get("type")
+        tk = t.get("key") if isinstance(t, dict) else t
+        if tk != "gsdo_recurring" or not o.get("name"):
+            continue
+        props = {p.get("key"): p for p in o.get("properties", [])}
+        unit = (props.get("interval_unit") or {}).get("select") or {}
+        if unit.get("name") == "as_needed":
+            by_name[o["name"]] = o["id"]
+    resolved, unresolved = [], []
+    for n in (names or []):
+        if n in by_name:
+            resolved.append(by_name[n])
+        else:
+            unresolved.append(n)
+    return resolved, unresolved
+
+
 def _iso(d):
     """A date object (or None) -> ISO string (or None). For turning a stored period back into
     the generate-style fields dict the edit flow works on."""
@@ -138,6 +167,7 @@ _ITEM_FIELDS = {
     "intent": ("intent",),
     "paused": ("paused_projects",),
     "workday_end": ("workday_end",),
+    "reactivate_tasks": ("reactivate_tasks",),
 }
 
 
@@ -175,6 +205,10 @@ def reflect_back(fields, original=None):
     if f.get("workday_end"):
         items.append({"key": "workday_end", "label": "Working until", "edit": "text",
                       "display": f["workday_end"]})
+    reactivate = f.get("reactivate_tasks") or []
+    if reactivate:
+        items.append({"key": "reactivate_tasks", "label": "Reopening", "edit": "text",
+                      "display": ", ".join(reactivate)})
 
     # Edit mode: mark which items CHANGED vs the period's original state, so an unintended
     # change (an LLM revision that clobbered an unrelated field) is visible before anything

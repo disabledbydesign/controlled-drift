@@ -842,8 +842,27 @@ class Handler(BaseHTTPRequestHandler):
             except Exception as e:
                 self._send(500, {"error": f"read-back failed: {e}"})
                 return
+            # Reactivate any as-needed tasks she named this period ("keep the dishes going") — the
+            # period write already succeeded, so a reactivation problem is surfaced alongside the
+            # success, never silently dropped and never rolling back the period itself.
+            reactivate_names = fields.get("reactivate_tasks") or []
+            unresolved = []
+            reactivate_failed = []
+            if reactivate_names:
+                resolved_ids, unresolved = focus_period_adapter.resolve_reactivate_names(
+                    reactivate_names, objects=data)
+                for rid in resolved_ids:
+                    try:
+                        recurring_active.set_recurring_active(rid, True)
+                    except Exception as e:
+                        reactivate_failed.append({"id": rid, "error": str(e)})
             focus_store.clear()
-            self._send(200, {"ok": True, "id": oid, "name": name})
+            resp = {"ok": True, "id": oid, "name": name}
+            if unresolved:
+                resp["reactivate_unresolved"] = unresolved
+            if reactivate_failed:
+                resp["reactivate_failed"] = reactivate_failed
+            self._send(200, resp)
             return
 
         if self.path == "/api/focus/edit":

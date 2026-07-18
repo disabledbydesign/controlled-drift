@@ -41,6 +41,15 @@ def test_prompt_handles_no_goals_or_tasks():
     assert "None" not in prompt
 
 
+def test_prompt_lists_reactivate_tasks_output_key():
+    # The authoring prompt must ask the model for reactivate_tasks — Task 6's "just say it" entry
+    # point for as-needed reactivation via Focus Period.
+    prompt = fpg.build_authoring_prompt(
+        "keep the dishes going", dt.date(2026, 7, 2), ["Job Search"], tasks=["Clean the fridge"])
+    assert "reactivate_tasks" in prompt
+    assert "Clean the fridge" in prompt   # her existing tasks are visible for the model to match
+
+
 # --- _load_authoring_context: the filtering logic itself, mocked loader ------
 # Same fixture convention as test_within_thread_pick.py (mock dp.g, call the real loader) —
 # proves the workstream/hobby/discrete-task filtering against realistic raw Anytype shapes,

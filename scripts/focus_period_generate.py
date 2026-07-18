@@ -92,6 +92,7 @@ Output ONLY a JSON object with these keys (use null or [] when she didn't say):
 - "workday_end": "HH:MM" only if she implies working late (a sprint), else null
 - "foreground_projects": the FEW projects from HER PROJECT LIST above that she's putting in front this period — match what she said to the closest real project name from that list; don't invent one.
 - "paused_projects": ONLY projects she EXPLICITLY says to STOP/drop this period. Default is []. Do NOT pause a project just because it isn't foreground — non-foreground projects stay present (backgrounded), they simply aren't prioritized. Hobby / creative / dev work she frames as low-priority or self-directed goes in NEITHER list — it is open time she chooses herself; say so in "intent".
+- "reactivate_tasks": names from HER CURRENT TASKS/RECURRING list above that she says to pick back up / do this period ("keep the dishes going", "I want to get back to cleaning the fridge"). Use the EXACT name from that list; [] if she names none. Only tasks she already has — never invent one.
 Output the JSON object only — nothing before or after."""
 
 
