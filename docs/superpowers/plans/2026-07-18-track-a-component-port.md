@@ -43,19 +43,19 @@ app/src/
 
 ---
 
-## Task 1 — Visual atoms  ⏳ IN FLIGHT
+## Task 1 — Visual atoms  ✅ DONE (gate applied, e05157d)
 
 - [x] Port `topAccent` 169, `glow` 170, `bevel` 171, `appBg` 172, `taskCheck` 183, `switchEl` 188, `badge` 336, `rail` 337, `chipEl` 338, `roundCheck` 1042, `editChip` 1043 to `app/src/components/atoms/`
-- [ ] **Review gate:** fresh reviewer compares each atom against gallery sections 5a/5c
-- [ ] `npx tsc --noEmit && npx vite build` clean
+- [x] **Review gate:** PASS WITH FIXES — 5 gallery-verified corrections applied, incl. a cascade error from the token docstring
+- [x] `npx tsc --noEmit && npx vite build` clean
 
-## Task 2 — Model layer  ⏳ IN FLIGHT
+## Task 2 — Model layer  ✅ DONE (gate applied, fde7405)
 
 - [x] Port `index`/`node`/`pathTo`/`removeNode` 277-280, `applySchema` 126, `effective` 486, `isInactive`, `statusColor`, `sideColor`, `chipsFor`, `typeOptions` 291, and all mutations (282-299, 487) to `app/src/model/`
 - [x] Mutations converted from in-place `bump()` to pure state→state functions — the ONE place restructuring is expected
-- [ ] vitest installed; tests cover the inherit resolver tri-state, `isInactive` per level, reparenting move, type conversion, delete-with-children
-- [ ] **Review gate**
-- [ ] ⚠ Report whether v4's `effective()` actually implements spec §4's tri-state (absent = inherit, present-but-empty = intentional none). If it does not, port v4's real behavior and flag — do not silently implement the spec.
+- [x] vitest installed; 63 tests incl. tri-state, `isInactive` per level, reparenting, type conversion, delete-with-children, structural sharing, `isOwnValue`
+- [x] **Review gate**: PASS WITH FIXES — `INHERIT` was unported, `move()` took a stale-able index, a fabricated symbol in a comment
+- [x] ⚠ Report whether v4's `effective()` actually implements spec §4's tri-state (absent = inherit, present-but-empty = intentional none). **ANSWER: v4 implements it CORRECTLY.** No divergence.
 
 ## Task 3 — App shell + tab routing  ← THE WIRE-IN POINT
 
