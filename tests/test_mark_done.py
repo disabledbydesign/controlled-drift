@@ -82,6 +82,23 @@ def test_resolve_ids_flags_a_recurring_task_so_completion_stays_cache_only():
     assert grant["id"] == "id-aaa" and "recurring" not in grant
 
 
+def test_resolve_ids_flags_an_as_needed_task_alongside_recurring(monkeypatch):
+    # Mirrors the recurring case above (cross-family review, 2026-07-17): _resolve_ids' as_needed_ids
+    # set must ALSO stamp item['as_needed']=True by id after LLM composition — the load-bearing
+    # re-attach seam Task 4 built. A regular (non-as-needed) recurring task must NOT get it.
+    ref_map = {"T1": "id-fridge", "T2": "id-dishes"}
+    tasks = [{"id": "id-fridge", "name": "Clean the fridge", "is_recurring": True, "as_needed": True},
+             {"id": "id-dishes", "name": "Do the dishes", "is_recurring": True}]
+    plan = {"blocks": [{"items": [
+        {"task": "Clean the fridge", "ref": "T1"},
+        {"task": "Do the dishes", "ref": "T2"},
+    ]}]}
+    pg._resolve_ids(plan, ref_map, tasks)
+    fridge, dishes = plan["blocks"][0]["items"]
+    assert fridge["id"] == "id-fridge" and fridge["recurring"] is True and fridge["as_needed"] is True
+    assert dishes["id"] == "id-dishes" and dishes["recurring"] is True and "as_needed" not in dishes
+
+
 # --- same task named twice -> one row, not two ------------------------------
 
 def test_dedup_resolved_items_drops_second_occurrence_across_blocks():

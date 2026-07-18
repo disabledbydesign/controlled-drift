@@ -206,7 +206,10 @@ def _reactivate_named_tasks(reactivate_names, objects):
         resolved_ids, unresolved = focus_period_adapter.resolve_reactivate_names(
             reactivate_names, objects=objects)
     except Exception as e:
-        return [], [{"error": str(e)}]
+        # id is None here — resolution itself failed before any id existed, distinct from a
+        # per-item activation failure below (which always has a real id). Same shape either way
+        # so a caller reading reactivate_failed never has to branch on which failure mode it was.
+        return [], [{"id": None, "error": str(e)}]
     failed = []
     for rid in resolved_ids:
         try:

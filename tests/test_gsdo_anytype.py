@@ -76,3 +76,22 @@ def test_unlink_properties_from_type_noop_when_not_linked():
     before = _type_property_keys(recurring["id"])
     g.unlink_properties_from_type(recurring["id"], ["gsdo_definitely_not_linked_key"])
     assert _type_property_keys(recurring["id"]) == before
+
+def test_recurring_mirrors_task_situated_fields_by_identical_key():
+    # Cross-family review (2026-07-17): build_recurring.py reuses Task's exact property keys for
+    # its 7 mirrored situated fields (build_task.py:16-27) — a name/type/option mismatch between
+    # the two build_*.py calls would silently MINT A DUPLICATE property instead of reusing Task's
+    # (ensure_property finds-by-name; a near-miss name creates new). This is a permanent live
+    # regression guard, not just a one-time build_model.py verification.
+    task = g.find_type("task")
+    recurring = g.find_type("Recurring")
+    task_by_name = {p.get("name"): p.get("key") for p in task.get("properties", [])}
+    recurring_by_name = {p.get("name"): p.get("key") for p in recurring.get("properties", [])}
+    mirrored = ["Needs clarifying", "Blocked on", "Affective", "Access conditions",
+                "Access notes", "AI autonomous", "Relevant docs"]
+    for name in mirrored:
+        assert name in task_by_name, f"{name!r} missing from Task — can't verify the mirror"
+        assert name in recurring_by_name, f"{name!r} missing from Recurring"
+        assert recurring_by_name[name] == task_by_name[name], (
+            f"{name!r} has DIFFERENT keys on Task ({task_by_name[name]!r}) vs Recurring "
+            f"({recurring_by_name[name]!r}) — a duplicate property was minted, not reused")
