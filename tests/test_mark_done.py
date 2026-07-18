@@ -379,6 +379,35 @@ def test_uncomplete_route_needs_an_id(live_server):
     assert status == 400 and "id" in body["error"]
 
 
+# --- the /api/recurring/active route (undo-a-reactivation + June's tick-list) ----
+
+def test_recurring_active_route_calls_the_primitive(live_server, monkeypatch):
+    calls = {}
+    monkeypatch.setattr(server.recurring_active, "set_recurring_active",
+                        lambda rid, active: calls.update({"c": (rid, active)}) or active)
+    status, body = _post(live_server, "/api/recurring/active", {"id": "rid-fridge", "active": False})
+    assert status == 200
+    assert body == {"ok": True, "active": False}
+    assert calls["c"] == ("rid-fridge", False)
+
+
+def test_recurring_active_route_needs_id_and_bool_active(live_server):
+    status, body = _post(live_server, "/api/recurring/active", {"active": False})
+    assert status == 400 and "id" in body["error"]
+    status2, body2 = _post(live_server, "/api/recurring/active", {"id": "rid-fridge"})
+    assert status2 == 400 and "active" in body2["error"]
+    status3, body3 = _post(live_server, "/api/recurring/active", {"id": "rid-fridge", "active": "yes"})
+    assert status3 == 400   # a string, not a real bool — JSON true/false only
+
+
+def test_recurring_active_route_surfaces_primitive_failure(live_server, monkeypatch):
+    def boom(rid, active):
+        raise RuntimeError("Active read-back mismatch")
+    monkeypatch.setattr(server.recurring_active, "set_recurring_active", boom)
+    status, body = _post(live_server, "/api/recurring/active", {"id": "rid-fridge", "active": True})
+    assert status == 500 and "mismatch" in body["error"]
+
+
 # --- complete_stream: the checker's stream close + read-back ------------------
 
 def test_complete_stream_writes_done_engagement_and_confirms(monkeypatch):

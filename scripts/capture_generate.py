@@ -29,6 +29,7 @@ import session_store
 import generation_log
 import when_resolve
 import capture_fields
+import recurring_active
 from anytype_test import call
 
 PROMPT_PATH = os.path.join(os.path.dirname(__file__), "..", "prompts", "weeding_gate.md")
@@ -93,6 +94,32 @@ def _build_ref_table(goals, projects):
         ref_map[tok] = proj["id"]
         id2name[proj["id"]] = proj.get("name")
         lines.append(f"  {tok} — {proj.get('name')}  (Project)")
+    return ref_map, id2name, "\n".join(lines)
+
+
+def _as_needed_recurrings(recurrings):
+    """Recurring objects whose Interval unit is as_needed — the reactivation candidates the weed
+    context offers the model, regardless of current Active state (an OFF one is exactly the case
+    to reactivate; an already-ON one is still a valid re-tap the model can route to `reactivate`
+    rather than silently duplicate)."""
+    out = []
+    for r in recurrings:
+        props = {p.get("key"): p for p in r.get("properties", [])}
+        unit = (props.get("interval_unit") or {}).get("select") or {}
+        if unit.get("name") == "as_needed":
+            out.append(r)
+    return out
+
+
+def _build_as_needed_ref_table(as_needed):
+    """Assign each as-needed Recurring an R# token, mirroring _build_ref_table's G#/P# tokens —
+    the model links to it the same reliable way (copy a short token, not a 50-char id)."""
+    ref_map, id2name, lines = {}, {}, []
+    for i, r in enumerate(as_needed, start=1):
+        tok = f"R{i}"
+        ref_map[tok] = r["id"]
+        id2name[r["id"]] = r.get("name")
+        lines.append(f"  {tok} — {r.get('name')}  (Recurring, as-needed)")
     return ref_map, id2name, "\n".join(lines)
 
 
@@ -172,6 +199,11 @@ tools or MCP to look anything up. Therefore:
   = "skip" with a `dedup_note` for a true duplicate; OR `action` = "create" — and if you saw a
   *possible* overlap you chose not to treat as a duplicate, set `dedup_note` on the created item
   too (record the doubt; it's a signal, not a reason to drop). No overlap seen → omit `dedup_note`.
+- **Reactivate an existing as-needed task (do NOT create a duplicate).** If an item is June asking to
+  do a task that is ALREADY in EXISTING AS-NEEDED TASKS ("do the dishes", "clean the fridge"), set
+  `action` = "reactivate" and `reactivate_ref` = its R# token — this turns the existing task back on.
+  Only for a clear match to that list. If you're unsure it's the same task, `action` = "create" as
+  normal (a duplicate June can see and undo beats silently reactivating the wrong thing).
 - **Capacity/affect.** If a feeling or capacity signal runs through the input ("this is heavy,"
   "I've been avoiding this," frustration, urgency), capture it once in `capacity_read` with
   `source` = "stated" if June said it outright or "inferred" if you read it from how she wrote.
@@ -211,7 +243,8 @@ validation surface; the JSON carries it. Shape:
           "name": "the item, in June's words",
           "link": "P3 | G1 | null",
           "status": "Ready | Needs Clarifying | null",
-          "action": "create | skip",
+          "action": "create | skip | reactivate",
+          "reactivate_ref": "R2 | null",
           "dedup_note": "why skipped, if skipped, else null",
           "reasoning": "why this type and this link — June must be able to see the why",
           "when": "<when June wants it, IN HER WORDS: 'today', a weekday like 'thursday', 'tomorrow', an ISO date, or 'someday'. EMPTY STRING if she didn't say. Never guess a time.>",
@@ -265,7 +298,7 @@ def _format_history(history):
     return "\n".join(lines)
 
 
-def _assemble_prompt(text, ref_table, dedup_list, history):
+def _assemble_prompt(text, ref_table, dedup_list, history, as_needed_table=None):
     with open(PROMPT_PATH) as f:
         template = f.read()
     parts = [
@@ -277,6 +310,9 @@ def _assemble_prompt(text, ref_table, dedup_list, history):
         "",
         "### EXISTING GOALS & PROJECTS — link items to these by token",
         ref_table or "  (none yet)",
+        "",
+        "### EXISTING AS-NEEDED TASKS — reactivate one of these by token instead of creating a duplicate",
+        as_needed_table or "  (none yet)",
         "",
         "### EXISTING TASKS/RECURRING — for the dedup check (do not recreate these)",
         dedup_list,
@@ -317,6 +353,7 @@ def parse_weed(model_text):
             item.setdefault("access_conditions", [])
             item.setdefault("engagement", "Open")
             item.setdefault("engagement_notes", "")
+            item.setdefault("reactivate_ref", None)
     return parsed
 
 
@@ -459,9 +496,14 @@ def capture(text, today=None):
 
     sid, goals, projects, tasks, recurrings, strategies = _load_weed_context()
     ref_map, id2name, ref_table = _build_ref_table(goals, projects)
+    # Reactivation candidates: R# tokens merged into the SAME ref_map the P#/G# link tokens use,
+    # so `reactivate_ref` resolves through one lookup, not a parallel channel.
+    r_ref_map, r_id2name, as_needed_table = _build_as_needed_ref_table(_as_needed_recurrings(recurrings))
+    ref_map.update(r_ref_map)
+    id2name.update(r_id2name)
     dedup_list = _format_dedup_list(tasks, recurrings, strategies, id2name=id2name)
     history = session_store.recent_entries("capture")
-    prompt = _assemble_prompt(text, ref_table, dedup_list, history)
+    prompt = _assemble_prompt(text, ref_table, dedup_list, history, as_needed_table=as_needed_table)
 
     approx_tokens = len(prompt) // _CHARS_PER_TOKEN
     if approx_tokens > PROMPT_TOKEN_WARN:
@@ -492,6 +534,24 @@ def capture(text, today=None):
         for item in grp.get("items", []):
             if item.get("action") == "skip":
                 skipped.append({"name": item.get("name"), "note": item.get("dedup_note")})
+                continue
+            if item.get("action") == "reactivate":
+                rid = ref_map.get(item.get("reactivate_ref"))
+                if not rid:
+                    session_store.log_failure("capture", "reactivate_unresolved", {"item": item})
+                    failed.append({"name": item.get("name"), "error": "reactivate_ref did not resolve"})
+                    continue
+                try:
+                    recurring_active.set_recurring_active(rid, True)  # ONE writer (Task 3); read-back + log inside
+                    obj = _get_object(rid)                    # prove + get the real name for the receipt
+                    created.append({"id": rid, "type": "Recurring", "name": obj.get("name"),
+                                    "action": "reactivate", "project": None,
+                                    "alignment_reasoning": item.get("reasoning"),
+                                    "when_label": None, "is_today": False})
+                except Exception as e:
+                    session_store.log_failure("capture", "reactivate_failed",
+                                              {"name": item.get("name"), "error": str(e)})
+                    failed.append({"name": item.get("name"), "error": str(e)})
                 continue
             tname = item.get("type")
             if tname not in ALLOWED_TYPES:
@@ -551,8 +611,10 @@ if __name__ == "__main__":
     if args.dry_prompt:
         sid, goals, projects, tasks, recurrings, strategies = _load_weed_context()
         ref_map, id2name, ref_table = _build_ref_table(goals, projects)
+        _, _, as_needed_table = _build_as_needed_ref_table(_as_needed_recurrings(recurrings))
         print(_assemble_prompt(args.text, ref_table,
                                _format_dedup_list(tasks, recurrings, strategies, id2name=id2name),
-                               session_store.recent_entries("capture")))
+                               session_store.recent_entries("capture"),
+                               as_needed_table=as_needed_table))
     else:
         print(json.dumps(capture(args.text), indent=2))

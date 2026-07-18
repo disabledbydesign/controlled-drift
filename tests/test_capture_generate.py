@@ -81,6 +81,40 @@ def test_parse_weed_fills_defaults():
     assert parsed["groups"] == [] and parsed["capacity_read"] is None
 
 
+def test_parse_weed_reads_reactivate_action():
+    raw = '''```json
+    {"opening":"o","capacity_read":null,"groups":[{"label":"g","through_line":"t","items":[
+      {"type":"Recurring","name":"Clean the fridge","link":null,"action":"reactivate","reactivate_ref":"R2","reasoning":"r"}
+    ]}]}
+    ```'''
+    item = cg.parse_weed(raw)["groups"][0]["items"][0]
+    assert item["action"] == "reactivate" and item["reactivate_ref"] == "R2"
+
+
+def test_parse_weed_defaults_reactivate_ref_to_none():
+    parsed = cg.parse_weed('```json\n{"groups":[{"items":[{"name":"x"}]}]}\n```')
+    assert parsed["groups"][0]["items"][0]["reactivate_ref"] is None
+
+
+# --- as-needed reactivation candidates in the weed context (Task 5) --------
+
+def test_as_needed_recurrings_filters_by_interval_unit():
+    as_needed = {"id": "r1", "name": "Clean the fridge",
+                 "properties": [{"key": "interval_unit", "select": {"name": "as_needed"}}]}
+    daily = {"id": "r2", "name": "Take meds",
+             "properties": [{"key": "interval_unit", "select": {"name": "day"}}]}
+    out = cg._as_needed_recurrings([as_needed, daily])
+    assert out == [as_needed]
+
+
+def test_build_as_needed_ref_table_assigns_r_tokens():
+    as_needed = [{"id": "rid-fridge", "name": "Clean the fridge"}]
+    ref_map, id2name, table = cg._build_as_needed_ref_table(as_needed)
+    assert ref_map == {"R1": "rid-fridge"}
+    assert id2name == {"rid-fridge": "Clean the fridge"}
+    assert "R1" in table and "Clean the fridge" in table
+
+
 # --- dedup list enrichment (project + Context signal, June 2026-07-16) ------
 # Root case: bare names alone weren't enough for the model to recognize a same-subject item
 # worded differently — she forgot she'd already added a related task earlier that day, and a
@@ -153,6 +187,63 @@ def test_capture_creates_links_and_skips(tmp_path, monkeypatch):
     surgeon = next(c for c in result["created"] if c["name"] == "Call surgeon")
     assert surgeon["project"] == "Build Controlled Drift"
     assert surgeon["alignment_reasoning"] == "concrete next step"
+
+
+def test_capture_reactivates_instead_of_creating(tmp_path, monkeypatch):
+    # A matched as-needed task activates the EXISTING Recurring — gsdo_objects.create must NOT be
+    # called for it, and the receipt shows action:"reactivate" so the surface can render "reopened X".
+    recurrings = [{"id": "rid-fridge", "name": "Clean the fridge",
+                   "properties": [{"key": "interval_unit", "select": {"name": "as_needed"}},
+                                  {"key": "active", "checkbox": False}]}]
+    canned = json.dumps({"opening": "x", "capacity_read": None, "groups": [
+        {"label": "g", "through_line": "t", "items": [
+            {"type": "Recurring", "name": "Clean the fridge", "link": None,
+             "action": "reactivate", "reactivate_ref": "R1", "reasoning": "asked to pick it back up"},
+        ]},
+    ]})
+    calls = _stub(monkeypatch, tmp_path, canned=canned)
+    monkeypatch.setattr(cg, "_load_weed_context",
+                        lambda: ("sid", [{"id": "g1", "name": "Material survival"}],
+                                 [{"id": "p1", "name": "Build Controlled Drift"}],
+                                 [{"id": "t1", "name": "SSRC grant application"}],
+                                 recurrings, []))
+    activated = {}
+    monkeypatch.setattr(cg.recurring_active, "set_recurring_active",
+                        lambda rid, active: activated.update({"c": (rid, active)}) or active)
+    monkeypatch.setattr(cg, "_get_object", lambda oid: {"name": "Clean the fridge"})
+
+    out = cg.capture("clean the fridge")
+
+    assert activated["c"] == ("rid-fridge", True)
+    assert calls == []   # gsdo_objects.create was NOT called — no duplicate
+    assert out["failed"] == []
+    assert len(out["created"]) == 1
+    record = out["created"][0]
+    assert record["action"] == "reactivate"
+    assert record["id"] == "rid-fridge"
+    assert record["name"] == "Clean the fridge"
+
+
+def test_capture_reactivate_unresolved_ref_fails_without_creating(tmp_path, monkeypatch):
+    # A reactivate_ref that doesn't resolve (e.g. the model hallucinated a token) must fail
+    # loudly into `failed`, never silently create nor silently drop the item.
+    canned = json.dumps({"opening": "x", "capacity_read": None, "groups": [
+        {"label": "g", "through_line": "t", "items": [
+            {"type": "Recurring", "name": "Clean the fridge", "link": None,
+             "action": "reactivate", "reactivate_ref": "R99", "reasoning": "r"},
+        ]},
+    ]})
+    calls = _stub(monkeypatch, tmp_path, canned=canned)
+    activated = {}
+    monkeypatch.setattr(cg.recurring_active, "set_recurring_active",
+                        lambda rid, active: activated.update({"c": True}))
+
+    out = cg.capture("clean the fridge")
+
+    assert activated == {}                # never called — nothing to activate
+    assert calls == []                    # never created either
+    assert out["created"] == []
+    assert len(out["failed"]) == 1 and out["failed"][0]["name"] == "Clean the fridge"
 
 
 def test_capture_writes_estimated_duration_labeled(tmp_path, monkeypatch):

@@ -17,6 +17,8 @@ Routes:
   POST /api/complete    {id} -> mark a task done in Anytype (read-back) + flip the cache
   POST /api/task/reschedule {id, when} -> anchor a when-token to a date (read-back) {ok, when_label}
   POST /api/project/engagement {id, old, new} -> correct a Project's Engagement (read-back) {ok, engagement}
+  POST /api/recurring/active {id, active} -> set a Recurring's Active flag (read-back) {ok, active} —
+                                              undo-a-reactivation / June's tick-list share this primitive
   POST /api/uncomplete  {id} -> undo: status back to Ready (read-back) + un-flip the cache
   GET  /api/session     ?stream=capture|negotiate -> recent session log entries (the receipt)
   POST /api/capture     {text} -> weed input into typed/linked Anytype objects (async, 202)
@@ -549,6 +551,24 @@ class Handler(BaseHTTPRequestHandler):
                 self._send(500, {"error": str(e)})
                 return
             self._send(200, {"ok": True, "engagement": out})
+            return
+
+        if self.path == "/api/recurring/active":
+            # Undo a reactivation — the "reopened X" receipt's undo action: turn it back OFF.
+            # NOT the same as /api/uncomplete (that writes Active=true, the opposite direction).
+            # Also serves June's separate tick-list UI (same shared primitive/contract, Task 3).
+            body = self._read_json_body()
+            rid = (body.get("id") or "").strip()
+            active = body.get("active")
+            if not rid or not isinstance(active, bool):
+                self._send(400, {"error": "recurring/active needs id and a boolean active"})
+                return
+            try:
+                out = recurring_active.set_recurring_active(rid, active)
+            except Exception as e:
+                self._send(500, {"error": str(e)})
+                return
+            self._send(200, {"ok": True, "active": out})
             return
 
         if self.path == "/api/task/not-today":

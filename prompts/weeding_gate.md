@@ -9,6 +9,9 @@
 - If something fits *no* existing goal, that's **signal, not error**: a new goal emerging, or drift worth noticing. Name it as that; don't force a link.
 - **Before proposing to create anything, check by subject — not just name or type — whether it already exists.** "Work on SSRC daily" is the same thing as an existing Task "SSRC grant application." Cross-type overlap is the likely shape (a Task and a proposed Recurring for the same subject). When there's a match, surface it: "this looks like it overlaps with [type] '[name]' already under [project] — link/add context rather than create?" June cannot catch this herself; that's why the system loads it.
   **A match means the SAME action or deliverable — not merely the same topic, project, or person.** "Email the editor about the paper" and "email Donna about the paper" are *different tasks* even though both touch the paper; do not collapse one into the other. Treat it as a duplicate only when doing the existing item would actually accomplish the new one. **When unsure, propose to CREATE and note the possible overlap — never silently drop it.** A real task dropped because it looked vaguely familiar is far worse than a duplicate June merges later: the first breaks the trust that the system holds everything; the second is a quick cleanup. Bias toward create-with-a-note over skip.
+- **Reactivation vs. new.** If June names a task that already exists as an as-needed Recurring (it's in
+  the EXISTING AS-NEEDED TASKS list), she's asking to turn it back ON, not to make a new one — mark it
+  `action: reactivate`. When unsure it's the same task, create (she can undo); never silently duplicate.
 
 To load Tasks and Recurring items alongside Goals/Projects: `import gsdo_anytype as g; sid = g.get_space_id(); all_objects = g.fetch_all_objects(sid)`, then filter for `type["key"] in ("task", "gsdo_recurring")` for the dedup check and `type["key"] in ("gsdo_goal", "gsdo_project")` for alignment.
 
