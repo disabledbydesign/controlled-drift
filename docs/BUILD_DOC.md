@@ -130,6 +130,16 @@ directs, reviews, approves — she does not generate. Never use the AskUserQuest
   means nothing. **Always use `gsdo_anytype.fetch_all_objects(sid)`**, which pages
   `GET /spaces/{sid}/objects`. This cost two wrong claims to June in one session (that she had no
   Strategy objects, and that Focus Period was not a type).
+- **Frontend dev-loop gotchas (2026-07-18).**
+  - `agent-browser screenshot` **hangs indefinitely** — reproduced at the raw CDP layer on a blank
+    page in fresh headless Chrome, so it is environmental, not app-related. **Do not debug it.**
+    Use `cd app && node scripts/shot.mjs "map,today" celestial,hardware`. agent-browser's DOM
+    reads, clicks and computed-style reads all work fine; only screenshots are affected.
+  - A Vite dev server started as a *tracked* background command gets **killed between turns**.
+    Start it detached instead: `cd app && nohup npx vite --port 5173 > /tmp/vite.log 2>&1 & disown`.
+  - Component tests: `vite.config` sets `globals: false`, so Testing Library's automatic cleanup
+    never registers. Call `afterEach(cleanup)` explicitly or renders accumulate and every
+    `getByText` fails with "found multiple elements".
 - **`describe_model.py` shows only the five core types.** It is the right tool for the GSDO schema
   and the wrong tool for "does this type exist" — Focus Period, Page, Note and Bookmark are all
   live and absent from its output.
