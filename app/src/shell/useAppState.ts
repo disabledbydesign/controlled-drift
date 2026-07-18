@@ -74,6 +74,15 @@ export interface UiState {
   addParentFor: string | null;
   /** free-text filter inside the move/add picker (Task 6). */
   pickerFilter: string;
+
+  /**
+   * v4's `st._returnFrom` — which tab sent the user into the detail editor, so its back
+   * button can say "Today" / "Add" instead of "Back" (v4 sets it at 1035, 1043, 1051, 1081
+   * and 1123; reads it at 587). Added 2026-07-18 with Task 5: the detail pane reads it and
+   * there is no other home for cross-tab origin. Today (Task 7) and Add (Task 8) are the only
+   * writers; every other route leaves it null and the label falls back to "Back".
+   */
+  returnFrom: 'today' | 'add' | null;
 }
 
 const INITIAL_UI: UiState = {
@@ -93,6 +102,7 @@ const INITIAL_UI: UiState = {
   moveFor: null,
   addParentFor: null,
   pickerFilter: '',
+  returnFrom: null,
 };
 
 /** What a toast carries. `seq` makes two identical messages in a row distinguishable. */

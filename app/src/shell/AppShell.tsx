@@ -1,6 +1,8 @@
 import { useEffect, useMemo, useRef } from 'react';
 import type { Theme, ThemeName } from '@tokens';
 import { appBg, TopAccent } from '../components/atoms/index.ts';
+import { DetailOverlay } from '../components/detail/index.ts';
+import type { DetailCtx } from '../components/detail/index.ts';
 import { starfield } from '../theme/starfield.ts';
 import {
   AddScreen,
@@ -29,8 +31,13 @@ export interface AppShellProps {
  * `appTabs()` UNLESS settings is open, then the tab body, then the three overlays
  * (`detail()`, `pickerPage()`, `toast()`).
  *
- * The overlays are Tasks 5, 6 and 11. They are deliberately absent rather than stubbed —
- * a stub that renders nothing looks identical to a missing one and hides the gap.
+ * `detail()` is mounted (Task 5) as `DetailOverlay`, which owns v4's two-phase close. It sits
+ * LAST in the tree and paints `position:absolute; inset:0; zIndex:30` over the whole frame —
+ * including the tab bar — which is why the shell root is `position:relative`.
+ *
+ * `pickerPage()` (Task 6) and `toast()` (Task 11) are still absent, and deliberately absent
+ * rather than stubbed — a stub that renders nothing looks identical to a missing one and
+ * hides the gap.
  *
  * ── theme ────────────────────────────────────────────────────────────────────
  * `T` arrives as a prop and is passed down. Nothing below this file calls `useTheme()`:
@@ -73,6 +80,24 @@ export function AppShell({ T, name, setTheme }: AppShellProps) {
   useEffect(() => {
     up({ detail: null, menuFor: null, chipEdit: null, addOpen: false, filterOpen: false });
   }, [tab, up]);
+
+  /**
+   * v4's `detail()` context. `flash` is v4's `flash(msg)` with no model change behind it —
+   * the title and note textareas already wrote per keystroke, so the blur has nothing left to
+   * persist and the toast is the only effect. Routing it through `apply` with the CURRENT
+   * graph reuses the one toast seam without a second state field; the unchanged reference
+   * means React skips the re-render of everything below it.
+   */
+  const detailCtx: DetailCtx = {
+    T,
+    graph: st.graph,
+    idx: st.idx,
+    schema: st.schema,
+    ui: st.ui,
+    up: st.up,
+    apply: st.apply,
+    flash: (msg: string) => st.apply({ graph: st.graph, toast: msg, ui: null, node: null }),
+  };
 
   const goTab = (next: AppTab) => {
     if (next === tab) return;
@@ -190,6 +215,9 @@ export function AppShell({ T, name, setTheme }: AppShellProps) {
           tokens
         </a>
       </div>
+
+      {/* v4's overlay slot. Last in the tree, painted over everything. */}
+      <DetailOverlay ctx={detailCtx} />
     </div>
   );
 }
