@@ -1,6 +1,6 @@
 import type { CSSProperties, DragEvent } from 'react';
 import { Badge, Chip } from '../atoms/index.ts';
-import { chipsFor, isSelfOrDescendant, move } from '../../model/index.ts';
+import { chipsFor, isSelfOrDescendant, move, node as nodeById } from '../../model/index.ts';
 import type { ModelNode } from '../../model/index.ts';
 import { ChipStrip } from '../panels/ChipStrip.tsx';
 import { Lead } from './Lead.tsx';
@@ -126,6 +126,16 @@ export function Row({
   const active =
     sel || ui.detail === n.id || ui.menuFor === n.id || (!!ui.chipEdit && ui.chipEdit.id === n.id);
 
+  /**
+   * Is this the row a write just landed on?
+   *
+   * The POLICY question — should a success show anything at all, and if so what — is answered in
+   * `shell/signals.ts` and nowhere else. `ctx.confirmed` is only ever populated when that policy
+   * says `inline`, so this component asks a pure identity question and holds no opinion. That is
+   * what makes "make success subtler" or "remove success feedback" a one-file edit.
+   */
+  const settling = !!ctx.confirmed && ctx.confirmed.id === n.id;
+
   // v4: a chip with no `field` is not editable — tapping it opens the detail editor instead.
   // Otherwise the chip strip TOGGLES: tapping the already-open field closes it.
   const onChip = (field: string | undefined) => {
@@ -147,13 +157,40 @@ export function Row({
   // panel row, passes `dnd:true` (with sel/noMenu/badgeAbove). Drag-to-reparent is a LIVE path
   // in v4's DESKTOP Map, so this lands in Task 10, not Task 6.
   //
-  // Carry forward to Task 11: an invalid drop no-ops SILENTLY — the guard fires here and again
-  // inside move() (mutations.ts:191), neither with feedback. That is v4's own shape, but it is
-  // exactly the reachable-but-silent case the toast should cover.
+  // ── ⭐ TASK 11: AN AUTHORISED DIVERGENCE FROM v4. June asked for this directly. ──────────
+  //
+  // What v4 does, and what shipped here through Task 10: dragging a node onto its own
+  // descendant lights the target up as a VALID drop target (blue dashed outline, blue wash),
+  // and on release everything clears and nothing happens — no message, no change, visually
+  // identical to a drop that missed. The interface affirmatively says "yes" and then silently
+  // declines. Both halves are wrong and both are fixed here:
+  //
+  //   1. `refuses` — an invalid target is never painted as valid. It gets its own refusal
+  //      look (red, dotted, no wash) and `dropEffect:'none'`, so the answer is legible BEFORE
+  //      the mouse comes up.
+  //   2. the drop handler says so — see `onDrop`. It is the only thing that knows a refusal
+  //      happened AND knows both titles, which is why the message is raised there.
+  //
+  // ⚠ `move()`'s cycle guard (mutations.ts:191) still returns a plain no-op with no toast and
+  // no `ui` patch, and its signature is UNCHANGED. That guard is defence-in-depth for callers
+  // that do not pre-check; it is not the feedback mechanism and must not become one.
+  //
+  // Note `dragOver` is still set on a refusing target rather than suppressed. That is
+  // deliberate: `onDragOver` must call `preventDefault()` for a `drop` event to fire at all, so
+  // refusing the dragover outright would make the refusal MESSAGE impossible — the browser
+  // would cancel the drag and nothing would ever say why. Accepting the event and painting it
+  // as refused gives both the honest hover state and the explanation on release.
   const movable = dnd && n.level !== 'GOAL' && n.level !== 'STRATEGY';
-  const dropTarget =
-    dnd && ['GOAL', 'PROJECT', 'SUBPROJECT', 'WORKSTREAM'].includes(n.level);
+  const dropTarget = dnd && ['GOAL', 'PROJECT', 'SUBPROJECT', 'WORKSTREAM'].includes(n.level);
   const dragOver = dnd && ui.dragOverId === n.id;
+  /**
+   * Would a drop here be refused? Derived during render from the id in the module-level drag
+   * holder — no new state field. `drag.id` is set on dragstart and stable for the whole drag,
+   * and `dragOverId` (which IS state) is what forces the re-render that recomputes this.
+   */
+  const refuses = dragOver && !!drag.id && isSelfOrDescendant(ctx.idx, drag.id, n.id);
+  /** Painted as a valid target only when it actually is one. */
+  const invites = dragOver && !refuses;
 
   const dragProps: {
     draggable?: boolean;
@@ -186,7 +223,8 @@ export function Row({
     dragProps.onDragOver = (e) => {
       if (!drag.id || drag.id === n.id) return;
       e.preventDefault();
-      e.dataTransfer.dropEffect = 'move';
+      // The cursor answers before the row does. `none` is the browser's own refusal cursor.
+      e.dataTransfer.dropEffect = isSelfOrDescendant(ctx.idx, drag.id, n.id) ? 'none' : 'move';
       if (ui.dragOverId !== n.id) up({ dragOverId: n.id });
     };
     dragProps.onDragLeave = () => {
@@ -202,7 +240,25 @@ export function Row({
       // v4 walks `t.parent` up from the drop target looking for the dragged id — i.e. refuses
       // to drop a node inside its own subtree, which would detach that subtree from the graph.
       // `isSelfOrDescendant(idx, id, n.id)` is that same question asked of the derived index.
-      if (!isSelfOrDescendant(ctx.idx, id, n.id)) ctx.apply(move(ctx.graph, id, n.id));
+      if (isSelfOrDescendant(ctx.idx, id, n.id)) {
+        // ⭐ The refusal now SPEAKS. Named objects, literal words, no metaphor — it says what
+        // did not happen, why, and what would work instead. `fail` also writes it to the error
+        // log on the way to the screen (see `shell/errorLog.ts`).
+        const moved = nodeById(ctx.idx, id);
+        const movedTitle = moved ? moved.title : 'That item';
+        ctx.fail(
+          'Not moved. “' +
+            (n.title || '(untitled)') +
+            '” is already inside “' +
+            movedTitle +
+            '”, so “' +
+            movedTitle +
+            '” cannot go there. Pick a place outside it.',
+          { nodeId: id, before: { move: id, into: n.id }, kind: 'move_refused' },
+        );
+        return;
+      }
+      ctx.apply(move(ctx.graph, id, n.id));
     };
   }
 
@@ -240,6 +296,10 @@ export function Row({
   return (
     <div style={{ display: 'flex', flexDirection: 'column', position: 'relative' }}>
       <div
+        // Re-keyed on the confirmation sequence so the settle actually REPLAYS when the same row
+        // is written to twice running. A CSS animation on an unchanged element runs once and
+        // never again; without this, the second save would be silent.
+        key={'line' + (settling && ctx.confirmed ? ctx.confirmed.seq : 0)}
         {...dragProps}
         style={{
           display: 'flex',
@@ -247,17 +307,35 @@ export function Row({
           gap: '5px',
           // THE indentation rule. Nothing else reads `depth`.
           paddingLeft: 8 + depth * 16 + 'px',
-          background: dragOver
+          // THE HOVER STATE NOW TELLS THE TRUTH. `invites` keeps v4's blue wash + blue dashed
+          // outline; `refuses` gets a visibly different red, DOTTED (not dashed) outline and no
+          // wash, so the two are distinguishable at a glance and by outline style alone — not by
+          // hue only, which would be invisible to a red/blue colour-blind reader.
+          background: invites
             ? C.blue + '2a'
-            : active
-              ? 'linear-gradient(90deg,' + C.rose + '26,' + C.rose + '0a 78%)'
-              : 'transparent',
+            : refuses
+              ? C.red + '1c'
+              : active
+                ? 'linear-gradient(90deg,' + C.rose + '26,' + C.rose + '0a 78%)'
+                : 'transparent',
           boxShadow: active && !dragOver ? 'inset 2px 0 0 ' + C.rose : 'none',
-          outline: dragOver ? '2px dashed ' + C.blue : 'none',
+          outline: invites
+            ? '2px dashed ' + C.blue
+            : refuses
+              ? '2px dotted ' + C.red
+              : 'none',
           outlineOffset: '-2px',
           borderBottom: '1px solid ' + C.hair,
-          cursor: movable ? 'grab' : undefined,
+          // `no-drop` while hovering a target that will refuse; `grab` on a row you can pick up.
+          cursor: refuses ? 'no-drop' : movable ? 'grab' : undefined,
+          // The QUIET success signal — see `shell/signals.ts`. A brief settle on the row the
+          // write was about, no text, nothing at the bottom of the screen. It is `none` for
+          // every write whose result is already visible at the control (a chip re-rendering, a
+          // title striking through); it earns its place on a move, where the row leaves the
+          // list you were looking at.
+          animation: settling ? 'rowsettle .5s ease' : undefined,
         }}
+        data-settling={settling ? 'true' : undefined}
       >
         <Lead ctx={ctx} n={n} expandable={expandable} open={open} onExpand={onExpand} />
 

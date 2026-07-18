@@ -490,5 +490,11 @@ function nodeInGraph(graph: Graph, id: string): ModelNode | null {
     }
     return null;
   };
-  return find(graph.roots) ?? find(graph.strategies);
+  // Orphan buckets are searched too — a node in one is an ordinary node that happens to have no
+  // parent, and every mutation must be able to reach it. See `OrphanBucket` in types.ts.
+  const inBuckets = (graph.orphans ?? []).reduce<ModelNode | null>(
+    (hit, b) => hit ?? find(b.nodes),
+    null,
+  );
+  return find(graph.roots) ?? find(graph.strategies) ?? inBuckets;
 }

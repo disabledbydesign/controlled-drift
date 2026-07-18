@@ -35,6 +35,45 @@ export interface ModelNode extends Node {
 export interface Graph {
   roots: ModelNode[];
   strategies: ModelNode[];
+  /**
+   * Objects that exist but hang off nothing — see `OrphanBucket`. Optional so every existing
+   * `{roots, strategies}` literal (tests, fixtures, the old shape) still typechecks; absent and
+   * empty mean the same thing.
+   */
+  orphans?: OrphanBucket[];
+}
+
+/**
+ * A catch-all group of unparented objects.
+ *
+ * ── why this is load-bearing and not a diagnostic ────────────────────────────
+ * The tree is Goal → Project → Task. An object with no parent renders NOWHERE in it — it does
+ * not show as misplaced, it silently does not exist. Capture and weeding both produce unfiled
+ * objects, so this is not an edge case: **twelve objects in June's live space are unparented
+ * right now** (3 tasks and 9 recurring items, including Shower, Go on a walk, Therapy, Text
+ * friends). Without these buckets the new surface would lose all twelve from view the day it
+ * replaces the old one. `scripts/review_surface.py:234-247` is the surface being retired, and
+ * this is the capability being carried across.
+ *
+ * ── the labels come from the server, not from here ───────────────────────────
+ * `GET /api/tree` returns `orphans` as four keyed buckets, each `{label, nodes}`
+ * (`scripts/api_tree.py:295-310`), and the labels there are kept verbatim from the retiring
+ * surface so the wording June already reads does not change. The UI renders whatever labels
+ * arrive; it does not author them and must not.
+ *
+ * ── they are part of the graph, not beside it ────────────────────────────────
+ * Bucket nodes go through `index()`, `updateNode()`, `removeNode()` and `appendChild()` exactly
+ * like rooted ones. That is deliberate: a row you can see but not open, edit or move is the
+ * "uncheckoffable ghost row" failure this repo already paid a rebuild for. Filing an orphan by
+ * moving it into a project is the whole point of surfacing it, and that only works if `move()`
+ * can find it.
+ */
+export interface OrphanBucket {
+  /** Stable id from the endpoint — `orphan_tasks`, `projects_without_goal`, … */
+  key: string;
+  /** June-facing heading, supplied by the endpoint. */
+  label: string;
+  nodes: ModelNode[];
 }
 
 /**

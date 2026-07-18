@@ -8,6 +8,8 @@
 
 export { defaultSchema } from './schema.ts';
 export { seed, seedStrategies } from './tree.ts';
+export { seedOrphans } from './orphans.ts';
+export type { OrphanBucketFixture } from './orphans.ts';
 export { seedPlan } from './plan.ts';
 export { seedPeriods } from './periods.ts';
 

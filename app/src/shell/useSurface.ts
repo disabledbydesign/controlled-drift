@@ -6,6 +6,7 @@ import type { PanelCtx } from '../components/panels/index.ts';
 import type { TodayCtx } from '../components/today/index.ts';
 import type { AddCtx, SettingsCtx } from '../screens/index.ts';
 import type { AppTab } from './tabs.ts';
+import { present } from './signals.ts';
 import { useAppState } from './useAppState.ts';
 import type { AppState } from './useAppState.ts';
 
@@ -66,6 +67,20 @@ export function useSurface({ T, name, setTheme, wide }: SurfaceOptions): Surface
   };
 
   /**
+   * THE ONE PLACE the presentation policy is consulted for the in-place success signal.
+   *
+   * `present()` (shell/signals.ts) decides whether a success shows anything and in what form.
+   * If it says `inline`, the affected row is named here and `Row` settles it; if it says
+   * anything else, this is null and no component below ever learns a success occurred. So
+   * changing or removing success feedback is an edit to `present()` — not a change here, and
+   * not a hunt through components.
+   */
+  const confirmed =
+    st.toast && st.toast.kind === 'success' && st.toast.nodeId && present(st.toast).mode === 'inline'
+      ? { id: st.toast.nodeId, seq: st.toast.seq }
+      : null;
+
+  /**
    * v4's `detail()` context. `flash` is v4's `flash(msg)` with no model change behind it —
    * the title and note textareas already wrote per keystroke, so the blur has nothing left to
    * persist and the toast is the only effect. Routing it through `apply` with the CURRENT
@@ -98,6 +113,8 @@ export function useSurface({ T, name, setTheme, wide }: SurfaceOptions): Surface
     ui: st.ui,
     up: st.up,
     apply: st.apply,
+    fail: st.fail,
+    confirmed,
     wide,
   };
 

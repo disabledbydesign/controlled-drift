@@ -105,6 +105,29 @@ export interface PanelCtx {
   /** v4's mutate-then-`bump()`; here, the one seam mutations go through. */
   apply: (result: MutationResult) => void;
   /**
+   * Report that something did NOT happen — the counterpart to `apply` (Task 11).
+   *
+   * `apply` takes a `MutationResult`, and a mutation that REFUSED does not produce one: it
+   * returns the graph unchanged with `toast:null`, by design. So the only thing that can say a
+   * refusal happened is the handler that refused, which is why this is on the context rather
+   * than something the model layer emits. Failures are logged as well as shown — see
+   * `shell/errorLog.ts`.
+   */
+  fail: (
+    msg: string,
+    opts?: { nodeId?: string | null; before?: unknown; kind?: string },
+  ) => void;
+  /**
+   * The row a successful write just landed on, when the presentation policy says to show it
+   * in place — v4 has no equivalent (Task 11).
+   *
+   * Deliberately NOT a signal object: whether a success shows anything, and in what form, is
+   * decided once in `shell/signals.ts`. By the time it reaches here the decision is made, so
+   * `Row` only asks "is this me?" and cannot develop its own opinion. `seq` is what lets the
+   * same row settle twice running.
+   */
+  confirmed?: { id: string; seq: number } | null;
+  /**
    * v4's `this._wide` — true only inside `deskApp()` (v4:730), false in `renderShell()` (929)
    * and `structurePanel()` (959).
    *

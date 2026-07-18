@@ -1,5 +1,12 @@
 import { useCallback, useMemo, useState } from 'react';
-import { defaultSchema, seed, seedPeriods, seedPlan, seedStrategies } from '../fixtures/index.ts';
+import {
+  defaultSchema,
+  seed,
+  seedOrphans,
+  seedPeriods,
+  seedPlan,
+  seedStrategies,
+} from '../fixtures/index.ts';
 import type { Period, Plan } from '../fixtures/index.ts';
 import { applySchema, index } from '../model/index.ts';
 import type {
@@ -13,6 +20,8 @@ import type {
 } from '../model/index.ts';
 import type { ChipEditTarget } from '../components/rows/index.ts';
 import type { FocusView } from '../components/focus/index.ts';
+import { logFailure } from './errorLog.ts';
+import type { Signal } from './signals.ts';
 import type { AppTab } from './tabs.ts';
 
 /**
@@ -286,11 +295,22 @@ const INITIAL_UI: UiState = {
   focusPickPaused: '',
 };
 
-/** What a toast carries. `seq` makes two identical messages in a row distinguishable. */
-export interface Toast {
-  msg: string;
-  seq: number;
-}
+/**
+ * What a toast carries.
+ *
+ * ⚠ WIDENED IN TASK 11. This used to be `{msg, seq}` — one undifferentiated stream, which
+ * silently assumed every message deserves the same presentation. It does not: June's direction
+ * of 2026-07-18 is that a success should be quiet and in place while a failure should be loud,
+ * textual and persistent. That is a difference in KIND, so the kind is on the value; `signals.ts`
+ * decides what each one looks like.
+ *
+ * `nodeId` is which object the message is about, so an inline success can settle that row
+ * instead of painting something generic. Null when there is no single object behind it.
+ *
+ * The name `Toast` is kept as an ALIAS of `Signal` so no existing import breaks, but the type
+ * that matters is `Signal` and new code should say that.
+ */
+export type Toast = Signal;
 
 export interface AppState {
   graph: Graph;
@@ -304,7 +324,8 @@ export interface AppState {
    */
   periods: Period[];
   ui: UiState;
-  toast: Toast | null;
+  /** The one signal currently outstanding — success or failure. See `signals.ts`. */
+  toast: Signal | null;
   /** v4's `up(patch)` — merge a patch into the UI bag. */
   up: (patch: Partial<UiState>) => void;
   /**
@@ -324,6 +345,21 @@ export interface AppState {
    * `model/periods.ts`.
    */
   applyPeriods: (result: PeriodResult) => void;
+  /**
+   * Report that something did NOT happen.
+   *
+   * The counterpart to `apply`, and deliberately a separate entry point rather than a `kind`
+   * argument threaded through it: `apply` takes a `MutationResult`, and a mutation that refused
+   * does not produce one — it returns the graph unchanged with `toast:null`. The caller that
+   * KNOWS it refused is the only thing that can say so, which is exactly the invalid-drop case.
+   *
+   * ⚠ This does NOT change the model layer's signature. `move()`'s cycle guard still returns a
+   * plain no-op; the drop handler, which knows it refused and knows both titles, raises this.
+   *
+   * Recording is not optional and not the caller's business: every failure reaches the log
+   * (`errorLog.ts`) on the way to the screen, so a dismissed message still leaves a trace.
+   */
+  fail: (msg: string, opts?: { nodeId?: string | null; before?: unknown; kind?: string }) => void;
   dismissToast: () => void;
 }
 
@@ -335,6 +371,9 @@ function initialGraph(): Graph {
   return {
     roots: structuredClone(seed) as Graph['roots'],
     strategies: structuredClone(seedStrategies) as Graph['strategies'],
+    // Track A's stand-in for `GET /api/tree`'s `orphans`. See `fixtures/orphans.ts` — the
+    // endpoint is the real source and this exists so the buckets are visible before Track B.
+    orphans: structuredClone(seedOrphans) as Graph['orphans'],
   };
 }
 
@@ -357,7 +396,12 @@ export function useAppState(): AppState {
   const [plan, setPlan] = useState<Plan>(initialPlan);
   const [periods, setPeriods] = useState<Period[]>(initialPeriods);
   const [ui, setUi] = useState<UiState>(INITIAL_UI);
-  const [toast, setToast] = useState<Toast | null>(null);
+  const [toast, setToast] = useState<Signal | null>(null);
+
+  /** Raise a SUCCESS signal. The three `apply*` seams all land here so the shape is identical. */
+  const succeed = useCallback((msg: string, nodeId: string | null) => {
+    setToast((prev) => ({ kind: 'success', msg, nodeId, seq: (prev?.seq ?? 0) + 1 }));
+  }, []);
 
   const idx = useMemo(() => index(graph), [graph]);
   // The schema literal is constant for now; the backend will make it fetched (Track B).
@@ -367,29 +411,48 @@ export function useAppState(): AppState {
     setUi((prev) => ({ ...prev, ...patch }));
   }, []);
 
-  const apply = useCallback((result: MutationResult) => {
-    setGraph(result.graph);
-    if (result.ui) setUi((prev) => ({ ...prev, ...result.ui }));
-    if (result.toast) {
-      const msg = result.toast;
-      setToast((prev) => ({ msg, seq: (prev?.seq ?? 0) + 1 }));
-    }
-  }, []);
+  const apply = useCallback(
+    (result: MutationResult) => {
+      setGraph(result.graph);
+      if (result.ui) setUi((prev) => ({ ...prev, ...result.ui }));
+      // `result.node` is the object the write was about — that is what makes an INLINE success
+      // possible at all, because it is the only thing that says which row to settle.
+      if (result.toast) succeed(result.toast, result.node ? result.node.id : null);
+    },
+    [succeed],
+  );
 
-  const applyPlan = useCallback((result: PlanResult) => {
-    setPlan(result.plan);
-    if (result.toast) {
-      const msg = result.toast;
-      setToast((prev) => ({ msg, seq: (prev?.seq ?? 0) + 1 }));
-    }
-  }, []);
+  const applyPlan = useCallback(
+    (result: PlanResult) => {
+      setPlan(result.plan);
+      // A plan mutation is about a plan entry, not a graph node, so there is no row to settle.
+      if (result.toast) succeed(result.toast, null);
+    },
+    [succeed],
+  );
 
-  const applyPeriods = useCallback((result: PeriodResult) => {
-    setPeriods(result.periods);
-    if (result.toast) {
-      const msg = result.toast;
-      setToast((prev) => ({ msg, seq: (prev?.seq ?? 0) + 1 }));
-    }
+  const applyPeriods = useCallback(
+    (result: PeriodResult) => {
+      setPeriods(result.periods);
+      if (result.toast) succeed(result.toast, null);
+    },
+    [succeed],
+  );
+
+  const fail = useCallback<AppState['fail']>((msg, opts = {}) => {
+    // Logged BEFORE it is shown, and unconditionally: a failure she dismisses without reading
+    // must still be diagnosable afterwards. See `errorLog.ts` for which log and why.
+    logFailure(msg, {
+      objectId: opts.nodeId ?? null,
+      before: opts.before ?? null,
+      ...(opts.kind ? { kind: opts.kind } : null),
+    });
+    setToast((prev) => ({
+      kind: 'failure',
+      msg,
+      nodeId: opts.nodeId ?? null,
+      seq: (prev?.seq ?? 0) + 1,
+    }));
   }, []);
 
   const dismissToast = useCallback(() => setToast(null), []);
@@ -406,6 +469,7 @@ export function useAppState(): AppState {
     apply,
     applyPlan,
     applyPeriods,
+    fail,
     dismissToast,
   };
 }

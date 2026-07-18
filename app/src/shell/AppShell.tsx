@@ -15,6 +15,7 @@ import {
 } from '../screens/index.ts';
 import { AppHeader } from './AppHeader.tsx';
 import { AppTabs } from './AppTabs.tsx';
+import { SignalBar } from './SignalBar.tsx';
 import { navAnimation, navDir, STRUCTURE_TABS } from './tabs.ts';
 import type { AppTab } from './tabs.ts';
 import type { Surface as SurfaceType } from './useSurface.ts';
@@ -40,9 +41,10 @@ export interface AppShellProps {
  * LAST in the tree and paints `position:absolute; inset:0; zIndex:30` over the whole frame —
  * including the tab bar — which is why the shell root is `position:relative`.
  *
- * `pickerPage()` is mounted (Task 6). `toast()` (Task 11) is still absent, and deliberately
- * absent rather than stubbed — a stub that renders nothing looks identical to a missing one
- * and hides the gap.
+ * `pickerPage()` is mounted (Task 6). `toast()` is mounted (Task 11) as `SignalBar` — v4's own
+ * `toast()` is `return null;` (v4:383), so what lands here is not a port but the thing that stub
+ * was standing in for: the read-back confirmation, and the failure message. What it shows for
+ * which case is decided in `shell/signals.ts`, not here.
  *
  * ── the contexts moved out (Task 10) ────────────────────────────────────────
  * The five context objects this file used to build now live in `useSurface`, because the
@@ -168,6 +170,10 @@ export function AppShell({ T, surface }: AppShellProps) {
           detail editor's location block, so the picker has to be able to paint over the
           detail pane (zIndex 45 vs. its 30), not sit behind it inside a tab body. */}
       <DetailOverlay ctx={detailCtx} />
+      {/* v4:938 — `this.toast()` is the LAST child of the shell, and that is the z-order.
+          v4's own `toast()` (383) is `return null`; `SignalBar` is what it became. It renders
+          only when `signals.present()` says `bar` — which by default is failures ONLY. */}
+      <SignalBar T={T} sig={st.toast} onDismiss={st.dismissToast} />
       {/* v4 reaches the focus editor from INSIDE `detail(id)` (v4:541,
           `if(id==='__focus__')return this.focusDetail()`). Here it is a sibling instead:
           `DetailCtx` has no `periods` / `applyPeriods` and must not grow them. Same

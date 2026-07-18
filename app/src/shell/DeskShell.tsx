@@ -4,7 +4,7 @@ import type { Theme } from '@tokens';
 import { appBg, TopAccent, typeColor } from '../components/atoms/index.ts';
 import { DetailOverlay } from '../components/detail/index.ts';
 import { FocusOverlay } from '../components/focus/index.ts';
-import { AddPanel, FilterMenu, PickerPage } from '../components/panels/index.ts';
+import { AddPanel, FilterMenu, orphanSections, PickerPage } from '../components/panels/index.ts';
 import { node } from '../model/index.ts';
 import type { ModelNode } from '../model/index.ts';
 import { Row } from '../components/rows/index.ts';
@@ -17,6 +17,7 @@ import {
   TodayScreen,
 } from '../screens/index.ts';
 import { starfield } from '../theme/starfield.ts';
+import { SignalBar } from './SignalBar.tsx';
 import type { AppTab } from './tabs.ts';
 import type { Surface as SurfaceType } from './useSurface.ts';
 
@@ -470,21 +471,31 @@ export function DeskShell({ T, surface }: DeskShellProps) {
       );
     };
 
-    const renderPanel = (items: ModelNode[], k: number) => (
-      <div
-        key={'p' + k}
-        data-desk-col={k}
-        style={{ width: w('deskcol', DESKCOL) + 'px', flex: '0 0 auto', overflowY: 'auto', padding: '6px 4px' }}
-      >
-        {items.length ? (
-          items.map((n) => panelRow(n, k))
-        ) : (
-          <div style={{ color: C.dimmer, fontSize: '12px', padding: '20px', textAlign: 'center' }}>
-            Nothing here
-          </div>
-        )}
-      </div>
-    );
+    const renderPanel = (items: ModelNode[], k: number) => {
+      // Task 11 — the orphan buckets, in COLUMN 0 only, under the goals. Same rule as the phone
+      // Map (`MapScreen`): objects with no parent belong beside the roots, and a column showing
+      // a project's children must not claim they are unfiled. Column 0 is the desktop's root
+      // list, so it is the same place, not a second decision.
+      const buckets = k === 0 ? orphanSections(panelCtx, (n) => panelRow(n, 0)) : [];
+      return (
+        <div
+          key={'p' + k}
+          data-desk-col={k}
+          style={{ width: w('deskcol', DESKCOL) + 'px', flex: '0 0 auto', overflowY: 'auto', padding: '6px 4px' }}
+        >
+          {items.length || buckets.length ? (
+            <>
+              {items.map((n) => panelRow(n, k))}
+              {buckets}
+            </>
+          ) : (
+            <div style={{ color: C.dimmer, fontSize: '12px', padding: '20px', textAlign: 'center' }}>
+              Nothing here
+            </div>
+          )}
+        </div>
+      );
+    };
 
     // v4:749 — column 0 is the visible roots; each id on the path contributes its visible
     // children. A dangling id (its node deleted or moved) contributes an EMPTY column rather
@@ -633,6 +644,10 @@ export function DeskShell({ T, surface }: DeskShellProps) {
             `moveFor` is also set from that pane's location block. Its `wide` branch (a centred
             modal over a scrim) comes from `panelCtx.wide`. */}
         <PickerPage ctx={panelCtx} />
+        {/* v4:775 — `this.toast()` is the last child on the desktop path too. Same component,
+            same policy; the desktop is where the invalid drop is reachable at all, so this is
+            the mount that actually carries the refusal message. */}
+        <SignalBar T={T} sig={st.toast} onDismiss={st.dismissToast} />
       </div>
     </div>
   );

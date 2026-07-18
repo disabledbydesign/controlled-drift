@@ -2,7 +2,7 @@ import { useRef } from 'react';
 import type { ReactNode } from 'react';
 import { typeColor } from '../components/atoms/index.ts';
 import { Row } from '../components/rows/index.ts';
-import { NAV } from '../components/panels/index.ts';
+import { CrossTabMatches, NAV, orphanSections } from '../components/panels/index.ts';
 import type { PanelCtx } from '../components/panels/index.ts';
 import { isInactive, node, pathTo, sideOf } from '../model/index.ts';
 import type { GraphIndex, ModelNode } from '../model/index.ts';
@@ -80,15 +80,21 @@ export function MapScreen({ ctx }: { ctx: PanelCtx }) {
   // ── search: flat matches across the whole tree ────────────────────────────
   if (q) {
     const flat: ReactNode[] = [];
+    const shown = new Set<string>();
     const walkFlat = (nodes: ModelNode[]): void => {
       nodes.forEach((n) => {
         if (!(ui.hideInactive && isInactive(n)) && n.title.toLowerCase().includes(q)) {
+          shown.add(n.id);
           flat.push(<Row key={n.id} ctx={ctx} n={n} depth={0} onTap={() => up({ detail: n.id })} />);
         }
         walkFlat(n.children);
       });
     };
     walkFlat(graph.roots);
+    // Task 11: unfiled objects are searchable too. They render nowhere in the tree walk above —
+    // that is the whole reason the buckets exist — so a search that skipped them would put them
+    // back out of reach the moment you typed anything.
+    (graph.orphans ?? []).forEach((b) => walkFlat(b.nodes));
     return (
       <StructurePanel ctx={ctx}>
         {flat.length ? (
@@ -100,6 +106,11 @@ export function MapScreen({ ctx }: { ctx: PanelCtx }) {
             Nothing matches
           </div>
         )}
+        {/* Task 11 — the hits this list did NOT show, named by the tab they live on. Strategies
+            never appear above (they are not in the tree), and a recurring item hidden by
+            `hideInactive` here still surfaces below with its tab named. Nothing renders when
+            there is nothing left to add. */}
+        <CrossTabMatches ctx={ctx} shownIds={shown} />
       </StructurePanel>
     );
   }
@@ -122,8 +133,32 @@ export function MapScreen({ ctx }: { ctx: PanelCtx }) {
     depth > nav.current.depth ? 'fwd' : depth < nav.current.depth ? 'back' : nav.current.dir;
   nav.current = { depth, dir };
 
+  // ── Task 11: the orphan buckets ────────────────────────────────────────────
+  // AT THE ROOT ONLY. They are objects with no parent, so they belong beside the goals, not
+  // repeated inside every drilled-in level — and inside a project, "not filed under anything"
+  // would read as a claim about that project's contents, which it is not.
+  //
+  // ⚠ These bypass `subtreeVis`, deliberately. That filter walks ancestry (`sideOf` inherits
+  // down from a parent) and an orphan has none, so a Side filter would silently swallow the
+  // whole bucket and the objects would vanish again — the exact failure the buckets exist to
+  // prevent. The title filter reaches them through the search branch above instead.
+  const buckets: ReactNode[] = focus
+    ? []
+    : orphanSections(ctx, (n) => (
+        <Row
+          key={n.id}
+          ctx={ctx}
+          n={n}
+          depth={0}
+          chipsBelow={['TASK', 'RECURRING'].includes(n.level)}
+          onTap={() => up({ detail: n.id })}
+        />
+      ));
+
   const rows: ReactNode[] = [];
-  if (!items.length) {
+  // The empty-state line asks about the WHOLE panel, buckets included — otherwise the root
+  // would say "Nothing matches" directly above four sections of matching objects.
+  if (!items.length && !buckets.length) {
     rows.push(
       <div
         key="e"
@@ -150,6 +185,17 @@ export function MapScreen({ ctx }: { ctx: PanelCtx }) {
       />,
     );
   });
+
+  // ── Task 11: the orphan buckets ────────────────────────────────────────────
+  // AT THE ROOT ONLY. They are objects with no parent, so they belong beside the goals, not
+  // repeated inside every drilled-in level — and inside a project, "not filed under anything"
+  // would read as a claim about that project's contents, which it is not.
+  //
+  // ⚠ These bypass `subtreeVis`, deliberately. That filter walks ancestry (`sideOf` inherits
+  // down from a parent) and an orphan has none, so a Side filter would silently swallow the
+  // whole bucket and the objects would vanish again — the exact failure the buckets exist to
+  // prevent. The title filter reaches them through the search branch above instead.
+  rows.push(...buckets);
 
   return (
     <StructurePanel ctx={ctx}>

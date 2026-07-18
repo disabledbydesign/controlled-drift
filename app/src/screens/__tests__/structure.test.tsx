@@ -67,6 +67,7 @@ function ctx(ui: Partial<PanelUi> = {}, graph: Graph = freshGraph()): PanelCtx {
     ui: { ...BASE_UI, ...ui },
     up: vi.fn(),
     apply: vi.fn(),
+    fail: vi.fn(),
   };
 }
 

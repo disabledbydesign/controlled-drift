@@ -1,7 +1,7 @@
 import type { ReactNode } from 'react';
 import { Switch } from '../components/atoms/index.ts';
 import { Row } from '../components/rows/index.ts';
-import { PANEL } from '../components/panels/index.ts';
+import { CrossTabMatches, PANEL } from '../components/panels/index.ts';
 import type { PanelCtx } from '../components/panels/index.ts';
 import { isInactive } from '../model/index.ts';
 import { StructurePanel } from './StructurePanel.tsx';
@@ -244,6 +244,12 @@ export function StrategiesScreen({ ctx, bare = false }: { ctx: PanelCtx; bare?: 
       </div>,
     );
   }
+
+  // Task 11 — matches that live on the Map or Routines, named as such. This is the tab where the
+  // gap was most visible: nothing outside `graph.strategies` could ever be found from here.
+  body.push(
+    <CrossTabMatches key="ctm" ctx={ctx} shownIds={new Set(strat.map((s) => s.id))} />,
+  );
 
   if (bare) return <>{body}</>;
   return <StructurePanel ctx={ctx}>{body}</StructurePanel>;

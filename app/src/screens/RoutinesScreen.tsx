@@ -1,6 +1,7 @@
 import type { ReactNode } from 'react';
 import { Rail } from '../components/atoms/index.ts';
 import { Row } from '../components/rows/index.ts';
+import { CrossTabMatches } from '../components/panels/index.ts';
 import type { PanelCtx } from '../components/panels/index.ts';
 import { pathTo } from '../model/index.ts';
 import type { ModelNode } from '../model/index.ts';
@@ -105,10 +106,13 @@ export function RoutinesScreen({ ctx, bare = false }: { ctx: PanelCtx; bare?: bo
   );
 
   let any = false;
+  /** Task 11 — what this tab actually listed, so the cross-tab block does not repeat it. */
+  const shown = new Set<string>();
   groups.forEach((g) => {
     const recs = g.recs.filter(match).sort((a, b) => rank(a) - rank(b));
     if (!recs.length) return;
     any = true;
+    recs.forEach((r) => shown.add(r.id));
     const path = pathTo(idx, g.parent.id)
       .map((p) => p.title)
       .join(' › ');
@@ -188,6 +192,10 @@ export function RoutinesScreen({ ctx, bare = false }: { ctx: PanelCtx; bare?: bo
       Tap the circle to mark an item not-done so it re-enters the daily plan.
     </div>,
   );
+
+  // Task 11 — matches that live on the Map or Strategies, named as such. Renders nothing when
+  // the filter box is empty or every match is already in the list above.
+  body.push(<CrossTabMatches key="ctm" ctx={ctx} shownIds={shown} />);
 
   if (bare) return <>{body}</>;
   return <StructurePanel ctx={ctx}>{body}</StructurePanel>;

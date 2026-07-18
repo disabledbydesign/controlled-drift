@@ -9,6 +9,7 @@
 export type {
   ModelNode,
   Graph,
+  OrphanBucket,
   GraphIndex,
   DerivedSchema,
   ModelColors,

@@ -35,8 +35,44 @@ export function index(graph: Graph): GraphIndex {
     parentOf.set(s.id, null);
     byId.set(s.id, s);
   }
+  // Orphan-bucket nodes are indexed like any other, with a null parent — which is literally
+  // true of them. Without this they would render (the Map shows the buckets) and then fail
+  // every lookup behind the row: `node(idx,id)` undefined, so the detail editor opens on
+  // nothing and `move()` refuses. See `OrphanBucket` in types.ts.
+  for (const b of graph.orphans ?? []) {
+    walk(b.nodes, null);
+  }
 
   return { byId, parentOf };
+}
+
+/**
+ * Every forest in the graph that can hold a node, as [read, write-back] pairs.
+ *
+ * The three graph-level operations below each used to search `roots` then `strategies` by hand.
+ * Adding orphan buckets as a third place would have meant repeating that pattern three more
+ * times, and the failure mode of a missed one is silent (the node is simply not found, and the
+ * mutation no-ops). One list, walked by all three, cannot fall out of step.
+ */
+function forests(graph: Graph): Array<{
+  nodes: ModelNode[];
+  put: (next: ModelNode[]) => Graph;
+}> {
+  const out: Array<{ nodes: ModelNode[]; put: (next: ModelNode[]) => Graph }> = [
+    { nodes: graph.roots, put: (next) => ({ ...graph, roots: next }) },
+    { nodes: graph.strategies, put: (next) => ({ ...graph, strategies: next }) },
+  ];
+  (graph.orphans ?? []).forEach((b, i) => {
+    out.push({
+      nodes: b.nodes,
+      put: (next) => {
+        const buckets = [...(graph.orphans ?? [])];
+        buckets[i] = { ...b, nodes: next };
+        return { ...graph, orphans: buckets };
+      },
+    });
+  });
+  return out;
 }
 
 /** v4: `node(id){ return this.byId[id]; }` — undefined when unknown. */
@@ -153,16 +189,9 @@ function appendChildInForest(
  * Returns the SAME graph reference when `id` is unknown, matching v4's no-op.
  */
 export function removeNode(graph: Graph, id: string): { graph: Graph; removed: ModelNode | null } {
-  const fromRoots = removeFromForest(graph.roots, id);
-  if (fromRoots.removed) {
-    return { graph: { ...graph, roots: fromRoots.nodes }, removed: fromRoots.removed };
-  }
-  const fromStrategies = removeFromForest(graph.strategies, id);
-  if (fromStrategies.removed) {
-    return {
-      graph: { ...graph, strategies: fromStrategies.nodes },
-      removed: fromStrategies.removed,
-    };
+  for (const f of forests(graph)) {
+    const res = removeFromForest(f.nodes, id);
+    if (res.removed) return { graph: f.put(res.nodes), removed: res.removed };
   }
   return { graph, removed: null };
 }
@@ -176,15 +205,13 @@ export function updateNode(
   id: string,
   fn: (n: ModelNode) => ModelNode,
 ): { graph: Graph; node: ModelNode | null } {
-  const inRoots = updateInForest(graph.roots, id, fn);
-  if (inRoots.node) {
-    if (inRoots.nodes === graph.roots) return { graph, node: inRoots.node };
-    return { graph: { ...graph, roots: inRoots.nodes }, node: inRoots.node };
-  }
-  const inStrategies = updateInForest(graph.strategies, id, fn);
-  if (inStrategies.node) {
-    if (inStrategies.nodes === graph.strategies) return { graph, node: inStrategies.node };
-    return { graph: { ...graph, strategies: inStrategies.nodes }, node: inStrategies.node };
+  for (const f of forests(graph)) {
+    const res = updateInForest(f.nodes, id, fn);
+    if (res.node) {
+      // Same reference back when `fn` returned its argument — the no-change no-op is preserved.
+      if (res.nodes === f.nodes) return { graph, node: res.node };
+      return { graph: f.put(res.nodes), node: res.node };
+    }
   }
   return { graph, node: null };
 }
@@ -202,11 +229,9 @@ export function appendChild(
     }
     return { graph: { ...graph, roots: [...graph.roots, child] }, ok: true };
   }
-  const inRoots = appendChildInForest(graph.roots, parentId, child);
-  if (inRoots.ok) return { graph: { ...graph, roots: inRoots.nodes }, ok: true };
-  const inStrategies = appendChildInForest(graph.strategies, parentId, child);
-  if (inStrategies.ok) {
-    return { graph: { ...graph, strategies: inStrategies.nodes }, ok: true };
+  for (const f of forests(graph)) {
+    const res = appendChildInForest(f.nodes, parentId, child);
+    if (res.ok) return { graph: f.put(res.nodes), ok: true };
   }
   return { graph, ok: false };
 }

@@ -11,5 +11,9 @@ export { AddPanel, addContextParent, validAddParent } from './AddPanel.tsx';
 export { ChipStrip, chipOpts } from './ChipStrip.tsx';
 export type { ChipStripProps } from './ChipStrip.tsx';
 export { PickerPage } from './PickerPage.tsx';
+// Task 11 — neither is a port; see each file's header for what it carries across and why.
+export { orphanSections } from './OrphanBuckets.tsx';
+export { CrossTabMatches, searchAll, owningTab } from './CrossTabMatches.tsx';
+export type { StructureTab } from './CrossTabMatches.tsx';
 export { FLABEL, NAV, PANEL } from './types.ts';
 export type { PanelCtx, PanelUi } from './types.ts';

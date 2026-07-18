@@ -203,8 +203,20 @@ describe('drag to re-parent — the one `dnd:true` call site (v4:747)', () => {
     setWidth(1440);
     const { container } = mount();
     goMap(container);
-    // A GOAL is a root and cannot move, so column 0 has no draggable rows...
-    expect(container.querySelectorAll('[data-desk-col="0"] [draggable="true"]')).toHaveLength(0);
+    // A GOAL is a root and cannot move, so no GOAL row in column 0 is draggable...
+    //
+    // ⚠ NARROWED IN TASK 11. This used to assert that column 0 held no draggable rows AT ALL.
+    // That stopped being true when the orphan buckets landed there: an unfiled task or project
+    // sits in column 0 and IS movable — which is the point of surfacing it, since dragging it
+    // onto a project is how it gets filed. Asserting per-row rather than per-column keeps the
+    // original claim (goals do not move) without asserting something the buckets disprove.
+    const col0 = container.querySelector('[data-desk-col="0"]') as HTMLElement;
+    for (const goal of ['Material survival', 'Scholarly practice', 'Builder practice']) {
+      const row = rowIn(container, 0, goal);
+      expect((row.firstElementChild as HTMLElement).getAttribute('draggable')).toBeNull();
+    }
+    // …and the orphan rows in the same column ARE draggable, so they can be filed.
+    expect(col0.querySelectorAll('[draggable="true"]').length).toBeGreaterThan(0);
     fireEvent.click(within(rowIn(container, 0, 'Scholarly practice')).getByText('Scholarly practice'));
     // ...but the projects under it can.
     expect(
@@ -241,7 +253,19 @@ describe('drag to re-parent — the one `dnd:true` call site (v4:747)', () => {
     ).toBeTruthy();
   });
 
-  it('⚠ an INVALID drop (onto its own descendant) is a SILENT no-op — v4:446, ported as-is', () => {
+  /**
+   * ⭐ REWRITTEN IN TASK 11 — and this test is the reason the rewrite is legible.
+   *
+   * It used to assert that an invalid drop was a SILENT no-op, with a comment saying the
+   * assertion was a flag: *"when Task 11's toast lands, it should fail, and the fix is to give
+   * the guard a message — not to loosen the test."* It did fail, exactly there, on the
+   * `not.toMatch(/cannot/)` line. The guard now has a message, so the assertion inverts.
+   *
+   * The silent behaviour was v4's, and this is an AUTHORISED DIVERGENCE from it — June asked for
+   * it directly on 2026-07-18, having watched the surface light a row up as a valid target and
+   * then decline without a word.
+   */
+  it('an INVALID drop (onto its own descendant) refuses VISIBLY and says why', () => {
     setWidth(1440);
     const { container } = mount();
     goMap(container);
@@ -251,16 +275,73 @@ describe('drag to re-parent — the one `dnd:true` call site (v4:747)', () => {
     const before = container.querySelector('[data-desk-col="1"]')!.textContent;
     const src = rowIn(container, 1, 'Build Controlled Drift');
     const child = container.querySelector('[data-desk-col="2"]')!.firstElementChild as HTMLElement;
+    const line = child.firstElementChild as HTMLElement;
     const t = dt();
     fireEvent.dragStart(src.firstElementChild!, { dataTransfer: t });
-    fireEvent.dragOver(child.firstElementChild!, { dataTransfer: t });
-    fireEvent.drop(child.firstElementChild!, { dataTransfer: t });
+    fireEvent.dragOver(line, { dataTransfer: t });
 
-    // Nothing moved …
+    // 1. THE HOVER STATE TELLS THE TRUTH. The valid-target look is a blue DASHED outline; a
+    //    target that will refuse must not wear it. `dropEffect` is the cursor half of the same
+    //    answer, given before the mouse comes up.
+    expect(line.style.outline).toContain('dotted');
+    expect(line.style.outline).not.toContain('dashed');
+    expect(t.dropEffect).toBe('none');
+
+    fireEvent.drop(line, { dataTransfer: t });
+
+    // 2. Nothing moved — the guard still holds.
     expect(container.querySelector('[data-desk-col="1"]')!.textContent).toBe(before);
-    // … and nothing SAID so. This assertion is the flag: when Task 11's toast lands, it should
-    // fail, and the fix is to give the guard a message — not to loosen the test.
-    expect(container.textContent).not.toMatch(/can.?t|cannot|invalid|not allowed/i);
+    // 3. …and now something SAYS so, naming both objects rather than saying "invalid".
+    const alert = screen.getByRole('alert');
+    expect(alert.textContent).toContain('Not moved');
+    expect(alert.textContent).toContain('Build Controlled Drift');
+    expect(alert.textContent).toContain('Daily plan pipeline');
+  });
+
+  it('a valid target still wears the valid look — the refusal style is not applied everywhere', () => {
+    setWidth(1440);
+    const { container } = mount();
+    goMap(container);
+    fireEvent.click(within(rowIn(container, 0, 'Scholarly practice')).getByText('Scholarly practice'));
+
+    const src = rowIn(container, 1, 'Reframe paper');
+    const dst = rowIn(container, 0, 'Builder practice');
+    const line = dst.firstElementChild as HTMLElement;
+    const t = dt();
+    fireEvent.dragStart(src.firstElementChild!, { dataTransfer: t });
+    fireEvent.dragOver(line, { dataTransfer: t });
+
+    expect(line.style.outline).toContain('dashed');
+    expect(t.dropEffect).toBe('move');
+    expect(screen.queryByRole('alert')).toBeNull();
+  });
+
+  it('the refusal message can be dismissed, and does NOT fade on its own', () => {
+    vi.useFakeTimers();
+    try {
+      setWidth(1440);
+      const { container } = mount();
+      goMap(container);
+      fireEvent.click(within(rowIn(container, 0, 'Builder practice')).getByText('Builder practice'));
+      fireEvent.click(
+        within(rowIn(container, 1, 'Build Controlled Drift')).getByText('Build Controlled Drift'),
+      );
+      const src = rowIn(container, 1, 'Build Controlled Drift');
+      const child = container.querySelector('[data-desk-col="2"]')!.firstElementChild as HTMLElement;
+      const t = dt();
+      fireEvent.dragStart(src.firstElementChild!, { dataTransfer: t });
+      fireEvent.drop(child.firstElementChild!, { dataTransfer: t });
+
+      expect(screen.getByRole('alert')).toBeTruthy();
+      // A failure must survive being glanced at late — it is the one signal that does not fade.
+      act(() => void vi.advanceTimersByTime(20000));
+      expect(screen.queryByRole('alert')).toBeTruthy();
+
+      fireEvent.click(screen.getByRole('button', { name: 'dismiss' }));
+      expect(screen.queryByRole('alert')).toBeNull();
+    } finally {
+      vi.useRealTimers();
+    }
   });
 });
 

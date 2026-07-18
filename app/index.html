@@ -27,6 +27,16 @@
       @keyframes panelin { from { opacity: 0; transform: translateY(-4px); }    to { opacity: 1; transform: translateY(0); } }
       @keyframes savedpulse { 0% { opacity: 0; transform: translateY(4px); } 15% { opacity: 1; transform: translateY(0); } 80% { opacity: 1; } 100% { opacity: 0; } }
       @keyframes ringpulse { 0% { opacity: .5; transform: scale(1); } 100% { opacity: 0; transform: scale(1.06); } }
+      /* Task 11 — the QUIET success signal. Not in v4 (v4's `toast()` is a stub); this is what
+         "feedback that this worked without needing text" is, at the row the write landed on.
+         A brief lift in brightness that settles back, no movement and no colour change, so it
+         reads as the row acknowledging rather than as something new arriving. */
+      @keyframes rowsettle { 0% { filter: brightness(1.5); } 100% { filter: brightness(1); } }
+      /* Respect the OS setting. An involuntary flash is exactly what this preference is for,
+         and the signal is redundant with the value already re-rendering in place. */
+      @media (prefers-reduced-motion: reduce) {
+        @keyframes rowsettle { 0% { filter: none; } 100% { filter: none; } }
+      }
     </style>
   </head>
   <body>
