@@ -122,6 +122,27 @@ def set_project_engagement(pid, old, new):
     return new
 
 
+def _log_recurring_done(task_id):
+    """Record a recurring/as-needed 'done for today' in the durable completion_log so next-day
+    rollover reads real done-state instead of guessing from cadence (a finished daily chore was
+    being mislabeled 'carried over'). Best-effort: the cache flip already stands; a log hiccup
+    must never fail the checkoff (mirrors task_actions.complete_task's best-effort logging)."""
+    try:
+        import completion_log
+        completion_log.log_completion(task_id, plan_store.item_name(task_id))
+    except Exception:
+        pass
+
+def _log_recurring_undone(task_id):
+    """Undo counterpart of _log_recurring_done (mis-tap fix). Netted out by completed_ids_on
+    within the same plan_date, so a done-then-undone reads as not-done."""
+    try:
+        import completion_log
+        completion_log.log_uncompletion(task_id)
+    except Exception:
+        pass
+
+
 def complete_task_row(task_id):
     """Route a checkoff by what the row IS, mirroring /api/complete's dispatch order — as-needed
     checked BEFORE is_recurring_item, since an active as-needed row is flagged both. An active
@@ -134,6 +155,7 @@ def complete_task_row(task_id):
         except Exception as e:
             return 500, {"error": str(e)}
         plan = plan_store.mark_item_done(task_id)
+        _log_recurring_done(task_id)
         return 200, {"completed": {"id": task_id, "done": True, "as_needed": True},
                      "plan": plan or {"empty": True}}
     # A recurring chore/appointment: "done for today" — flip the cache only, NO Anytype
@@ -142,6 +164,7 @@ def complete_task_row(task_id):
     # check off the dishes (2026-07-13).
     if plan_store.is_recurring_item(task_id):
         plan = plan_store.mark_item_done(task_id)
+        _log_recurring_done(task_id)
         return 200, {"completed": {"id": task_id, "done": True, "recurring": True},
                      "plan": plan or {"empty": True}}
     # A block check: "I worked on it today" — log locally + flip the cache, NEVER an
@@ -170,11 +193,13 @@ def uncomplete_task_row(task_id):
         except Exception as e:
             return 500, {"error": str(e)}
         plan = plan_store.mark_item_undone(task_id)
+        _log_recurring_undone(task_id)
         return 200, {"uncompleted": {"id": task_id, "done": False, "as_needed": True},
                      "plan": plan or {"empty": True}}
     # A recurring chore: undo is a local cache un-flip only (nothing was written to Anytype).
     if plan_store.is_recurring_item(task_id):
         plan = plan_store.mark_item_undone(task_id)
+        _log_recurring_undone(task_id)
         return 200, {"uncompleted": {"id": task_id, "done": False, "recurring": True},
                      "plan": plan or {"empty": True}}
     # A block un-check (mis-tap): un-log today's chunk + un-flip the cache. Cache-only.
