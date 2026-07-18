@@ -172,6 +172,21 @@ directs, reviews, approves — she does not generate. Never use the AskUserQuest
   *"how June feels about THIS item, in her words ('dreading it')... Never a number or rating."*
   The prompt is not the problem; its reach is.
 
+- **⚠ THE TEST SUITE IS NOT HERMETIC — `tests/test_gsdo_anytype.py` hits June's LIVE space.**
+  It creates and deletes real schema properties there (`_delete_prop_by_name` issues
+  `DELETE /spaces/{sid}/properties/{id}` against the real API). Combined with Anytype's
+  ASYNCHRONOUS schema deletes, this makes the full suite **intermittently flaky**: a test that
+  deletes and immediately re-reads can see stale state, and the timing window shifts depending on
+  what ran before it. Observed 2026-07-18 — one run reported two failures in that file plus an
+  unrelated error; the next two runs were clean at 956.
+  · A failure in `test_ensure_property_is_idempotent` / `test_ensure_select_options_idempotent`
+    is **flakiness until proven otherwise** — re-run before investigating.
+  · It also means running the suite briefly MUTATES her schema. It cleans up after itself, but
+    the isolation §5.4 assumes is only true of the `CD_CONFIG_DIR`/`CD_DATA_DIR` sandbox, not of
+    Anytype.
+  · Fixing it means faking at the transport seam, as `tests/fake_space.py` now does for the write
+    layer. Not done; recorded so the next person does not chase a phantom regression.
+
 - **Frontend dev-loop gotchas (2026-07-18).**
   - `agent-browser screenshot` **hangs indefinitely** — reproduced at the raw CDP layer on a blank
     page in fresh headless Chrome, so it is environmental, not app-related. **Do not debug it.**
