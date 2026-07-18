@@ -1,4 +1,4 @@
-import { useMemo, useRef, useState } from 'react';
+import { useEffect, useMemo, useRef } from 'react';
 import type { Theme, ThemeName } from '@tokens';
 import { appBg, TopAccent } from '../components/atoms/index.ts';
 import { starfield } from '../theme/starfield.ts';
@@ -12,7 +12,7 @@ import {
 } from '../screens/index.ts';
 import { AppHeader } from './AppHeader.tsx';
 import { AppTabs } from './AppTabs.tsx';
-import { navAnimation, navDir } from './tabs.ts';
+import { navAnimation, navDir, STRUCTURE_TABS } from './tabs.ts';
 import type { AppTab } from './tabs.ts';
 import { useAppState } from './useAppState.ts';
 
@@ -50,16 +50,33 @@ export function AppShell({ T, name, setTheme }: AppShellProps) {
   // Forward enters from the right, back from the left. v4 derives the direction from tree
   // DEPTH; the same rule is applied here to the tab order (see `navDir`). The keyframes
   // (`navfwd` / `navback`) already live in index.html — this only names them.
-  const [dir, setDir] = useState<'fwd' | 'back'>('fwd');
-  const prev = useRef<AppTab>(tab);
+  //
+  // ⚠ Direction is DERIVED during render from the tab actually in state — it is NOT tracked
+  // by the click handler. Corrected 2026-07-18 (review gate): tracking it in `goTab` meant
+  // any other route to a tab change bypassed it. `up({tab:'map'})` is public, `tab` is a
+  // UiState field, and a future mutation returning `ui:{tab:...}` would flow through
+  // `apply()` — all three would have silently inverted the animation.
+  //
+  // This is the same principle as the stale-index fix in useAppState: make the wrong thing
+  // impossible rather than documenting a rule someone has to remember. Whatever changes the
+  // tab, the direction is right, because it is computed from the tab itself.
+  const nav = useRef<{ tab: AppTab; dir: 'fwd' | 'back' }>({ tab, dir: 'fwd' });
+  if (nav.current.tab !== tab) {
+    nav.current = { tab, dir: navDir(nav.current.tab, tab) };
+  }
+  const dir = nav.current.dir;
+
+  // v4:954 clears the same transient UI on every tab change, so a menu or panel left open on
+  // one tab does not reappear over another. As an effect keyed on `tab` this fires however
+  // the tab changed — the clear was previously inside `goTab` and shared the bypass above.
+  const { up } = st;
+  useEffect(() => {
+    up({ detail: null, menuFor: null, chipEdit: null, addOpen: false, filterOpen: false });
+  }, [tab, up]);
 
   const goTab = (next: AppTab) => {
     if (next === tab) return;
-    setDir(navDir(prev.current, next));
-    prev.current = next;
-    // v4 clears the same transient UI on every tab change, so a menu or panel left open on
-    // one tab does not reappear over another.
-    st.up({ tab: next, detail: null, menuFor: null, chipEdit: null, addOpen: false, filterOpen: false });
+    up({ tab: next });
   };
 
   const body =
@@ -100,13 +117,29 @@ export function AppShell({ T, name, setTheme }: AppShellProps) {
       />
       {tab !== 'settings' ? <AppTabs T={T} current={tab} onSelect={goTab} /> : null}
 
-      <div style={{ flex: 1, overflowY: 'auto', overflowX: 'hidden' }}>
-        {/* Keyed on the tab so React remounts the panel and the entry animation actually
-            replays; without the key it is the same element and the animation runs once. */}
-        <div key={tab} style={{ animation: navAnimation(dir) }}>
+      {/* v4:934-935 FORKS here and the fork is load-bearing (review gate, 2026-07-18):
+          `today` and `add` get a scrolling wrapper, but `map` / `routines` / `strategies` go
+          to `structurePanel(tab)` (v4:959-965) OUTSIDE it. `structurePanel` is its own flex
+          column with `overflow:hidden`, holding `mapControls()` / `filterMenu()` / `addPanel()`
+          ABOVE its own inner scroller (v4:964) so those controls stay put while the list moves.
+
+          Nested inside a scrolling parent, `structurePanel`'s `flex:1` is inert (the parent is
+          not a flex container), its height collapses to content, and the map controls scroll
+          away with the list. Invisible today because the structure tabs are placeholders — it
+          would surface in Task 6 and read as a Task 6 bug. Forked now so it cannot. */}
+      {STRUCTURE_TABS.has(tab) ? (
+        <div key={tab} style={{ flex: 1, minHeight: 0, display: 'flex', flexDirection: 'column', animation: navAnimation(dir) }}>
           {body}
         </div>
-      </div>
+      ) : (
+        <div style={{ flex: 1, overflowY: 'auto', overflowX: 'hidden' }}>
+          {/* Keyed on the tab so React remounts the panel and the entry animation actually
+              replays; without the key it is the same element and the animation runs once. */}
+          <div key={tab} style={{ animation: navAnimation(dir) }}>
+            {body}
+          </div>
+        </div>
+      )}
 
       {/* Temporary: the theme switch belongs in Settings (Task 8, `themeSection()` ~1144).
           It sits here so both themes are drivable while Settings is still a placeholder. */}

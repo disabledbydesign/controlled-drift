@@ -40,6 +40,19 @@ export interface UiState {
   chipEdit: string | null;
   addOpen: boolean;
   filterOpen: boolean;
+
+  // These three are emitted by mutations that ALREADY SHIP (mutations.ts:145 `move`,
+  // :201 `move`, :406 `addChild`). They were missing here, and the `as Partial<UiState>`
+  // cast in `apply()` suppressed the error — so the keys would have landed in the bag at
+  // runtime as untyped extras and TypeScript would never have told Task 6 they were absent.
+  // The cast is now gone; adding a mutation that returns an unknown `ui` key is a compile
+  // error, which is the point. Added 2026-07-18 (review gate).
+  /** id of the node being re-parented; drives `pickerPage` (Task 6). */
+  moveFor: string | null;
+  /** id of the node a new child is being added under (Task 6). */
+  addParentFor: string | null;
+  /** free-text filter inside the move/add picker (Task 6). */
+  pickerFilter: string;
 }
 
 const INITIAL_UI: UiState = {
@@ -54,6 +67,9 @@ const INITIAL_UI: UiState = {
   chipEdit: null,
   addOpen: false,
   filterOpen: false,
+  moveFor: null,
+  addParentFor: null,
+  pickerFilter: '',
 };
 
 /** What a toast carries. `seq` makes two identical messages in a row distinguishable. */
@@ -106,7 +122,7 @@ export function useAppState(): AppState {
 
   const apply = useCallback((result: MutationResult) => {
     setGraph(result.graph);
-    if (result.ui) setUi((prev) => ({ ...prev, ...(result.ui as Partial<UiState>) }));
+    if (result.ui) setUi((prev) => ({ ...prev, ...result.ui }));
     if (result.toast) {
       const msg = result.toast;
       setToast((prev) => ({ msg, seq: (prev?.seq ?? 0) + 1 }));
@@ -115,5 +131,10 @@ export function useAppState(): AppState {
 
   const dismissToast = useCallback(() => setToast(null), []);
 
-  return { graph, idx, schema, plan: seedPlan, ui, toast, up, apply, dismissToast };
+  // `plan` is cloned for the same reason the graph is: Task 7 edits plan blocks directly
+  // (check off an item, advance an arc step), and returning the module-level `seedPlan` by
+  // reference would let the running app mutate the fixture other tests import.
+  const plan = useMemo(() => structuredClone(seedPlan) as Plan, []);
+
+  return { graph, idx, schema, plan, ui, toast, up, apply, dismissToast };
 }

@@ -42,3 +42,10 @@ export const NAV = '.26s cubic-bezier(.4,0,.2,1)';
 export function navAnimation(dir: NavDir): string {
   return `${dir === 'back' ? 'navback' : 'navfwd'} ${NAV}`;
 }
+
+/**
+ * The three tabs v4 routes through `structurePanel(tab)` (v4:934-935, :959-965) rather than
+ * the plain scrolling body. They own their own scroll container so the map controls, filter
+ * menu and add panel stay pinned above the list. See the fork in AppShell.
+ */
+export const STRUCTURE_TABS: ReadonlySet<AppTab> = new Set<AppTab>(['map', 'routines', 'strategies']);
