@@ -34,6 +34,5 @@ def set_recurring_active(rid, active):
     got = _active_of(after)
     if bool(got) != bool(active):
         raise RuntimeError(f"Active read-back mismatch for {rid!r}: wrote {active!r}, got {got!r}")
-    reactivation_log.log_change(rid, after.get("name"),
-                                bool(old) if old is not None else None, bool(active))
-    return active
+    reactivation_log.log_change(rid, after.get("name"), bool(old), bool(active))
+    return bool(active)
