@@ -1,15 +1,18 @@
 import { useCallback, useMemo, useState } from 'react';
-import { defaultSchema, seed, seedPlan, seedStrategies } from '../fixtures/index.ts';
-import type { Plan } from '../fixtures/index.ts';
+import { defaultSchema, seed, seedPeriods, seedPlan, seedStrategies } from '../fixtures/index.ts';
+import type { Period, Plan } from '../fixtures/index.ts';
 import { applySchema, index } from '../model/index.ts';
 import type {
   DerivedSchema,
+  FocusForm,
   Graph,
   GraphIndex,
   MutationResult,
+  PeriodResult,
   PlanResult,
 } from '../model/index.ts';
 import type { ChipEditTarget } from '../components/rows/index.ts';
+import type { FocusView } from '../components/focus/index.ts';
 import type { AppTab } from './tabs.ts';
 
 /**
@@ -173,6 +176,28 @@ export interface UiState {
    * prepend (v4:1140).
    */
   receipt: readonly ReceiptEntry[];
+
+  // ── Focus-period editor (Task 9) ────────────────────────────────────────────
+  // v4 declares `focusView:'list'`, `focusEditId:null`, `focusReflect:null`, `focusDraft:''`
+  // and `focusEditField:null` in its initial bag (v4:79). `focusEditField` is NOT carried
+  // here: its only reader was `fRow` (v4:842), which has zero call sites — see
+  // `components/focus/fields.tsx`. `focusNewOff` and the two picker search boxes appear in v4
+  // only via `up()` (v4 keys them `focusPick_front` / `focusPick_paused`) and are read with
+  // `||''` fallbacks; declared here because the bag is strictly typed.
+  /** Which focus screen the `__focus__` route shows. v4's `st.focusView`. */
+  focusView: FocusView;
+  /** id of the period being edited — read by `saveFocus`. v4's `st.focusEditId`. */
+  focusEditId: string | null;
+  /** The live focus edit form. v4's `st.focusReflect`. */
+  focusReflect: FocusForm | null;
+  /** The author flow's free-text box. v4's `st.focusDraft`. */
+  focusDraft: string;
+  /** Un-added date in the days-off editor. v4's `st.focusNewOff`. */
+  focusNewOff: string;
+  /** Foreground picker's search box. v4's `st['focusPick_front']`. */
+  focusPickFront: string;
+  /** Paused picker's search box. v4's `st['focusPick_paused']`. */
+  focusPickPaused: string;
 }
 
 /** v4's two literal log tags (v4:1130). Not schema-driven in v4 — hardcoded in the render. */
@@ -227,6 +252,13 @@ const INITIAL_UI: UiState = {
   backend: 'claude',
   hobby: true,
   receipt: [],
+  focusView: 'list',
+  focusEditId: null,
+  focusReflect: null,
+  focusDraft: '',
+  focusNewOff: '',
+  focusPickFront: '',
+  focusPickPaused: '',
 };
 
 /** What a toast carries. `seq` makes two identical messages in a row distinguishable. */
@@ -241,6 +273,11 @@ export interface AppState {
   idx: GraphIndex;
   schema: DerivedSchema;
   plan: Plan;
+  /**
+   * The focus periods (Task 9). Held in state rather than read straight off the fixture
+   * because `saveFocus` writes them — the same reason `plan` is cloned and held here.
+   */
+  periods: Period[];
   ui: UiState;
   toast: Toast | null;
   /** v4's `up(patch)` — merge a patch into the UI bag. */
@@ -256,6 +293,12 @@ export interface AppState {
    * shape: new value in, toast raised the same way. See `model/plan.ts`.
    */
   applyPlan: (result: PlanResult) => void;
+  /**
+   * Apply a PERIOD mutation (Task 9). Third seam of the same shape as `apply`/`applyPlan`,
+   * for the same reason: focus periods are neither graph nodes nor plan entries. See
+   * `model/periods.ts`.
+   */
+  applyPeriods: (result: PeriodResult) => void;
   dismissToast: () => void;
 }
 
@@ -279,9 +322,15 @@ function initialPlan(): Plan {
   return structuredClone(seedPlan) as Plan;
 }
 
+/** Cloned for the same reason the graph and the plan are — `saveFocus` writes periods. */
+function initialPeriods(): Period[] {
+  return structuredClone(seedPeriods) as Period[];
+}
+
 export function useAppState(): AppState {
   const [graph, setGraph] = useState<Graph>(initialGraph);
   const [plan, setPlan] = useState<Plan>(initialPlan);
+  const [periods, setPeriods] = useState<Period[]>(initialPeriods);
   const [ui, setUi] = useState<UiState>(INITIAL_UI);
   const [toast, setToast] = useState<Toast | null>(null);
 
@@ -310,7 +359,28 @@ export function useAppState(): AppState {
     }
   }, []);
 
+  const applyPeriods = useCallback((result: PeriodResult) => {
+    setPeriods(result.periods);
+    if (result.toast) {
+      const msg = result.toast;
+      setToast((prev) => ({ msg, seq: (prev?.seq ?? 0) + 1 }));
+    }
+  }, []);
+
   const dismissToast = useCallback(() => setToast(null), []);
 
-  return { graph, idx, schema, plan, ui, toast, up, apply, applyPlan, dismissToast };
+  return {
+    graph,
+    idx,
+    schema,
+    plan,
+    periods,
+    ui,
+    toast,
+    up,
+    apply,
+    applyPlan,
+    applyPeriods,
+    dismissToast,
+  };
 }

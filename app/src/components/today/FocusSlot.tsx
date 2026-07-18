@@ -1,21 +1,14 @@
+import { FocusPanel } from '../focus/index.ts';
 import { PANEL } from './types.ts';
 import type { TodayCtx } from './types.ts';
 
 /**
- * v4 `fmtDate(v)` (~840):
- *   if(!v)return '—'; const s=''+v; const d=new Date(s.length<=10?s+'T00:00':s);
- *   return isNaN(d.getTime())?s:d.toLocaleDateString('en-US',{month:'short',day:'numeric'});
- *
- * The `+'T00:00'` on a bare `YYYY-MM-DD` is load-bearing: without it the string parses as UTC
- * midnight and renders as the previous day for anyone west of Greenwich. Unparseable input
- * falls through to the raw string rather than "Invalid Date".
+ * `fmtDate` moved to `components/focus/fmtDate.ts` with Task 9 — the whole focus editor
+ * formats dates with it, and it was never Today-specific. Re-exported here so this module's
+ * existing import surface (`today/index.ts`) is unchanged.
  */
-export function fmtDate(v: string | undefined | null): string {
-  if (!v) return '—';
-  const s = '' + v;
-  const d = new Date(s.length <= 10 ? s + 'T00:00' : s);
-  return isNaN(d.getTime()) ? s : d.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
-}
+export { fmtDate } from '../focus/fmtDate.ts';
+import { fmtDate } from '../focus/fmtDate.ts';
 
 export interface FocusSlotProps {
   ctx: TodayCtx;
@@ -32,10 +25,8 @@ export interface FocusSlotProps {
  * The `›` rotates 90° on expand. `panelin` is the shared entry animation, already in
  * `index.html`.
  *
- * ⚠ The expanded body is v4's `focusPanel()` (~814), which is **Task 9**, not this task.
- * A visible marker renders in its place rather than nothing at all — a stub that renders
- * nothing is indistinguishable from a missing mount, which is the failure mode
- * `docs/BUILD_DOC.md` §3 is about. It is placeholder chrome and comes out with Task 9.
+ * The expanded body is v4's `focusPanel()` (~814), mounted here as `FocusPanel` (Task 9).
+ * The visible "not built yet" marker that stood in for it is gone.
  */
 export function FocusSlot({ ctx }: FocusSlotProps) {
   const C = ctx.T.c;
@@ -97,9 +88,7 @@ export function FocusSlot({ ctx }: FocusSlotProps) {
       </button>
       {open ? (
         <div style={{ padding: '0 14px 12px', animation: 'panelin ' + PANEL }}>
-          <div style={{ fontFamily: ctx.T.mono, fontSize: '10px', color: C.dimmer }}>
-            Focus period editor — not built yet (Task 9).
-          </div>
+          <FocusPanel ctx={ctx.focus} />
         </div>
       ) : null}
     </div>

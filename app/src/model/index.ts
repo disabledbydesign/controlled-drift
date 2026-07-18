@@ -47,6 +47,9 @@ export {
 export { workItems, nearestProject, isDone, toggleArcStep } from './plan.ts';
 export type { PlanResult, PlanWorkItem } from './plan.ts';
 
+export { formFromPeriod, formFromDraft, saveFocus } from './periods.ts';
+export type { PeriodResult, FocusForm } from './periods.ts';
+
 export {
   setVal,
   toggleMulti,

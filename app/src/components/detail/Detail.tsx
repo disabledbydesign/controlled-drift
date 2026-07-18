@@ -68,8 +68,10 @@ const NAV = '.26s cubic-bezier(.4,0,.2,1)';
  * effort flags & notes flow through here."
  *
  * ── NOT PORTED, and why ──────────────────────────────────────────────────────
- * · `if(id==='__focus__') return this.focusDetail()` (v4:541). The focus-period editor is
- *   Task 9. Guarded and returns null rather than rendering a wrong pane.
+ * · `if(id==='__focus__') return this.focusDetail()` (v4:541). The focus-period editor SHIPPED
+ *   (Task 9) but mounts as its own overlay, `components/focus/FocusOverlay`, a sibling of
+ *   `DetailOverlay` in `AppShell` — it needs `periods` / `applyPeriods`, which `DetailCtx`
+ *   does not carry. The guard below stays so exactly one of the two ever paints.
  * · `maybeDiscardBlank` (v4:307). v4 runs it inside `up()` whenever `detail` changes, to
  *   delete a just-created `_new` node the user closed without filling in. Its only producer is
  *   `addChild`, which has no UI yet (Task 6/8), so it is unreachable — reported rather than
@@ -90,7 +92,8 @@ export function Detail({ ctx, id, closing, onClose }: DetailProps) {
   // the pane closing (an armed delete carried onto the next object would be dangerous).
   const [confirmDelete, setConfirmDelete] = useState(false);
 
-  // Task 9's pane. Returning null keeps a wrong editor from rendering over the focus period.
+  // The focus period has its own overlay (see the header note). Returning null keeps this
+  // pane from painting a wrong editor underneath it.
   if (id === '__focus__') return null;
 
   const n: ModelNode | undefined = idx.byId.get(id);

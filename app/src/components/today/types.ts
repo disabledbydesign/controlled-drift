@@ -11,6 +11,7 @@
 import type { Theme } from '@tokens';
 import type { Period, Plan } from '../../fixtures/index.ts';
 import type { Graph, GraphIndex, MutationResult, PlanResult } from '../../model/index.ts';
+import type { FocusCtx } from '../focus/types.ts';
 
 /** v4:63 — `this.PANEL='.16s ease'`. Duplicated for the same one-way-dependency reason. */
 export const PANEL = '.16s ease';
@@ -59,4 +60,11 @@ export interface TodayCtx {
   openDetail: (id: string) => void;
   /** v4's `up({appTab:'map'})` / `up({appTab:'add'})`. Same reasoning as `openDetail`. */
   goTab: (tab: 'map' | 'add') => void;
+  /**
+   * The focus-period context (Task 9). `FocusSlot`'s expanded body is v4's `focusPanel()`
+   * (v4:1021), which needs `periods`, `applyPeriods` and the `__focus__` detail route —
+   * none of which belong in `TodayUi`. Nested as its own context rather than flattened, for
+   * the same one-way-dependency reason the whole file exists.
+   */
+  focus: FocusCtx;
 }

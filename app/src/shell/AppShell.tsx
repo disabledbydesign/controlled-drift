@@ -3,10 +3,11 @@ import type { Theme, ThemeName } from '@tokens';
 import { appBg, TopAccent } from '../components/atoms/index.ts';
 import { DetailOverlay } from '../components/detail/index.ts';
 import type { DetailCtx } from '../components/detail/index.ts';
+import { FocusOverlay } from '../components/focus/index.ts';
+import type { FocusCtx } from '../components/focus/index.ts';
 import { PickerPage } from '../components/panels/index.ts';
 import type { PanelCtx } from '../components/panels/index.ts';
 import type { TodayCtx } from '../components/today/index.ts';
-import { seedPeriods } from '../fixtures/index.ts';
 import { starfield } from '../theme/starfield.ts';
 import {
   AddScreen,
@@ -125,9 +126,43 @@ export function AppShell({ T, name, setTheme }: AppShellProps) {
   };
 
   /**
-   * v4's `this` as the Today methods read it (Task 7). `periods` comes straight from the
-   * fixture rather than through `useAppState`, because nothing in Track A writes a period —
-   * the Focus editor that does is Task 9, and it will move this into the state bag then.
+   * v4's `this` as the focus-period methods read it (Task 9).
+   *
+   * `openEditor` / `closeEditor` are callbacks rather than `up` fields because they write
+   * `detail`, which is shell-wide routing state — same reasoning as `openDetail` below.
+   *
+   * ⚠ `closeEditor` is v4's Back (888) and v4's post-save reset (926), which are the SAME
+   * patch. It discards `focusReflect` without saving. That is `ux_consistency_review` #4 and
+   * it is preserved deliberately — see `components/focus/types.ts`.
+   */
+  const focusCtx: FocusCtx = {
+    T,
+    graph: st.graph,
+    periods: st.periods,
+    ui: st.ui,
+    up: st.up,
+    applyPeriods: st.applyPeriods,
+    openEditor: (view, editId, reflect) =>
+      st.up({
+        detail: '__focus__',
+        focusView: view,
+        focusEditId: editId,
+        focusReflect: reflect,
+        // v4:836 clears the draft when opening the author flow and leaves it alone on edit.
+        ...(view === 'author' ? { focusDraft: '' } : null),
+      }),
+    closeEditor: () =>
+      st.up({
+        detail: null,
+        focusView: 'list',
+        focusEditId: null,
+        focusReflect: null,
+        focusDraft: '',
+      }),
+  };
+
+  /**
+   * v4's `this` as the Today methods read it (Task 7).
    *
    * `openDetail` and `goTab` are callbacks rather than `up` fields on purpose: `detail`,
    * `returnFrom` and `tab` are shell-wide routing state, and putting them in `TodayUi` would
@@ -138,7 +173,8 @@ export function AppShell({ T, name, setTheme }: AppShellProps) {
     graph: st.graph,
     idx: st.idx,
     plan: st.plan,
-    periods: seedPeriods,
+    periods: st.periods,
+    focus: focusCtx,
     ui: st.ui,
     up: st.up,
     apply: st.apply,
@@ -252,6 +288,12 @@ export function AppShell({ T, name, setTheme }: AppShellProps) {
           detail editor's location block, so the picker has to be able to paint over the
           detail pane (zIndex 45 vs. its 30), not sit behind it inside a tab body. */}
       <DetailOverlay ctx={detailCtx} />
+      {/* v4 reaches the focus editor from INSIDE `detail(id)` (v4:541,
+          `if(id==='__focus__')return this.focusDetail()`). Here it is a sibling instead:
+          `DetailCtx` has no `periods` / `applyPeriods` and must not grow them. Same
+          `__focus__` route, same z-index, same slide-in. `Detail.tsx` keeps its
+          `id==='__focus__' → null` guard so exactly one of the two ever paints. */}
+      <FocusOverlay ctx={focusCtx} open={st.ui.detail === '__focus__'} />
       <PickerPage ctx={panelCtx} />
     </div>
   );

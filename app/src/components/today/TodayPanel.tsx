@@ -27,7 +27,7 @@ export interface TodayPanelProps {
  * ── the shape switch ────────────────────────────────────────────────────────
  * `View: Schedule · Priority` writes `todayShape`, which picks between the clock bands and
  * the flat ranked list. Per spec §17 a focus period can force either shape; that override is
- * the Focus editor's (Task 9) and does not appear here.
+ * the Focus editor's (`components/focus`) and does not appear here.
  *
  * ── the action row ──────────────────────────────────────────────────────────
  * Every button except "Add something" is `flash()` only — no regeneration behind it, because

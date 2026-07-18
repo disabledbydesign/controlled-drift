@@ -26,6 +26,7 @@ import { index, toggleArcStep, workItems } from '../../../model/index.ts';
 import type { Graph, ModelNode } from '../../../model/index.ts';
 import { TodayPanel } from '../TodayPanel.tsx';
 import type { TodayCtx, TodayUi } from '../types.ts';
+import { focusCtxWith } from '../../focus/__tests__/harness.ts';
 
 afterEach(cleanup);
 
@@ -89,6 +90,8 @@ function ctxWith(ui: Partial<TodayUi> = {}, plan: Plan = freshPlan()) {
     idx: index(graph),
     plan,
     periods: seedPeriods,
+    // Task 9: FocusSlot's expanded body is FocusPanel, which reads this.
+    focus: focusCtxWith().ctx,
     ui: { ...BASE_UI, ...ui },
     up,
     apply,

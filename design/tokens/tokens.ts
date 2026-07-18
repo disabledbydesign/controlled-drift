@@ -388,12 +388,14 @@ export const themes: Record<ThemeName, Theme> = {
       // nothing to correct v4 with. The visible symptom: 150px-tall textareas on the Add tab
       // rendered as lozenges.
       field: '13px',
-      // ⚠ SAME MISATTRIBUTION RISK, left as-is pending a visual check. The cited lines
-      // (L146-154, L179-184) are status CHIPS — <span>Steady</span>, <span>Sprint</span>,
-      // <span>Open</span>, <span>Parked</span> — not controls. `ctl` drives the Inherit|Custom
-      // segments and similar small buttons. Not obviously wrong on screen, unlike `field`, so it
-      // is flagged rather than reverted; v4's value was 11px.
-      ctl: '999px',
+      // ⚠ REVERTED to v4's 11px on 2026-07-18, after the visual check it was waiting on.
+      // Changed to '999px' during reconciliation citing gallery L146-154 / L179-184 — but those
+      // lines are status CHIPS (<span>Steady</span>, <span>Sprint</span>, <span>Open</span>,
+      // <span>Parked</span>), not controls. Same misattribution as `field` above: values were
+      // mined from a line range holding several element kinds and attributed to the wrong one.
+      // It was flagged as "not obviously wrong on screen" and left; Task 9 made it obviously
+      // wrong — `ctl` is applied to the focus-period CARD, which rendered as a lens/ellipse.
+      ctl: '11px',
       mod: '14px',                  // was 18px — gallery L203 (menu)
     },
     chrome: 'rgba(12,8,22,0.4)',    // UNVERIFIED — gallery L39-43 header is transparent over the starfield
