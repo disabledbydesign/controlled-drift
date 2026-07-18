@@ -1,0 +1,817 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<meta name="design_doc_mode" content="canvas">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Sora:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+<style>
+  *{box-sizing:border-box}
+  body{margin:0;background:#0a0910;font-family:'Sora',-apple-system,BlinkMacSystemFont,'Segoe UI',system-ui,sans-serif}
+  ::-webkit-scrollbar{width:0;height:0}
+</style>
+</helmet>
+<section style="padding:64px 56px 96px;display:flex;flex-direction:column;gap:34px;background:radial-gradient(60% 50% at 15% 3%,rgba(130,75,190,.14),transparent 60%),radial-gradient(60% 55% at 90% 97%,rgba(45,95,200,.12),transparent 60%),#030308">
+  <div style="max-width:740px;display:flex;flex-direction:column;gap:14px">
+    <div style="font-family:'JetBrains Mono',monospace;font-size:12px;font-weight:600;letter-spacing:.22em;text-transform:uppercase;color:#5f5a76">Controlled Drift · whole-surface style</div>
+    <div style="font-size:30px;font-weight:700;letter-spacing:-.02em;line-height:1.15;background:linear-gradient(100deg,#f2a0c4,#c9a2e0,#7fb2f5,#49c8d6);-webkit-background-clip:text;background-clip:text;-webkit-text-fill-color:transparent">Two complete looks, top to bottom</div>
+    <div style="font-size:15.5px;line-height:1.6;color:#9a94ac">Not patched sections — the whole screen committed to one style. <b style="color:#f2a6c8;font-weight:600">Celestial</b> treats the app as a continuous starfield: soft, floating, hairline-separated, glow only on <i>now</i>. <b style="color:#58c4e6;font-weight:600">Hardware</b> treats it as an instrument surface: framed modules, bevels, LED status, mono chrome — with reading text kept calm and legible.</div>
+  </div>
+
+  <div style="display:flex;flex-wrap:wrap;gap:44px;align-items:flex-start">
+
+    <!-- ══ 4a CELESTIAL ══ -->
+    <div id="4a" style="display:flex;flex-direction:column;gap:16px;align-items:center">
+      <div style="display:flex;align-items:center;gap:10px;align-self:flex-start"><span style="font-family:'JetBrains Mono',monospace;font-size:11px;font-weight:600;color:#050410;background:#ef92bd;border-radius:6px;padding:3px 7px">4a</span><span style="font-size:17px;font-weight:700;color:#f5eef2">Celestial</span><span style="font-size:13px;color:#8a8090">— space, floating, calm</span></div>
+      <div style="width:384px;height:812px;background:#000;border-radius:44px;padding:11px;box-shadow:0 40px 90px rgba(0,0,0,.7),0 0 0 1.5px #241826,0 0 60px rgba(239,146,189,.08)">
+        <div style="width:100%;height:100%;border-radius:34px;overflow:hidden;display:flex;flex-direction:column;background:radial-gradient(5.4px 5.4px at 19.1% 91.0%,rgba(215,232,255,0.09),transparent 70%),radial-gradient(6.3px 6.3px at 34.6% 32.2%,rgba(255,224,238,0.09),transparent 70%),radial-gradient(5.8px 5.8px at 63.5% 40.6%,rgba(255,255,255,0.09),transparent 70%),radial-gradient(6.4px 6.4px at 46.1% 56.9%,rgba(255,255,255,0.09),transparent 70%),radial-gradient(5.2px 5.2px at 89.9% 87.7%,rgba(215,232,255,0.09),transparent 70%),radial-gradient(5.2px 5.2px at 88.6% 53.5%,rgba(255,224,238,0.09),transparent 70%),radial-gradient(4.9px 4.9px at 18.7% 38.8%,rgba(255,224,238,0.09),transparent 70%),radial-gradient(1.16px 1.16px at 14.0% 14.3%,rgba(255,214,232,0.39),transparent 62%),radial-gradient(1.22px 1.22px at 23.5% 14.9%,rgba(208,226,255,0.49),transparent 62%),radial-gradient(1.33px 1.33px at 10.7% 14.2%,rgba(255,255,255,0.47),transparent 62%),radial-gradient(1.05px 1.05px at 20.2% 1.5%,rgba(255,255,255,0.61),transparent 62%),radial-gradient(0.62px 0.62px at 14.7% 12.9%,rgba(255,214,232,0.48),transparent 62%),radial-gradient(1.34px 1.34px at 23.1% 15.7%,rgba(255,214,232,0.22),transparent 62%),radial-gradient(0.86px 0.86px at 22.9% 8.6%,rgba(208,226,255,0.4),transparent 62%),radial-gradient(0.51px 0.51px at 11.0% 11.5%,rgba(208,226,255,0.51),transparent 62%),radial-gradient(1.25px 1.25px at 16.6% 13.0%,rgba(255,255,255,0.4),transparent 62%),radial-gradient(0.86px 0.86px at 9.4% 3.6%,rgba(255,255,255,0.36),transparent 62%),radial-gradient(0.86px 0.86px at 9.4% 13.7%,rgba(255,255,255,0.57),transparent 62%),radial-gradient(0.63px 0.63px at 13.0% 19.8%,rgba(255,255,255,0.34),transparent 62%),radial-gradient(1.05px 1.05px at 30.1% 26.2%,rgba(255,255,255,0.26),transparent 62%),radial-gradient(0.71px 0.71px at 30.7% 34.6%,rgba(208,226,255,0.24),transparent 62%),radial-gradient(0.97px 0.97px at 37.2% 33.2%,rgba(208,226,255,0.38),transparent 62%),radial-gradient(0.78px 0.78px at 28.1% 26.5%,rgba(255,255,255,0.5),transparent 62%),radial-gradient(0.79px 0.79px at 31.1% 25.0%,rgba(255,255,255,0.51),transparent 62%),radial-gradient(1.27px 1.27px at 28.6% 33.5%,rgba(255,255,255,0.39),transparent 62%),radial-gradient(0.74px 0.74px at 35.1% 22.5%,rgba(255,255,255,0.37),transparent 62%),radial-gradient(1.43px 1.43px at 28.9% 24.4%,rgba(255,255,255,0.37),transparent 62%),radial-gradient(1.38px 1.38px at 36.2% 28.9%,rgba(255,255,255,0.35),transparent 62%),radial-gradient(0.76px 0.76px at 57.2% 5.0%,rgba(255,214,232,0.55),transparent 62%),radial-gradient(1.16px 1.16px at 59.7% 14.9%,rgba(255,255,255,0.35),transparent 62%),radial-gradient(0.88px 0.88px at 63.3% 7.7%,rgba(255,214,232,0.61),transparent 62%),radial-gradient(1.4px 1.4px at 61.0% 5.6%,rgba(255,255,255,0.58),transparent 62%),radial-gradient(0.56px 0.56px at 62.6% 9.1%,rgba(255,255,255,0.35),transparent 62%),radial-gradient(1.26px 1.26px at 57.2% 7.0%,rgba(208,226,255,0.34),transparent 62%),radial-gradient(1.18px 1.18px at 62.8% 12.1%,rgba(255,255,255,0.26),transparent 62%),radial-gradient(1.22px 1.22px at 53.5% 8.5%,rgba(255,255,255,0.32),transparent 62%),radial-gradient(0.62px 0.62px at 62.6% 11.7%,rgba(190,214,255,0.49),transparent 62%),radial-gradient(1.09px 1.09px at 63.0% 11.6%,rgba(255,214,232,0.56),transparent 62%),radial-gradient(0.73px 0.73px at 59.9% 11.7%,rgba(255,255,255,0.57),transparent 62%),radial-gradient(0.71px 0.71px at 82.2% 13.6%,rgba(255,255,255,0.47),transparent 62%),radial-gradient(0.85px 0.85px at 82.5% 21.6%,rgba(255,214,232,0.37),transparent 62%),radial-gradient(1.22px 1.22px at 80.9% 18.6%,rgba(190,214,255,0.53),transparent 62%),radial-gradient(1.2px 1.2px at 90.4% 24.3%,rgba(255,214,232,0.31),transparent 62%),radial-gradient(1.26px 1.26px at 80.2% 27.5%,rgba(208,226,255,0.57),transparent 62%),radial-gradient(0.57px 0.57px at 77.9% 26.5%,rgba(255,214,232,0.31),transparent 62%),radial-gradient(1.4px 1.4px at 76.0% 24.2%,rgba(208,226,255,0.6),transparent 62%),radial-gradient(0.99px 0.99px at 90.1% 28.7%,rgba(255,214,232,0.23),transparent 62%),radial-gradient(0.98px 0.98px at 83.3% 31.3%,rgba(255,255,255,0.61),transparent 62%),radial-gradient(0.62px 0.62px at 78.8% 29.6%,rgba(255,240,214,0.41),transparent 62%),radial-gradient(0.96px 0.96px at 51.5% 39.8%,rgba(255,255,255,0.26),transparent 62%),radial-gradient(1.18px 1.18px at 33.6% 33.4%,rgba(255,214,232,0.39),transparent 62%),radial-gradient(0.61px 0.61px at 41.8% 26.7%,rgba(255,214,232,0.39),transparent 62%),radial-gradient(0.98px 0.98px at 41.0% 40.7%,rgba(255,255,255,0.61),transparent 62%),radial-gradient(1.46px 1.46px at 41.7% 48.7%,rgba(255,255,255,0.45),transparent 62%),radial-gradient(1.49px 1.49px at 53.7% 34.3%,rgba(208,226,255,0.23),transparent 62%),radial-gradient(0.82px 0.82px at 58.4% 41.5%,rgba(255,255,255,0.38),transparent 62%),radial-gradient(0.76px 0.76px at 77.4% 49.9%,rgba(208,226,255,0.41),transparent 62%),radial-gradient(0.8px 0.8px at 69.8% 46.0%,rgba(190,214,255,0.31),transparent 62%),radial-gradient(0.99px 0.99px at 79.7% 47.7%,rgba(255,255,255,0.6),transparent 62%),radial-gradient(0.6px 0.6px at 65.1% 48.0%,rgba(208,226,255,0.52),transparent 62%),radial-gradient(1.25px 1.25px at 68.8% 34.4%,rgba(255,255,255,0.28),transparent 62%),radial-gradient(1.06px 1.06px at 77.0% 42.9%,rgba(208,226,255,0.57),transparent 62%),radial-gradient(0.95px 0.95px at 78.3% 41.2%,rgba(208,226,255,0.49),transparent 62%),radial-gradient(1.27px 1.27px at 24.5% 54.5%,rgba(255,255,255,0.37),transparent 62%),radial-gradient(1.36px 1.36px at 26.2% 52.9%,rgba(255,255,255,0.6),transparent 62%),radial-gradient(1.04px 1.04px at 28.2% 45.3%,rgba(255,255,255,0.29),transparent 62%),radial-gradient(1.04px 1.04px at 33.6% 59.5%,rgba(255,255,255,0.46),transparent 62%),radial-gradient(1.36px 1.36px at 22.3% 40.5%,rgba(255,214,232,0.39),transparent 62%),radial-gradient(0.7px 0.7px at 31.1% 56.1%,rgba(190,214,255,0.49),transparent 62%),radial-gradient(0.93px 0.93px at 16.1% 50.9%,rgba(208,226,255,0.56),transparent 62%),radial-gradient(0.63px 0.63px at 8.4% 57.3%,rgba(255,255,255,0.41),transparent 62%),radial-gradient(0.68px 0.68px at 24.2% 55.0%,rgba(255,255,255,0.38),transparent 62%),radial-gradient(0.97px 0.97px at 36.5% 50.5%,rgba(255,255,255,0.42),transparent 62%),radial-gradient(1.33px 1.33px at 92.3% 61.0%,rgba(255,255,255,0.46),transparent 62%),radial-gradient(0.96px 0.96px at 98.5% 57.2%,rgba(255,255,255,0.6),transparent 62%),radial-gradient(0.78px 0.78px at 98.5% 63.9%,rgba(208,226,255,0.38),transparent 62%),radial-gradient(0.57px 0.57px at 90.1% 51.3%,rgba(255,255,255,0.37),transparent 62%),radial-gradient(1.49px 1.49px at 87.1% 56.2%,rgba(208,226,255,0.55),transparent 62%),radial-gradient(0.84px 0.84px at 87.8% 58.7%,rgba(255,214,232,0.38),transparent 62%),radial-gradient(1.44px 1.44px at 97.2% 61.7%,rgba(208,226,255,0.56),transparent 62%),radial-gradient(1.02px 1.02px at 81.7% 65.1%,rgba(255,214,232,0.36),transparent 62%),radial-gradient(0.72px 0.72px at 86.3% 54.1%,rgba(255,255,255,0.48),transparent 62%),radial-gradient(1.36px 1.36px at 86.4% 57.5%,rgba(255,255,255,0.37),transparent 62%),radial-gradient(0.97px 0.97px at 33.9% 61.1%,rgba(255,255,255,0.51),transparent 62%),radial-gradient(1.28px 1.28px at 38.3% 69.6%,rgba(255,255,255,0.45),transparent 62%),radial-gradient(0.93px 0.93px at 42.7% 64.1%,rgba(255,255,255,0.61),transparent 62%),radial-gradient(1.01px 1.01px at 39.2% 68.1%,rgba(255,240,214,0.42),transparent 62%),radial-gradient(1.4px 1.4px at 35.4% 57.2%,rgba(255,255,255,0.3),transparent 62%),radial-gradient(1.37px 1.37px at 36.9% 69.1%,rgba(208,226,255,0.4),transparent 62%),radial-gradient(0.75px 0.75px at 38.1% 60.5%,rgba(255,214,232,0.27),transparent 62%),radial-gradient(0.78px 0.78px at 40.1% 66.3%,rgba(208,226,255,0.33),transparent 62%),radial-gradient(1.39px 1.39px at 36.2% 58.4%,rgba(255,255,255,0.48),transparent 62%),radial-gradient(1.16px 1.16px at 38.1% 65.8%,rgba(255,214,232,0.25),transparent 62%),radial-gradient(1.43px 1.43px at 43.0% 69.4%,rgba(255,255,255,0.35),transparent 62%),radial-gradient(1.43px 1.43px at 61.3% 78.5%,rgba(208,226,255,0.33),transparent 62%),radial-gradient(0.68px 0.68px at 55.6% 70.9%,rgba(208,226,255,0.46),transparent 62%),radial-gradient(1px 1px at 64.3% 76.0%,rgba(255,255,255,0.28),transparent 62%),radial-gradient(1.21px 1.21px at 52.1% 77.0%,rgba(255,214,232,0.58),transparent 62%),radial-gradient(1.25px 1.25px at 55.3% 65.2%,rgba(255,255,255,0.46),transparent 62%),radial-gradient(0.65px 0.65px at 66.4% 69.6%,rgba(208,226,255,0.31),transparent 62%),radial-gradient(0.57px 0.57px at 53.3% 76.3%,rgba(190,214,255,0.61),transparent 62%),radial-gradient(1.09px 1.09px at 60.1% 63.9%,rgba(255,255,255,0.58),transparent 62%),radial-gradient(0.81px 0.81px at 50.8% 72.8%,rgba(255,255,255,0.26),transparent 62%),radial-gradient(0.99px 0.99px at 62.1% 72.2%,rgba(255,255,255,0.45),transparent 62%),radial-gradient(0.76px 0.76px at 48.1% 78.3%,rgba(255,240,214,0.36),transparent 62%),radial-gradient(1.31px 1.31px at 66.4% 75.5%,rgba(255,240,214,0.33),transparent 62%),radial-gradient(0.81px 0.81px at 80.3% 81.5%,rgba(255,255,255,0.52),transparent 62%),radial-gradient(1.07px 1.07px at 80.5% 84.7%,rgba(208,226,255,0.49),transparent 62%),radial-gradient(0.82px 0.82px at 82.5% 88.0%,rgba(255,255,255,0.44),transparent 62%),radial-gradient(1.1px 1.1px at 80.5% 78.6%,rgba(208,226,255,0.3),transparent 62%),radial-gradient(1.25px 1.25px at 80.3% 86.2%,rgba(190,214,255,0.52),transparent 62%),radial-gradient(0.92px 0.92px at 82.4% 83.7%,rgba(255,255,255,0.54),transparent 62%),radial-gradient(0.97px 0.97px at 74.4% 84.2%,rgba(255,214,232,0.61),transparent 62%),radial-gradient(0.85px 0.85px at 81.7% 83.0%,rgba(255,255,255,0.25),transparent 62%),radial-gradient(1.05px 1.05px at 79.8% 82.1%,rgba(255,214,232,0.34),transparent 62%),radial-gradient(1.38px 1.38px at 76.9% 79.2%,rgba(255,255,255,0.33),transparent 62%),radial-gradient(0.71px 0.71px at 12.2% 81.9%,rgba(255,255,255,0.33),transparent 62%),radial-gradient(1.23px 1.23px at 15.8% 78.1%,rgba(255,240,214,0.42),transparent 62%),radial-gradient(1.35px 1.35px at 9.2% 84.7%,rgba(208,226,255,0.26),transparent 62%),radial-gradient(1.35px 1.35px at 10.1% 81.2%,rgba(255,240,214,0.37),transparent 62%),radial-gradient(1.46px 1.46px at 19.7% 77.4%,rgba(255,255,255,0.44),transparent 62%),radial-gradient(1.3px 1.3px at 3.4% 81.4%,rgba(208,226,255,0.57),transparent 62%),radial-gradient(1.13px 1.13px at 12.4% 83.5%,rgba(255,255,255,0.29),transparent 62%),radial-gradient(0.81px 0.81px at 19.0% 78.6%,rgba(255,255,255,0.49),transparent 62%),radial-gradient(0.56px 0.56px at 4.3% 87.2%,rgba(190,214,255,0.27),transparent 62%),radial-gradient(0.76px 0.76px at 20.7% 78.5%,rgba(255,255,255,0.55),transparent 62%),radial-gradient(0.94px 0.94px at 13.6% 84.1%,rgba(255,255,255,0.43),transparent 62%),radial-gradient(0.87px 0.87px at 15.9% 78.8%,rgba(208,226,255,0.26),transparent 62%),radial-gradient(1.32px 1.32px at 51.6% 88.6%,rgba(255,255,255,0.43),transparent 62%),radial-gradient(0.73px 0.73px at 49.2% 94.3%,rgba(255,214,232,0.31),transparent 62%),radial-gradient(1.32px 1.32px at 50.7% 94.5%,rgba(255,255,255,0.54),transparent 62%),radial-gradient(1.3px 1.3px at 51.0% 93.1%,rgba(255,255,255,0.46),transparent 62%),radial-gradient(1.15px 1.15px at 50.9% 90.3%,rgba(190,214,255,0.56),transparent 62%),radial-gradient(0.53px 0.53px at 51.1% 93.8%,rgba(255,255,255,0.27),transparent 62%),radial-gradient(0.7px 0.7px at 70.3% 38.8%,rgba(208,226,255,0.32),transparent 62%),radial-gradient(0.98px 0.98px at 83.7% 81.7%,rgba(255,255,255,0.23),transparent 62%),radial-gradient(0.55px 0.55px at 78.3% 20.1%,rgba(255,255,255,0.34),transparent 62%),radial-gradient(0.78px 0.78px at 79.9% 36.9%,rgba(208,226,255,0.27),transparent 62%),radial-gradient(0.55px 0.55px at 88.6% 57.4%,rgba(255,255,255,0.24),transparent 62%),radial-gradient(0.72px 0.72px at 38.5% 86.7%,rgba(255,255,255,0.23),transparent 62%),radial-gradient(0.82px 0.82px at 72.4% 27.5%,rgba(255,255,255,0.19),transparent 62%),radial-gradient(0.73px 0.73px at 87.5% 84.0%,rgba(208,226,255,0.4),transparent 62%),radial-gradient(0.58px 0.58px at 28.7% 51.8%,rgba(208,226,255,0.23),transparent 62%),radial-gradient(0.9px 0.9px at 41.5% 44.1%,rgba(255,255,255,0.34),transparent 62%),radial-gradient(0.89px 0.89px at 43.4% 48.2%,rgba(208,226,255,0.34),transparent 62%),radial-gradient(1.1px 1.1px at 51.3% 24.4%,rgba(255,240,214,0.19),transparent 62%),radial-gradient(1.06px 1.06px at 88.0% 91.2%,rgba(255,255,255,0.18),transparent 62%),radial-gradient(0.73px 0.73px at 43.2% 17.7%,rgba(255,255,255,0.34),transparent 62%),radial-gradient(0.63px 0.63px at 54.4% 94.5%,rgba(208,226,255,0.29),transparent 62%),radial-gradient(0.55px 0.55px at 17.3% 59.9%,rgba(208,226,255,0.34),transparent 62%),radial-gradient(1.06px 1.06px at 52.5% 55.9%,rgba(255,255,255,0.33),transparent 62%),radial-gradient(0.83px 0.83px at 67.8% 33.5%,rgba(255,240,214,0.39),transparent 62%),radial-gradient(0.54px 0.54px at 26.9% 41.6%,rgba(255,255,255,0.2),transparent 62%),radial-gradient(0.98px 0.98px at 59.3% 28.1%,rgba(255,255,255,0.33),transparent 62%),radial-gradient(0.94px 0.94px at 72.2% 9.7%,rgba(255,240,214,0.37),transparent 62%),radial-gradient(0.95px 0.95px at 67.8% 44.9%,rgba(255,255,255,0.28),transparent 62%),radial-gradient(0.9px 0.9px at 37.9% 19.4%,rgba(255,255,255,0.28),transparent 62%),radial-gradient(0.59px 0.59px at 18.3% 75.3%,rgba(255,255,255,0.23),transparent 62%),radial-gradient(0.87px 0.87px at 61.1% 36.4%,rgba(255,214,232,0.26),transparent 62%),radial-gradient(1.08px 1.08px at 13.7% 9.8%,rgba(255,255,255,0.3),transparent 62%),radial-gradient(1.68px 1.68px at 19.1% 91.0%,rgba(215,232,255,0.69),transparent 60%),radial-gradient(1.96px 1.96px at 34.6% 32.2%,rgba(255,224,238,0.76),transparent 60%),radial-gradient(1.82px 1.82px at 63.5% 40.6%,rgba(255,255,255,0.76),transparent 60%),radial-gradient(2.01px 2.01px at 46.1% 56.9%,rgba(255,255,255,0.78),transparent 60%),radial-gradient(1.64px 1.64px at 89.9% 87.7%,rgba(215,232,255,0.75),transparent 60%),radial-gradient(1.63px 1.63px at 88.6% 53.5%,rgba(255,224,238,0.75),transparent 60%),radial-gradient(1.52px 1.52px at 18.7% 38.8%,rgba(255,224,238,0.75),transparent 60%),radial-gradient(120% 60% at 82% 0%,rgba(224,96,168,.22),transparent 55%),radial-gradient(120% 70% at 5% 100%,rgba(48,150,190,.18),transparent 55%),radial-gradient(90% 50% at 50% 42%,rgba(150,90,205,.1),transparent 70%),#060512">
+          <!-- status -->
+          <div style="display:flex;justify-content:space-between;align-items:center;padding:14px 22px 6px"><span style="font-family:'JetBrains Mono',monospace;font-size:13px;color:#f5eef2">9:41</span><span style="font-size:9px;color:#c99fb0;letter-spacing:3px">✦✦✦</span></div>
+          <!-- header -->
+          <div style="display:flex;justify-content:space-between;align-items:center;padding:8px 22px 14px">
+            <div><div style="font-size:19px;font-weight:700;color:#f5eef2;letter-spacing:-.01em">Controlled Drift</div><div style="font-family:'JetBrains Mono',monospace;font-size:10.5px;color:#8a8090;letter-spacing:.08em;margin-top:2px">FRI · JUL 17 · morning</div></div>
+            <span style="width:34px;height:34px;border-radius:50%;background:rgba(255,255,255,.04);border:1px solid rgba(255,255,255,.09);display:flex;align-items:center;justify-content:center;color:#a89aa6;font-size:15px">✧</span>
+          </div>
+          <!-- tabs -->
+          <div style="display:flex;gap:22px;padding:0 22px 4px;border-bottom:1px solid rgba(255,255,255,.06)">
+            <span style="font-size:13.5px;color:#f2a6c8;font-weight:600;padding-bottom:9px;border-bottom:2px solid #ef92bd;box-shadow:0 8px 14px -8px rgba(239,146,189,.8)">Today</span>
+            <span style="font-size:13.5px;color:#8a8090;padding-bottom:9px">Focus</span>
+            <span style="font-size:13.5px;color:#8a8090;padding-bottom:9px">Add</span>
+            <span style="font-size:13.5px;color:#8a8090;padding-bottom:9px">Map</span>
+            <span style="font-size:13.5px;color:#8a8090;padding-bottom:9px">Routines</span>
+          </div>
+          <!-- plan -->
+          <div style="flex:1;overflow:hidden;padding:18px 22px;display:flex;flex-direction:column;gap:18px">
+            <div>
+              <div style="display:flex;align-items:center;gap:9px;margin-bottom:7px"><span style="width:7px;height:7px;border-radius:50%;background:#5fc6d6;box-shadow:0 0 4px rgba(95,198,214,.85),0 0 11px 2px rgba(95,198,214,.45)"></span><span style="font-family:'JetBrains Mono',monospace;font-size:11px;font-weight:600;letter-spacing:.08em;text-transform:uppercase;color:#a89aa6">Job search</span></div>
+              <div style="font-size:15.5px;color:#f5eef2;line-height:1.4;padding-left:16px;margin-bottom:9px">Follow up on the GRA leads</div>
+              <div style="margin-left:16px;background:radial-gradient(1px 1px at 20% 35%,rgba(255,255,255,.4),transparent 60%),radial-gradient(1px 1px at 72% 62%,rgba(255,255,255,.32),transparent 60%),rgba(239,146,189,.07);border:1px solid rgba(239,146,189,.24);border-radius:13px;padding:10px 13px"><div style="font-family:'JetBrains Mono',monospace;font-size:9.5px;letter-spacing:.1em;text-transform:uppercase;color:#b07f96;margin-bottom:3px">why this matters</div><div style="font-size:12.5px;line-height:1.45;color:#f2a6c8">Income and a role that fits — not one that extracts</div></div>
+            </div>
+            <div style="height:1px;background:rgba(255,255,255,.06)"></div>
+            <div>
+              <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:7px"><div style="display:flex;align-items:center;gap:9px"><span style="width:7px;height:7px;border-radius:50%;background:#a98fee;box-shadow:0 0 4px rgba(169,143,238,.8),0 0 11px 2px rgba(169,143,238,.4)"></span><span style="font-family:'JetBrains Mono',monospace;font-size:11px;font-weight:600;letter-spacing:.08em;text-transform:uppercase;color:#a89aa6">Scholarly writing</span></div><span style="font-family:'JetBrains Mono',monospace;font-size:10px;color:#f0a86a;background:radial-gradient(1px 1px at 30% 40%,rgba(255,255,255,.5),transparent 60%),rgba(240,168,106,.11);border:1px solid rgba(240,168,106,.36);border-radius:999px;padding:3px 10px;white-space:nowrap">✦ 4h chunk</span></div>
+              <div style="padding-left:16px;font-size:13.5px;line-height:1.7;color:#8a8090"><span style="color:#58d69a;text-shadow:0 0 3px rgba(88,214,154,.9),0 0 9px rgba(88,214,154,.65)">✓</span> outline done<br><span style="color:#ef92bd;text-shadow:0 0 3px rgba(239,146,189,.9),0 0 10px rgba(239,146,189,.7)">✦</span> <span style="color:#f5eef2">draft §2 of the paper</span><br><span style="color:#4f4a5e">☐</span> revise intro</div>
+            </div>
+            <div style="height:1px;background:rgba(255,255,255,.06)"></div>
+            <div>
+              <div style="display:flex;align-items:center;gap:9px"><span style="width:19px;height:19px;border-radius:50%;border:2px solid #58d69a;flex:0 0 auto;box-shadow:0 0 3px rgba(88,214,154,.6),0 0 9px 1px rgba(88,214,154,.4),inset 0 0 4px rgba(88,214,154,.3)"></span><span style="font-size:14.5px;color:#f5eef2">Refill the prescriptions</span><span style="font-family:'JetBrains Mono',monospace;font-size:9.5px;color:#6f6480;margin-left:auto">DAILY LIFE</span></div>
+            </div>
+            <div style="margin-top:2px"><div style="font-family:'JetBrains Mono',monospace;font-size:9.5px;letter-spacing:.1em;text-transform:uppercase;color:#6f6480;margin-bottom:6px">still here, not today</div><div style="font-size:12.5px;color:#6f6480;line-height:1.6">· Calendar integration — backburner<br>· Park migration from Reframe</div></div>
+          </div>
+          <!-- actions + ask -->
+          <div style="padding:12px 22px 8px;display:flex;flex-wrap:wrap;gap:7px;border-top:1px solid rgba(255,255,255,.06)">
+            <span style="font-size:11.5px;color:#f2a6c8;background:radial-gradient(1.2px 1.2px at 20% 34%,rgba(255,255,255,.55),transparent 60%),radial-gradient(1px 1px at 70% 64%,rgba(255,255,255,.4),transparent 60%),rgba(239,146,189,.12);border:1px solid rgba(239,146,189,.42);border-radius:999px;padding:6px 13px;box-shadow:0 0 16px rgba(239,146,189,.22)">✦ Fresh plan</span>
+            <span style="font-size:11.5px;color:#a89aa6;background:rgba(255,255,255,.04);border:1px solid rgba(255,255,255,.09);border-radius:999px;padding:6px 13px">Low energy</span>
+            <span style="font-size:11.5px;color:#a89aa6;background:rgba(255,255,255,.04);border:1px solid rgba(255,255,255,.09);border-radius:999px;padding:6px 13px">I'm stuck</span>
+            <span style="font-size:11.5px;color:#a89aa6;background:rgba(255,255,255,.04);border:1px solid rgba(255,255,255,.09);border-radius:999px;padding:6px 13px">Quick wins</span>
+          </div>
+          <div style="padding:6px 22px 20px"><div style="display:flex;align-items:center;gap:9px;background:rgba(255,255,255,.03);border:1px solid rgba(255,255,255,.08);border-radius:999px;padding:11px 16px"><span style="font-size:14px;color:#c99fb0">✧</span><span style="font-size:13px;color:#6f6480">tell me what you need…</span></div></div>
+        </div>
+      </div>
+    </div>
+
+    <!-- ══ 4c HARDWARE ══ -->
+    <div id="4c" style="display:flex;flex-direction:column;gap:16px;align-items:center">
+      <div style="display:flex;align-items:center;gap:10px;align-self:flex-start"><span style="font-family:'JetBrains Mono',monospace;font-size:11px;font-weight:600;color:#03030b;background:#58c4e6;border-radius:6px;padding:3px 7px">4c</span><span style="font-size:17px;font-weight:700;color:#eef3fb">Hardware</span><span style="font-size:13px;color:#7f8aa2">— instrument surface, precise</span></div>
+      <div style="width:384px;height:812px;background:#000;border-radius:44px;padding:11px;box-shadow:0 40px 90px rgba(0,0,0,.72),0 0 0 1.5px #10202a,0 0 60px rgba(88,196,230,.08)">
+        <div style="width:100%;height:100%;border-radius:34px;overflow:hidden;display:flex;flex-direction:column;background:radial-gradient(120% 55% at 85% 0%,rgba(222,80,170,.14),transparent 55%),radial-gradient(120% 60% at 5% 100%,rgba(40,160,210,.16),transparent 55%),#07080f">
+          <!-- status -->
+          <div style="display:flex;justify-content:space-between;align-items:center;padding:14px 20px 8px"><span style="font-family:'JetBrains Mono',monospace;font-size:12.5px;color:#dbe2f0;letter-spacing:.05em">[ 09:41 ]</span><span style="font-family:'JetBrains Mono',monospace;font-size:11px;color:#58c4e6;letter-spacing:.1em">◈ ▮▮▮▯</span></div>
+          <!-- header module -->
+          <div style="margin:6px 16px 12px;border:1px solid rgba(255,255,255,.09);border-radius:6px;background:linear-gradient(180deg,rgba(20,24,38,.7),rgba(10,12,22,.7));box-shadow:inset 0 1px 0 rgba(255,255,255,.07);padding:12px 16px;display:flex;justify-content:space-between;align-items:center">
+            <div><div style="font-size:17px;font-weight:700;color:#eef3fb;letter-spacing:.01em">Controlled Drift</div><div style="font-family:'JetBrains Mono',monospace;font-size:10px;color:#7f8aa2;letter-spacing:.06em;margin-top:2px">SYS · FRI 2026-07-17 · 06:41</div></div>
+            <span style="width:32px;height:32px;border-radius:5px;background:rgba(255,255,255,.05);border:1px solid rgba(255,255,255,.12);box-shadow:inset 0 1px 0 rgba(255,255,255,.08);display:flex;align-items:center;justify-content:center;color:#93a0b8;font-size:14px">⚙</span>
+          </div>
+          <!-- tabs = hardware buttons -->
+          <div style="display:flex;gap:6px;padding:0 16px 12px">
+            <span style="flex:1;text-align:center;font-family:'JetBrains Mono',monospace;font-size:10.5px;letter-spacing:.05em;color:#58c4e6;background:linear-gradient(180deg,rgba(88,196,230,.16),rgba(88,196,230,.05));border:1px solid rgba(88,196,230,.5);border-radius:4px;padding:6px 0;box-shadow:0 0 12px rgba(88,196,230,.22),inset 0 1px 0 rgba(255,255,255,.12)">TODAY</span>
+            <span style="flex:1;text-align:center;font-family:'JetBrains Mono',monospace;font-size:10.5px;letter-spacing:.05em;color:#7f8aa2;background:rgba(255,255,255,.03);border:1px solid rgba(255,255,255,.1);border-radius:4px;padding:6px 0;box-shadow:inset 0 1px 0 rgba(255,255,255,.05)">FOCUS</span>
+            <span style="flex:1;text-align:center;font-family:'JetBrains Mono',monospace;font-size:10.5px;letter-spacing:.05em;color:#7f8aa2;background:rgba(255,255,255,.03);border:1px solid rgba(255,255,255,.1);border-radius:4px;padding:6px 0;box-shadow:inset 0 1px 0 rgba(255,255,255,.05)">ADD</span>
+            <span style="flex:1;text-align:center;font-family:'JetBrains Mono',monospace;font-size:10.5px;letter-spacing:.05em;color:#7f8aa2;background:rgba(255,255,255,.03);border:1px solid rgba(255,255,255,.1);border-radius:4px;padding:6px 0;box-shadow:inset 0 1px 0 rgba(255,255,255,.05)">MAP</span>
+          </div>
+          <!-- plan module -->
+          <div style="flex:1;overflow:hidden;margin:0 16px;display:flex;flex-direction:column;gap:10px">
+            <div style="font-family:'JetBrains Mono',monospace;font-size:9.5px;letter-spacing:.14em;color:#6f7a92">┌ PLAN ─────────────────────</div>
+            <div style="border:1px solid rgba(255,255,255,.09);border-left:2px solid #3aa0da;border-radius:5px;background:linear-gradient(180deg,rgba(18,22,34,.66),rgba(10,12,20,.66));box-shadow:inset 0 1px 0 rgba(255,255,255,.06);padding:12px 13px">
+              <div style="display:flex;align-items:center;gap:9px;margin-bottom:6px"><span style="width:7px;height:7px;border-radius:2px;background:#3aa0da;box-shadow:0 0 4px rgba(58,160,218,.85),0 0 10px 2px rgba(58,160,218,.45)"></span><span style="font-family:'JetBrains Mono',monospace;font-size:10.5px;font-weight:600;letter-spacing:.06em;color:#93a0b8">JOB SEARCH</span></div>
+              <div style="font-size:14.5px;color:#eef3fb;line-height:1.4;margin-bottom:8px">Follow up on the GRA leads</div>
+              <div style="background:linear-gradient(180deg,rgba(240,122,181,.08),rgba(240,122,181,.03));border:1px solid rgba(240,122,181,.22);border-left:2px solid #f593c1;border-radius:3px;padding:8px 11px"><div style="font-family:'JetBrains Mono',monospace;font-size:9px;letter-spacing:.12em;text-transform:uppercase;color:#c98caa;margin-bottom:3px">// why this matters</div><div style="font-size:12.5px;line-height:1.45;color:#f6aecd">Income and a role that fits — not one that extracts</div></div>
+            </div>
+            <div style="border:1px solid rgba(255,255,255,.09);border-left:2px solid #58c4e6;border-radius:5px;background:linear-gradient(180deg,rgba(18,22,34,.66),rgba(10,12,20,.66));box-shadow:inset 0 1px 0 rgba(255,255,255,.06);padding:12px 13px">
+              <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:7px"><div style="display:flex;align-items:center;gap:9px"><span style="width:7px;height:7px;border-radius:2px;background:#58c4e6;box-shadow:0 0 4px rgba(88,196,230,.85),0 0 10px 2px rgba(88,196,230,.45)"></span><span style="font-family:'JetBrains Mono',monospace;font-size:10.5px;font-weight:600;letter-spacing:.06em;color:#93a0b8">SCHOLARLY WRITING</span></div><span style="font-family:'JetBrains Mono',monospace;font-size:9.5px;color:#eab36a;background:linear-gradient(180deg,rgba(234,179,106,.15),rgba(234,179,106,.05));border:1px solid rgba(234,179,106,.4);border-radius:3px;padding:2px 7px;box-shadow:inset 0 1px 0 rgba(255,255,255,.1)">◱ 4H</span></div>
+              <div style="font-size:13.5px;line-height:1.7;color:#7f8aa2;font-family:'JetBrains Mono',monospace"><span style="color:#4fd69a;text-shadow:0 0 3px rgba(79,214,154,.9),0 0 9px rgba(79,214,154,.65)">[x]</span> <span style="font-family:'Sora',sans-serif">outline done</span><br><span style="color:#f593c1;text-shadow:0 0 3px rgba(240,122,181,.9),0 0 9px rgba(240,122,181,.7)">[»]</span> <span style="font-family:'Sora',sans-serif;color:#eef3fb">draft §2 of the paper</span><br><span style="color:#454e68">[ ]</span> <span style="font-family:'Sora',sans-serif">revise intro</span></div>
+            </div>
+            <div style="display:flex;align-items:center;gap:9px;padding:2px 2px"><span style="width:15px;height:15px;border-radius:2px;border:2px solid #4fd69a;flex:0 0 auto;box-shadow:0 0 3px rgba(79,214,154,.6),0 0 9px 1px rgba(79,214,154,.4),inset 0 0 4px rgba(79,214,154,.3)"></span><span style="font-size:14px;color:#eef3fb">Refill the prescriptions</span><span style="font-family:'JetBrains Mono',monospace;font-size:9px;color:#5f6a86;margin-left:auto">DAILY-LIFE</span></div>
+          </div>
+          <!-- controls -->
+          <div style="padding:12px 16px 8px;display:flex;flex-wrap:wrap;gap:6px">
+            <span style="display:inline-flex;align-items:center;gap:6px;font-family:'JetBrains Mono',monospace;font-size:10.5px;letter-spacing:.04em;color:#f593c1;background:linear-gradient(180deg,rgba(240,122,181,.17),rgba(240,122,181,.06));border:1px solid rgba(240,122,181,.5);border-radius:4px;padding:6px 11px;box-shadow:0 0 14px rgba(240,122,181,.2),inset 0 1px 0 rgba(255,255,255,.13),inset 0 -1px 0 rgba(0,0,0,.32)"><span style="width:5px;height:5px;border-radius:50%;background:#f593c1;box-shadow:0 0 6px #f593c1"></span>↻ FRESH PLAN</span>
+            <span style="display:inline-flex;align-items:center;gap:6px;font-family:'JetBrains Mono',monospace;font-size:10.5px;letter-spacing:.04em;color:#93a0b8;background:linear-gradient(180deg,rgba(255,255,255,.05),rgba(255,255,255,.01));border:1px solid rgba(255,255,255,.12);border-radius:4px;padding:6px 11px;box-shadow:inset 0 1px 0 rgba(255,255,255,.07),inset 0 -1px 0 rgba(0,0,0,.32)"><span style="width:5px;height:5px;border-radius:50%;background:#3d4658"></span>LOW ENERGY</span>
+            <span style="display:inline-flex;align-items:center;gap:6px;font-family:'JetBrains Mono',monospace;font-size:10.5px;letter-spacing:.04em;color:#93a0b8;background:linear-gradient(180deg,rgba(255,255,255,.05),rgba(255,255,255,.01));border:1px solid rgba(255,255,255,.12);border-radius:4px;padding:6px 11px;box-shadow:inset 0 1px 0 rgba(255,255,255,.07),inset 0 -1px 0 rgba(0,0,0,.32)"><span style="width:5px;height:5px;border-radius:50%;background:#3d4658"></span>I'M STUCK</span>
+          </div>
+          <div style="padding:6px 16px 20px"><div style="display:flex;align-items:center;gap:9px;background:rgba(0,0,0,.35);border:1px solid rgba(255,255,255,.1);border-radius:4px;padding:11px 14px;box-shadow:inset 0 1px 3px rgba(0,0,0,.4)"><span style="font-family:'JetBrains Mono',monospace;color:#58c4e6;font-size:13px">&gt;_</span><span style="font-family:'JetBrains Mono',monospace;font-size:12px;color:#5f6a86">tell me what you need…</span></div></div>
+        </div>
+      </div>
+    </div>
+
+  </div>
+
+  <div style="max-width:740px;font-size:13.5px;line-height:1.6;color:#8b85a0">These are the same screen, same content, same color grammar — only the <b style="color:#c9c3d8;font-weight:600">overall style language</b> differs. <a href="#4a" style="color:#ef92bd">4a Celestial</a> vs <a href="#4c" style="color:#58c4e6">4c Hardware</a> — these two are the finalists. Earlier color rounds are below for reference.</div>
+</section>
+
+<section style="padding:64px 56px 96px;display:flex;flex-direction:column;gap:34px;background:radial-gradient(55% 45% at 12% 3%,rgba(120,70,185,.13),transparent 60%),radial-gradient(58% 52% at 92% 98%,rgba(45,90,200,.11),transparent 60%),#040309">
+  <div style="max-width:740px;display:flex;flex-direction:column;gap:14px">
+    <div style="font-family:'JetBrains Mono',monospace;font-size:12px;font-weight:600;letter-spacing:.22em;text-transform:uppercase;color:#5f5a76">Controlled Drift · component kits</div>
+    <div style="font-size:30px;font-weight:700;letter-spacing:-.02em;line-height:1.15;background:linear-gradient(100deg,#f2a0c4,#c9a2e0,#7fb2f5,#49c8d6);-webkit-background-clip:text;background-clip:text;-webkit-text-fill-color:transparent">Every component, in each style</div>
+    <div style="font-size:15.5px;line-height:1.6;color:#9a94ac">So the vibe is fully pinned — no re-explaining. Tags, type badges, buttons, toggles, segmented controls, checkboxes, recurrence, inputs, menus, and feedback, each rendered in both languages. When you pick, this is the spec I build the real app against.</div>
+  </div>
+
+  <div style="display:flex;flex-wrap:wrap;gap:32px;align-items:flex-start">
+
+    <!-- ═══ 5a CELESTIAL KIT ═══ -->
+    <div id="5a" style="width:560px;border-radius:20px;overflow:hidden;background:radial-gradient(1.5px 1.5px at 14% 10%,rgba(255,255,255,.5),transparent 60%),radial-gradient(1px 1px at 66% 6%,rgba(255,255,255,.4),transparent 60%),radial-gradient(1px 1px at 88% 22%,rgba(255,255,255,.45),transparent 60%),radial-gradient(1px 1px at 34% 30%,rgba(255,214,232,.34),transparent 60%),radial-gradient(1px 1px at 52% 44%,rgba(215,232,255,.3),transparent 60%),radial-gradient(1.3px 1.3px at 78% 52%,rgba(255,255,255,.4),transparent 60%),radial-gradient(1px 1px at 20% 62%,rgba(255,240,214,.3),transparent 60%),radial-gradient(1px 1px at 62% 74%,rgba(255,255,255,.34),transparent 60%),radial-gradient(1px 1px at 40% 86%,rgba(255,255,255,.3),transparent 60%),radial-gradient(130% 80% at 88% -8%,rgba(224,96,168,.16),transparent 55%),radial-gradient(130% 90% at 2% 108%,rgba(48,150,190,.13),transparent 55%),#070513;box-shadow:0 34px 90px rgba(0,0,0,.6),inset 0 1px 0 rgba(255,255,255,.05);border:1px solid rgba(255,255,255,.06)">
+      <div style="height:2px;background:linear-gradient(90deg,#ef92bd,#d58fd8,#5fc6d6)"></div>
+      <div style="padding:18px 24px;border-bottom:1px solid rgba(255,255,255,.05);display:flex;align-items:center;gap:10px"><span style="font-family:'JetBrains Mono',monospace;font-size:11px;font-weight:600;color:#070513;background:#ef92bd;border-radius:6px;padding:3px 7px">5a</span><span style="font-size:18px;font-weight:700;color:#f5eef2">Celestial kit</span></div>
+      <div style="padding:22px 24px;display:flex;flex-direction:column;gap:22px">
+
+        <div><div style="font-family:'JetBrains Mono',monospace;font-size:10px;letter-spacing:.14em;text-transform:uppercase;color:#6f6480;margin-bottom:10px">Tags · soft / outline / solid</div>
+          <div style="display:flex;flex-wrap:wrap;gap:7px;margin-bottom:8px">
+            <span style="font-size:11.5px;color:#58d69a;background:rgba(88,214,154,.14);border:1px solid rgba(88,214,154,.4);border-radius:999px;padding:4px 12px">Steady</span>
+            <span style="font-size:11.5px;color:#ef92bd;background:rgba(239,146,189,.14);border:1px solid rgba(239,146,189,.4);border-radius:999px;padding:4px 12px">Sprint</span>
+            <span style="font-size:11.5px;color:#f0a86a;background:rgba(240,168,106,.14);border:1px solid rgba(240,168,106,.4);border-radius:999px;padding:4px 12px">Open</span>
+            <span style="font-size:11.5px;color:#9aa0e0;background:rgba(154,160,224,.14);border:1px solid rgba(154,160,224,.4);border-radius:999px;padding:4px 12px">Work</span>
+          </div>
+          <div style="display:flex;flex-wrap:wrap;gap:7px">
+            <span style="font-size:11.5px;color:#f0a86a;background:transparent;border:1px solid #f0a86a;border-radius:999px;padding:4px 12px">Needs clarifying</span>
+            <span style="font-size:11.5px;color:#6f6480;background:transparent;border:1px solid #4f4a5e;border-radius:999px;padding:4px 12px">Parked</span>
+            <span style="font-size:11.5px;font-weight:600;color:#14101a;background:#ef92bd;border:1px solid #ef92bd;border-radius:999px;padding:4px 12px">Now</span>
+          </div>
+        </div>
+
+        <div><div style="font-family:'JetBrains Mono',monospace;font-size:10px;letter-spacing:.14em;text-transform:uppercase;color:#6f6480;margin-bottom:10px">Object types · structure ramp + kinds</div>
+          <div style="display:flex;flex-wrap:wrap;gap:14px">
+            <span style="display:inline-flex;align-items:center;gap:7px"><span style="width:9px;height:9px;border-radius:50%;background:#9fe0e8;box-shadow:0 0 7px rgba(159,224,232,.6)"></span><span style="font-family:'JetBrains Mono',monospace;font-size:11px;letter-spacing:.05em;color:#d7d0da">Goal</span></span>
+            <span style="display:inline-flex;align-items:center;gap:7px"><span style="width:9px;height:9px;border-radius:50%;background:#5fc6d6;box-shadow:0 0 7px rgba(95,198,214,.6)"></span><span style="font-family:'JetBrains Mono',monospace;font-size:11px;letter-spacing:.05em;color:#d7d0da">Project</span></span>
+            <span style="display:inline-flex;align-items:center;gap:7px"><span style="width:9px;height:9px;border-radius:50%;background:#3f8fd0;box-shadow:0 0 7px rgba(63,143,208,.6)"></span><span style="font-family:'JetBrains Mono',monospace;font-size:11px;letter-spacing:.05em;color:#d7d0da">Task</span></span>
+            <span style="display:inline-flex;align-items:center;gap:7px"><span style="width:9px;height:9px;border-radius:50%;background:#4fb8a6;box-shadow:0 0 7px rgba(79,184,166,.6)"></span><span style="font-family:'JetBrains Mono',monospace;font-size:11px;letter-spacing:.05em;color:#d7d0da">Recurring</span></span>
+            <span style="display:inline-flex;align-items:center;gap:7px"><span style="width:9px;height:9px;border-radius:50%;background:#d58fd8;box-shadow:0 0 7px rgba(213,143,216,.6)"></span><span style="font-family:'JetBrains Mono',monospace;font-size:11px;letter-spacing:.05em;color:#d7d0da">Strategy</span></span>
+          </div>
+        </div>
+
+        <div><div style="font-family:'JetBrains Mono',monospace;font-size:10px;letter-spacing:.14em;text-transform:uppercase;color:#6f6480;margin-bottom:10px">Buttons · primary / secondary / ghost / danger</div>
+          <div style="display:flex;flex-wrap:wrap;gap:8px;align-items:center">
+            <span style="font-size:12px;color:#f2a6c8;background:radial-gradient(1.2px 1.2px at 22% 32%,rgba(255,255,255,.55),transparent 60%),rgba(239,146,189,.14);border:1px solid rgba(239,146,189,.45);border-radius:999px;padding:7px 15px;box-shadow:0 0 16px rgba(239,146,189,.24)">✦ Fresh plan</span>
+            <span style="font-size:12px;color:#a89aa6;background:rgba(255,255,255,.05);border:1px solid rgba(255,255,255,.1);border-radius:999px;padding:7px 15px">Move</span>
+            <span style="font-size:12px;color:#8a8090;padding:7px 6px">Edit</span>
+            <span style="font-size:12px;color:#ef7683;background:transparent;border:1px solid rgba(239,118,131,.5);border-radius:999px;padding:7px 15px">Delete</span>
+          </div>
+        </div>
+
+        <div><div style="font-family:'JetBrains Mono',monospace;font-size:10px;letter-spacing:.14em;text-transform:uppercase;color:#6f6480;margin-bottom:10px">Controls · toggle / segmented / checkbox</div>
+          <div style="display:flex;flex-wrap:wrap;gap:20px;align-items:center">
+            <span style="display:inline-flex;align-items:center;gap:8px"><span style="width:48px;height:22px;border-radius:999px;background:linear-gradient(90deg,rgba(239,146,189,.05),rgba(239,146,189,.32));border:1px solid rgba(239,146,189,.4);position:relative;overflow:hidden"><span style="position:absolute;top:50%;left:6px;right:24px;height:2px;transform:translateY(-50%);background:linear-gradient(90deg,transparent,rgba(239,146,189,.7));border-radius:2px"></span><span style="position:absolute;top:2px;left:27px;width:17px;height:17px;border-radius:50%;background:radial-gradient(circle at 40% 35%,#ffe4f0,#ef92bd);box-shadow:0 0 10px rgba(239,146,189,.9),0 0 3px #fff"></span></span><span style="font-size:11px;color:#a89aa6">On</span></span>
+            <span style="display:inline-flex;align-items:center;gap:8px"><span style="width:48px;height:22px;border-radius:999px;background:rgba(255,255,255,.04);border:1px solid rgba(255,255,255,.1);position:relative;overflow:hidden"><span style="position:absolute;top:9px;left:26px;width:1.5px;height:1.5px;border-radius:50%;background:rgba(255,255,255,.3)"></span><span style="position:absolute;top:13px;left:36px;width:1.5px;height:1.5px;border-radius:50%;background:rgba(255,255,255,.25)"></span><span style="position:absolute;top:3px;left:4px;width:15px;height:15px;border-radius:50%;background:transparent;border:1.5px solid #6f6480;box-shadow:inset 0 0 4px rgba(0,0,0,.5)"></span></span><span style="font-size:11px;color:#6f6480">Off</span></span>
+            <span style="display:inline-flex;border-radius:999px;background:rgba(255,255,255,.04);border:1px solid rgba(255,255,255,.09);padding:2px">
+              <span style="font-size:11px;color:#f2a6c8;background:rgba(239,146,189,.16);border-radius:999px;padding:4px 11px">Schedule</span>
+              <span style="font-size:11px;color:#8a8090;padding:4px 11px">Priority</span>
+              <span style="font-size:11px;color:#8a8090;padding:4px 11px">Woven</span>
+            </span>
+            <span style="display:inline-flex;align-items:center;gap:8px"><span style="width:20px;height:20px;border-radius:50%;background:#58d69a;display:flex;align-items:center;justify-content:center;color:#062018;font-size:12px">✓</span><span style="width:20px;height:20px;border-radius:50%;border:2px solid #6f6480"></span></span>
+          </div>
+        </div>
+
+        <div><div style="font-family:'JetBrains Mono',monospace;font-size:10px;letter-spacing:.14em;text-transform:uppercase;color:#6f6480;margin-bottom:10px">Recurrence · input</div>
+          <div style="display:flex;flex-wrap:wrap;gap:8px;align-items:center;margin-bottom:10px">
+            <span style="font-size:12px;color:#a89aa6">every</span>
+            <span style="font-size:12px;color:#f5eef2;background:rgba(255,255,255,.05);border:1px solid rgba(255,255,255,.12);border-radius:999px;padding:4px 12px">1</span>
+            <span style="font-size:11.5px;color:#f0a86a;background:rgba(240,168,106,.14);border:1px solid rgba(240,168,106,.4);border-radius:999px;padding:4px 12px">week</span>
+            <span style="font-size:11.5px;color:#8a8090;background:rgba(255,255,255,.04);border:1px solid rgba(255,255,255,.09);border-radius:999px;padding:4px 12px">day</span>
+            <span style="font-size:11.5px;color:#8a8090;background:rgba(255,255,255,.04);border:1px solid rgba(255,255,255,.09);border-radius:999px;padding:4px 12px">month</span>
+          </div>
+          <div style="display:flex;align-items:center;gap:9px;background:rgba(255,255,255,.03);border:1px solid rgba(255,255,255,.08);border-radius:999px;padding:10px 15px"><span style="font-size:14px;color:#c99fb0">✧</span><span style="font-size:12.5px;color:#6f6480;flex:1">tell me what you need…</span><span style="font-size:11.5px;color:#f2a6c8;background:rgba(239,146,189,.14);border:1px solid rgba(239,146,189,.4);border-radius:999px;padding:5px 12px">✦ Send</span></div>
+        </div>
+
+        <div style="display:flex;gap:26px;flex-wrap:wrap">
+          <div><div style="font-family:'JetBrains Mono',monospace;font-size:10px;letter-spacing:.14em;text-transform:uppercase;color:#6f6480;margin-bottom:10px">Menu</div>
+            <div style="width:150px;border-radius:14px;background:radial-gradient(1px 1px at 24% 30%,rgba(255,255,255,.4),transparent 60%),rgba(30,20,32,.92);border:1px solid rgba(239,146,189,.28);box-shadow:0 16px 34px rgba(0,0,0,.5);padding:5px">
+              <div style="font-size:12.5px;color:#f2a6c8;background:rgba(239,146,189,.14);border-radius:9px;padding:8px 11px">Edit</div>
+              <div style="font-size:12.5px;color:#d7d0da;padding:8px 11px">Move to…</div>
+              <div style="font-size:12.5px;color:#ef7683;padding:8px 11px">Delete</div>
+            </div>
+          </div>
+          <div><div style="font-family:'JetBrains Mono',monospace;font-size:10px;letter-spacing:.14em;text-transform:uppercase;color:#6f6480;margin-bottom:10px">Feedback</div>
+            <div style="display:flex;flex-direction:column;gap:10px;align-items:flex-start">
+              <span style="font-size:12px;font-weight:600;color:#062018;background:#58d69a;border-radius:999px;padding:7px 15px;box-shadow:0 0 18px rgba(88,214,154,.5)">✦ Saved</span>
+              <span style="display:inline-flex;align-items:center;gap:7px;font-family:'JetBrains Mono',monospace;font-size:10px;letter-spacing:.12em;color:#f2a6c8"><span style="width:7px;height:7px;border-radius:50%;background:#ef92bd;box-shadow:0 0 8px #ef92bd"></span>NOW</span>
+            </div>
+          </div>
+        </div>
+
+      </div>
+    </div>
+
+    <!-- ═══ 5c HARDWARE KIT ═══ -->
+    <div id="5c" style="width:560px;border-radius:20px;overflow:hidden;background:linear-gradient(0deg,rgba(255,255,255,.014) 1px,transparent 1px),linear-gradient(90deg,rgba(255,255,255,.014) 1px,transparent 1px),radial-gradient(130% 80% at 90% -8%,rgba(222,80,170,.15),transparent 52%),radial-gradient(130% 90% at 2% 108%,rgba(40,160,210,.15),transparent 55%),#07080f;background-size:26px 26px,26px 26px,auto,auto,auto;box-shadow:0 34px 90px rgba(0,0,0,.62),inset 0 1px 0 rgba(255,255,255,.05);border:1px solid rgba(255,255,255,.07)">
+      <div style="height:2px;background:linear-gradient(90deg,#f593c1,#58c4e6)"></div>
+      <div style="padding:18px 24px;border-bottom:1px solid rgba(255,255,255,.06);display:flex;align-items:center;gap:10px"><span style="font-family:'JetBrains Mono',monospace;font-size:11px;font-weight:600;color:#07080f;background:#58c4e6;border-radius:6px;padding:3px 7px">5c</span><span style="font-size:18px;font-weight:700;color:#eef3fb">Hardware kit</span></div>
+      <div style="padding:22px 24px;display:flex;flex-direction:column;gap:22px">
+
+        <div><div style="font-family:'JetBrains Mono',monospace;font-size:10px;letter-spacing:.14em;text-transform:uppercase;color:#6f7a92;margin-bottom:10px">// tags · flat / outline / lit</div>
+          <div style="display:flex;flex-wrap:wrap;gap:6px;margin-bottom:8px">
+            <span style="font-family:'JetBrains Mono',monospace;font-size:10.5px;letter-spacing:.03em;color:#4fd69a;background:linear-gradient(180deg,rgba(79,214,154,.14),rgba(79,214,154,.05));border:1px solid rgba(79,214,154,.4);border-radius:3px;padding:3px 9px;box-shadow:inset 0 1px 0 rgba(255,255,255,.08)">STEADY</span>
+            <span style="font-family:'JetBrains Mono',monospace;font-size:10.5px;letter-spacing:.03em;color:#f593c1;background:linear-gradient(180deg,rgba(240,122,181,.14),rgba(240,122,181,.05));border:1px solid rgba(240,122,181,.4);border-radius:3px;padding:3px 9px;box-shadow:inset 0 1px 0 rgba(255,255,255,.08)">SPRINT</span>
+            <span style="font-family:'JetBrains Mono',monospace;font-size:10.5px;letter-spacing:.03em;color:#eab36a;background:linear-gradient(180deg,rgba(234,179,106,.14),rgba(234,179,106,.05));border:1px solid rgba(234,179,106,.4);border-radius:3px;padding:3px 9px;box-shadow:inset 0 1px 0 rgba(255,255,255,.08)">OPEN</span>
+            <span style="font-family:'JetBrains Mono',monospace;font-size:10.5px;letter-spacing:.03em;color:#9aa0e0;background:linear-gradient(180deg,rgba(154,160,224,.14),rgba(154,160,224,.05));border:1px solid rgba(154,160,224,.4);border-radius:3px;padding:3px 9px;box-shadow:inset 0 1px 0 rgba(255,255,255,.08)">WORK</span>
+          </div>
+          <div style="display:flex;flex-wrap:wrap;gap:6px">
+            <span style="font-family:'JetBrains Mono',monospace;font-size:10.5px;letter-spacing:.03em;color:#eab36a;background:transparent;border:1px dashed rgba(234,179,106,.55);border-radius:3px;padding:3px 9px">NEEDS CLARIFYING</span>
+            <span style="font-family:'JetBrains Mono',monospace;font-size:10.5px;letter-spacing:.03em;color:#6f7a92;background:transparent;border:1px solid rgba(255,255,255,.14);border-radius:3px;padding:3px 9px">PARKED</span>
+            <span style="display:inline-flex;align-items:center;gap:5px;font-family:'JetBrains Mono',monospace;font-size:10.5px;letter-spacing:.03em;color:#07120e;background:#4fd69a;border-radius:3px;padding:3px 9px;box-shadow:0 0 12px rgba(79,214,154,.4)"><span style="width:5px;height:5px;border-radius:50%;background:#07120e"></span>DONE</span>
+          </div>
+        </div>
+
+        <div><div style="font-family:'JetBrains Mono',monospace;font-size:10px;letter-spacing:.14em;text-transform:uppercase;color:#6f7a92;margin-bottom:10px">// object types · structure ramp + kinds</div>
+          <div style="display:flex;flex-wrap:wrap;gap:12px">
+            <span style="display:inline-flex;align-items:center;gap:7px"><span style="width:8px;height:8px;border-radius:2px;background:#9be2f0;box-shadow:0 0 7px rgba(155,226,240,.7)"></span><span style="font-family:'JetBrains Mono',monospace;font-size:10.5px;letter-spacing:.04em;color:#c5cddd">GOAL</span></span>
+            <span style="display:inline-flex;align-items:center;gap:7px"><span style="width:8px;height:8px;border-radius:2px;background:#58c4e6;box-shadow:0 0 7px rgba(88,196,230,.7)"></span><span style="font-family:'JetBrains Mono',monospace;font-size:10.5px;letter-spacing:.04em;color:#c5cddd">PROJECT</span></span>
+            <span style="display:inline-flex;align-items:center;gap:7px"><span style="width:8px;height:8px;border-radius:2px;background:#4f7fe6;box-shadow:0 0 7px rgba(79,127,230,.7)"></span><span style="font-family:'JetBrains Mono',monospace;font-size:10.5px;letter-spacing:.04em;color:#c5cddd">TASK</span></span>
+            <span style="display:inline-flex;align-items:center;gap:7px"><span style="width:8px;height:8px;border-radius:2px;background:#45cfc0;box-shadow:0 0 7px rgba(69,207,192,.7)"></span><span style="font-family:'JetBrains Mono',monospace;font-size:10.5px;letter-spacing:.04em;color:#c5cddd">RECURRING</span></span>
+            <span style="display:inline-flex;align-items:center;gap:7px"><span style="width:8px;height:8px;border-radius:2px;background:#d071d8;box-shadow:0 0 7px rgba(208,113,216,.7)"></span><span style="font-family:'JetBrains Mono',monospace;font-size:10.5px;letter-spacing:.04em;color:#c5cddd">STRATEGY</span></span>
+          </div>
+        </div>
+
+        <div><div style="font-family:'JetBrains Mono',monospace;font-size:10px;letter-spacing:.14em;text-transform:uppercase;color:#6f7a92;margin-bottom:10px">// buttons · primary / secondary / ghost / danger</div>
+          <div style="display:flex;flex-wrap:wrap;gap:7px;align-items:center">
+            <span style="display:inline-flex;align-items:center;gap:6px;font-family:'JetBrains Mono',monospace;font-size:10.5px;letter-spacing:.04em;color:#f593c1;background:linear-gradient(180deg,rgba(240,122,181,.17),rgba(240,122,181,.06));border:1px solid rgba(240,122,181,.5);border-radius:4px;padding:7px 12px;box-shadow:0 0 14px rgba(240,122,181,.2),inset 0 1px 0 rgba(255,255,255,.13),inset 0 -1px 0 rgba(0,0,0,.32)"><span style="width:5px;height:5px;border-radius:50%;background:#f593c1;box-shadow:0 0 6px #f593c1"></span>↻ FRESH PLAN</span>
+            <span style="font-family:'JetBrains Mono',monospace;font-size:10.5px;letter-spacing:.04em;color:#93a0b8;background:linear-gradient(180deg,rgba(255,255,255,.05),rgba(255,255,255,.01));border:1px solid rgba(255,255,255,.12);border-radius:4px;padding:7px 12px;box-shadow:inset 0 1px 0 rgba(255,255,255,.07),inset 0 -1px 0 rgba(0,0,0,.32)">MOVE</span>
+            <span style="font-family:'JetBrains Mono',monospace;font-size:10.5px;letter-spacing:.04em;color:#7f8aa2;padding:7px 6px">EDIT</span>
+            <span style="font-family:'JetBrains Mono',monospace;font-size:10.5px;letter-spacing:.04em;color:#ef7683;background:transparent;border:1px solid rgba(239,118,131,.5);border-radius:4px;padding:7px 12px">DELETE</span>
+          </div>
+        </div>
+
+        <div><div style="font-family:'JetBrains Mono',monospace;font-size:10px;letter-spacing:.14em;text-transform:uppercase;color:#6f7a92;margin-bottom:10px">// controls · toggle / segmented / checkbox</div>
+          <div style="display:flex;flex-wrap:wrap;gap:20px;align-items:center">
+            <span style="display:inline-flex;align-items:center;gap:8px"><span style="width:48px;height:24px;border-radius:3px;background:linear-gradient(180deg,rgba(88,196,230,.28),rgba(88,196,230,.08));border:1px solid rgba(88,196,230,.6);position:relative;overflow:hidden;box-shadow:0 0 12px rgba(88,196,230,.45),inset 0 1px 0 rgba(255,255,255,.12)"><span style="position:absolute;top:0;bottom:0;left:5px;width:2px;background:#58c4e6;box-shadow:0 0 6px #58c4e6"></span><span style="position:absolute;top:0;bottom:0;left:9px;width:2px;background:rgba(88,196,230,.45)"></span><span style="position:absolute;top:3px;right:3px;width:16px;height:16px;border-radius:2px;background:linear-gradient(180deg,#7fdcf5,#3aa0da);box-shadow:0 0 8px #58c4e6,inset 0 1px 0 rgba(255,255,255,.4)"></span></span><span style="font-family:'JetBrains Mono',monospace;font-size:10px;color:#58c4e6">1</span></span>
+            <span style="display:inline-flex;align-items:center;gap:8px"><span style="width:48px;height:24px;border-radius:3px;background:rgba(0,0,0,.45);border:1px solid rgba(255,255,255,.12);position:relative;overflow:hidden;box-shadow:inset 0 1px 3px rgba(0,0,0,.5)"><span style="position:absolute;top:0;bottom:0;right:5px;width:2px;background:#2a3346"></span><span style="position:absolute;top:0;bottom:0;right:9px;width:2px;background:#242c3d"></span><span style="position:absolute;top:3px;left:3px;width:16px;height:16px;border-radius:2px;background:linear-gradient(180deg,#3d4658,#252c3b);box-shadow:inset 0 1px 0 rgba(255,255,255,.06)"></span></span><span style="font-family:'JetBrains Mono',monospace;font-size:10px;color:#5f6a86">0</span></span>
+            <span style="display:inline-flex;border-radius:5px;background:rgba(0,0,0,.3);border:1px solid rgba(255,255,255,.1);padding:2px;box-shadow:inset 0 1px 2px rgba(0,0,0,.4)">
+              <span style="font-family:'JetBrains Mono',monospace;font-size:10px;color:#58c4e6;background:linear-gradient(180deg,rgba(88,196,230,.18),rgba(88,196,230,.06));border:1px solid rgba(88,196,230,.4);border-radius:3px;padding:4px 10px">SCHED</span>
+              <span style="font-family:'JetBrains Mono',monospace;font-size:10px;color:#7f8aa2;padding:4px 10px">PRIO</span>
+              <span style="font-family:'JetBrains Mono',monospace;font-size:10px;color:#7f8aa2;padding:4px 10px">WOVEN</span>
+            </span>
+            <span style="display:inline-flex;align-items:center;gap:8px"><span style="width:19px;height:19px;border-radius:3px;background:#4fd69a;display:flex;align-items:center;justify-content:center;color:#07120e;font-size:11px;box-shadow:0 0 8px rgba(79,214,154,.4)">✓</span><span style="width:19px;height:19px;border-radius:3px;border:2px solid #5f6a86"></span></span>
+          </div>
+        </div>
+
+        <div><div style="font-family:'JetBrains Mono',monospace;font-size:10px;letter-spacing:.14em;text-transform:uppercase;color:#6f7a92;margin-bottom:10px">// recurrence · input</div>
+          <div style="display:flex;flex-wrap:wrap;gap:7px;align-items:center;margin-bottom:10px">
+            <span style="font-family:'JetBrains Mono',monospace;font-size:11px;color:#93a0b8">EVERY</span>
+            <span style="font-family:'JetBrains Mono',monospace;font-size:11px;color:#eef3fb;background:rgba(0,0,0,.35);border:1px solid rgba(255,255,255,.14);border-radius:3px;padding:4px 11px;box-shadow:inset 0 1px 2px rgba(0,0,0,.4)">1</span>
+            <span style="font-family:'JetBrains Mono',monospace;font-size:10.5px;color:#eab36a;background:linear-gradient(180deg,rgba(234,179,106,.15),rgba(234,179,106,.05));border:1px solid rgba(234,179,106,.4);border-radius:3px;padding:4px 10px">WEEK</span>
+            <span style="font-family:'JetBrains Mono',monospace;font-size:10.5px;color:#7f8aa2;background:rgba(255,255,255,.03);border:1px solid rgba(255,255,255,.1);border-radius:3px;padding:4px 10px">DAY</span>
+            <span style="font-family:'JetBrains Mono',monospace;font-size:10.5px;color:#7f8aa2;background:rgba(255,255,255,.03);border:1px solid rgba(255,255,255,.1);border-radius:3px;padding:4px 10px">MONTH</span>
+          </div>
+          <div style="display:flex;align-items:center;gap:9px;background:rgba(0,0,0,.35);border:1px solid rgba(255,255,255,.1);border-radius:4px;padding:10px 14px;box-shadow:inset 0 1px 3px rgba(0,0,0,.4)"><span style="font-family:'JetBrains Mono',monospace;color:#58c4e6;font-size:13px">&gt;_</span><span style="font-family:'JetBrains Mono',monospace;font-size:12px;color:#5f6a86;flex:1">tell me what you need…</span><span style="font-family:'JetBrains Mono',monospace;font-size:10px;color:#58c4e6;background:linear-gradient(180deg,rgba(88,196,230,.16),rgba(88,196,230,.05));border:1px solid rgba(88,196,230,.5);border-radius:3px;padding:5px 11px">EXEC ⏎</span></div>
+        </div>
+
+        <div style="display:flex;gap:26px;flex-wrap:wrap">
+          <div><div style="font-family:'JetBrains Mono',monospace;font-size:10px;letter-spacing:.14em;text-transform:uppercase;color:#6f7a92;margin-bottom:10px">// menu</div>
+            <div style="width:160px;border-radius:5px;background:rgba(10,13,22,.96);border:1px solid rgba(88,196,230,.28);box-shadow:0 16px 34px rgba(0,0,0,.55);overflow:hidden">
+              <div style="font-family:'JetBrains Mono',monospace;font-size:11.5px;color:#f593c1;background:linear-gradient(180deg,rgba(240,122,181,.14),rgba(240,122,181,.04));padding:8px 12px;border-left:2px solid #f593c1">EDIT</div>
+              <div style="font-family:'JetBrains Mono',monospace;font-size:11.5px;color:#b8b0c8;padding:8px 12px">MOVE TO…</div>
+              <div style="font-family:'JetBrains Mono',monospace;font-size:11.5px;color:#ef7683;padding:8px 12px">DELETE</div>
+            </div>
+          </div>
+          <div><div style="font-family:'JetBrains Mono',monospace;font-size:10px;letter-spacing:.14em;text-transform:uppercase;color:#6f7a92;margin-bottom:10px">// feedback</div>
+            <div style="display:flex;flex-direction:column;gap:10px;align-items:flex-start">
+              <span style="display:inline-flex;align-items:center;gap:6px;font-family:'JetBrains Mono',monospace;font-size:10.5px;letter-spacing:.04em;color:#07120e;background:#4fd69a;border-radius:4px;padding:6px 12px;box-shadow:0 0 16px rgba(79,214,154,.45)"><span style="width:5px;height:5px;border-radius:50%;background:#07120e"></span>SAVED ✓</span>
+              <span style="display:inline-flex;align-items:center;gap:7px;font-family:'JetBrains Mono',monospace;font-size:10px;letter-spacing:.12em;color:#f593c1"><span style="width:6px;height:6px;border-radius:50%;background:#f593c1;box-shadow:0 0 8px #f593c1"></span>● NOW · ACTIVE</span>
+            </div>
+          </div>
+        </div>
+
+      </div>
+    </div>
+
+  </div>
+
+  <div style="max-width:740px;font-size:13.5px;line-height:1.6;color:#8b85a0">Full kits: <a href="#5a" style="color:#ef92bd">5a Celestial</a> vs <a href="#5c" style="color:#58c4e6">5c Hardware</a> — every element in each language, same color grammar. Pick a direction (4a/4c whole-screen above sets the vibe; these kits are the build spec). Then I wire it into the real app.</div>
+</section>
+
+<section style="padding:64px 56px 96px;display:flex;flex-direction:column;gap:34px;background:radial-gradient(70% 55% at 18% 2%,rgba(120,70,180,.13),transparent 60%),radial-gradient(65% 60% at 92% 98%,rgba(50,90,195,.11),transparent 60%),#040309">
+  <div style="max-width:730px;display:flex;flex-direction:column;gap:14px">
+    <div style="font-family:'JetBrains Mono',monospace;font-size:12px;font-weight:600;letter-spacing:.22em;text-transform:uppercase;color:#5f5a76">Controlled Drift · hacker pass</div>
+    <div style="font-size:30px;font-weight:700;letter-spacing:-.02em;line-height:1.15;background:linear-gradient(100deg,#f2a0c4,#c9a2e0,#7fb2f5,#49c8d6);-webkit-background-clip:text;background-clip:text;-webkit-text-fill-color:transparent">Deeper into space — three color leads</div>
+    <div style="font-size:15.5px;line-height:1.6;color:#9a94ac">Darks pushed broader and deeper so the cards float in real void. Same grammar, but each one <b style="color:#e0d9ec;font-weight:600">leads with a different family</b> — the feminist-hacker move is refusing the default (blue-first, terminal-green): let rose, violet, or cyan run the show. All stay accessible — light text, moderate chroma, glow only on <i>now</i>.</div>
+  </div>
+
+  <div style="display:flex;flex-wrap:wrap;gap:30px;align-items:flex-start">
+
+    <!-- ── 3a — Terminal Rose ── -->
+    <div id="3a" style="position:relative;width:540px;border-radius:20px;overflow:hidden;background:radial-gradient(135% 105% at 88% -14%,rgba(224,96,168,.22),transparent 52%),radial-gradient(135% 125% at 3% 114%,rgba(48,150,190,.17),transparent 55%),#050410;box-shadow:0 34px 90px rgba(0,0,0,.7),inset 0 1px 0 rgba(255,255,255,.05);border:1px solid rgba(255,255,255,.06)">
+      <div style="height:2px;background:linear-gradient(90deg,#ef92bd,#d58fd8,#5fc6d6)"></div>
+      <div style="padding:20px 24px;border-bottom:1px solid rgba(255,255,255,.05)">
+        <div style="display:flex;align-items:center;gap:10px">
+          <span style="font-family:'JetBrains Mono',monospace;font-size:11px;font-weight:600;color:#050410;background:#ef92bd;border-radius:6px;padding:3px 7px;letter-spacing:.05em">3a</span>
+          <span style="font-size:19px;font-weight:700;color:#f5eef2;letter-spacing:-.01em">Terminal Rose</span>
+        </div>
+        <div style="font-size:13px;color:#a89aa6;margin-top:5px">Rose-led. Cyan is the "data/map" terminal; green means done. Warm identity runs it.</div>
+      </div>
+      <div style="margin:20px 24px 0;border-radius:14px;padding:18px 20px;background:linear-gradient(160deg,rgba(22,18,32,.7),rgba(11,9,19,.7));border:1px solid rgba(255,255,255,.06);box-shadow:inset 0 1px 0 rgba(255,255,255,.05)">
+        <div style="font-family:'JetBrains Mono',monospace;font-size:10px;letter-spacing:.14em;text-transform:uppercase;color:#8a6f7e;margin-bottom:9px">next, right now</div>
+        <div style="display:inline-flex;align-items:center;gap:11px;border-radius:999px;padding:10px 16px;background:radial-gradient(1.3px 1.3px at 18% 32%,rgba(255,255,255,.6),transparent 60%),radial-gradient(1px 1px at 54% 68%,rgba(255,255,255,.45),transparent 60%),radial-gradient(1px 1px at 84% 40%,rgba(255,255,255,.5),transparent 60%),rgba(239,146,189,.1);border:1px solid rgba(239,146,189,.42);box-shadow:0 0 24px rgba(239,146,189,.3)">
+          <span style="color:#f2a6c8;font-size:13px">✦</span><span style="font-size:14.5px;color:#fbeef4;font-weight:500">Draft §2 of the paper</span>
+        </div>
+      </div>
+      <div style="padding:18px 24px 24px;display:flex;gap:16px;flex-wrap:wrap">
+        <div style="flex:1;min-width:225px;border-radius:14px;overflow:hidden;background:linear-gradient(165deg,rgba(22,18,32,.72),rgba(12,10,20,.72));border:1px solid rgba(255,255,255,.06);box-shadow:inset 0 1px 0 rgba(255,255,255,.05)">
+          <div style="display:flex;justify-content:space-between;padding:11px 14px;border-bottom:1px solid rgba(255,255,255,.05)"><span style="font-family:'JetBrains Mono',monospace;font-size:10px;letter-spacing:.12em;text-transform:uppercase;color:#6f6480">Today</span><span style="font-family:'JetBrains Mono',monospace;font-size:10px;color:#6f6480">Fri Jul 17</span></div>
+          <div style="padding:14px">
+            <div style="display:flex;align-items:center;gap:8px;margin-bottom:6px"><span style="width:7px;height:7px;border-radius:50%;background:#40a9c4;box-shadow:0 0 8px rgba(64,169,196,.6)"></span><span style="font-size:11px;font-weight:600;letter-spacing:.04em;text-transform:uppercase;color:#a89aa6">Job search</span></div>
+            <div style="font-size:14.5px;color:#f5eef2;line-height:1.4;padding-left:15px;margin-bottom:7px">Follow up on the GRA leads</div>
+            <div style="margin-left:15px;background:radial-gradient(1px 1px at 22% 38%,rgba(255,255,255,.4),transparent 60%),radial-gradient(1px 1px at 72% 64%,rgba(255,255,255,.32),transparent 60%),rgba(239,146,189,.07);border:1px solid rgba(239,146,189,.24);border-radius:13px;padding:9px 12px"><div style="font-family:'JetBrains Mono',monospace;font-size:9.5px;letter-spacing:.1em;text-transform:uppercase;color:#b07f96;margin-bottom:3px">why this matters</div><div style="font-size:12.5px;line-height:1.4;color:#f2a6c8">Income and a role that fits — not one that extracts</div></div>
+          </div>
+          <div style="height:1px;background:rgba(255,255,255,.05);margin:0 14px"></div>
+          <div style="padding:14px">
+            <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:7px"><div style="display:flex;align-items:center;gap:8px"><span style="width:7px;height:7px;border-radius:50%;background:#5fc6d6;box-shadow:0 0 8px rgba(95,198,214,.55)"></span><span style="font-size:11px;font-weight:600;letter-spacing:.04em;text-transform:uppercase;color:#a89aa6">Scholarly writing</span></div><span style="font-family:'JetBrains Mono',monospace;font-size:10px;color:#f0a86a;background:radial-gradient(1px 1px at 28% 40%,rgba(255,255,255,.5),transparent 60%),radial-gradient(1px 1px at 74% 62%,rgba(255,255,255,.4),transparent 60%),rgba(240,168,106,.11);border:1px solid rgba(240,168,106,.36);border-radius:999px;padding:2px 10px;white-space:nowrap">✦ 4h chunk</span></div>
+            <div style="font-size:13px;color:#8a8090;padding-left:15px;line-height:1.5"><span style="color:#58d69a">✓</span> outline done &nbsp; <span style="color:#ef92bd;text-shadow:0 0 10px rgba(239,146,189,.75)">→</span> <span style="color:#f5eef2">draft §2</span> &nbsp; <span style="color:#4f4a5e">☐</span> revise</div>
+          </div>
+          <div style="display:flex;flex-wrap:wrap;gap:6px;padding:12px 14px;border-top:1px solid rgba(255,255,255,.05)"><span style="font-size:11.5px;color:#f2a6c8;background:radial-gradient(1.2px 1.2px at 20% 34%,rgba(255,255,255,.55),transparent 60%),radial-gradient(1px 1px at 70% 64%,rgba(255,255,255,.4),transparent 60%),rgba(239,146,189,.12);border:1px solid rgba(239,146,189,.42);border-radius:999px;padding:5px 13px;box-shadow:0 0 16px rgba(239,146,189,.22)">✦ Fresh plan</span><span style="font-size:11.5px;color:#a89aa6;background:rgba(255,255,255,.04);border:1px solid rgba(255,255,255,.09);border-radius:999px;padding:5px 13px">Low energy</span></div>
+        </div>
+        <div style="flex:1;min-width:190px;border-radius:14px;overflow:hidden;background:linear-gradient(165deg,rgba(22,18,32,.72),rgba(12,10,20,.72));border:1px solid rgba(255,255,255,.06);box-shadow:inset 0 1px 0 rgba(255,255,255,.05)">
+          <div style="padding:11px 14px;border-bottom:1px solid rgba(255,255,255,.05)"><span style="font-family:'JetBrains Mono',monospace;font-size:10px;letter-spacing:.12em;text-transform:uppercase;color:#6f6480">Map</span></div>
+          <div style="padding:14px;display:flex;flex-direction:column;gap:11px">
+            <div style="display:flex;align-items:center;gap:9px"><span style="width:9px;height:9px;border-radius:50%;background:#9fe0e8;box-shadow:0 0 7px rgba(159,224,232,.5)"></span><span style="font-size:13.5px;color:#f5eef2;font-weight:500">Material survival</span></div>
+            <div style="display:flex;align-items:center;gap:9px;padding-left:16px"><span style="width:8px;height:8px;border-radius:50%;background:#5fc6d6;box-shadow:0 0 7px rgba(95,198,214,.5)"></span><span style="font-size:13px;color:#e2dae0">Job search</span></div>
+            <div style="display:flex;align-items:center;gap:9px;padding-left:32px"><span style="width:7px;height:7px;border-radius:50%;background:#40a9c4;box-shadow:0 0 7px rgba(64,169,196,.5)"></span><span style="font-size:12.5px;color:#c9bfc9">GRA applications</span></div>
+            <div style="display:flex;align-items:center;gap:9px;padding-left:48px"><span style="width:16px;height:16px;border-radius:50%;border:2px solid #3f8fd0;flex:0 0 auto;box-shadow:0 0 10px rgba(63,143,208,.45)"></span><span style="font-size:12.5px;color:#c9bfc9">Draft the cover letter</span></div>
+            <div style="height:1px;background:rgba(255,255,255,.05);margin:3px 0"></div>
+            <div style="display:flex;align-items:center;gap:9px"><span style="width:9px;height:9px;border-radius:50%;background:#4fb8a6;box-shadow:0 0 7px rgba(79,184,166,.5)"></span><span style="font-size:12.5px;color:#c9bfc9">Meditate <span style="color:#7a7080;font-size:11px">· recurring</span></span></div>
+            <div style="display:flex;align-items:center;gap:9px"><span style="width:9px;height:9px;border-radius:50%;background:#d58fd8;box-shadow:0 0 7px rgba(213,143,216,.5)"></span><span style="font-size:12.5px;color:#c9bfc9">Rest is real labor <span style="color:#7a7080;font-size:11px">· strategy</span></span></div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- ── 3b — Violet Deep ── -->
+    <div id="3b" style="position:relative;width:540px;border-radius:20px;overflow:hidden;background:radial-gradient(135% 105% at 85% -14%,rgba(150,90,222,.26),transparent 52%),radial-gradient(135% 125% at 2% 114%,rgba(70,110,225,.17),transparent 55%),radial-gradient(95% 82% at 48% 55%,rgba(210,120,170,.08),transparent 64%),#060512;box-shadow:0 34px 90px rgba(0,0,0,.7),inset 0 1px 0 rgba(255,255,255,.06);border:1px solid rgba(255,255,255,.07)">
+      <div style="height:2px;background:linear-gradient(90deg,#e79bc0,#b98ff0,#7d8ff0)"></div>
+      <div style="padding:20px 24px;border-bottom:1px solid rgba(255,255,255,.05)">
+        <div style="display:flex;align-items:center;gap:10px">
+          <span style="font-family:'JetBrains Mono',monospace;font-size:11px;font-weight:600;color:#060512;background:#a98fee;border-radius:6px;padding:3px 7px;letter-spacing:.05em">3b</span>
+          <span style="font-size:19px;font-weight:700;color:#f4f0fb;letter-spacing:-.01em">Violet Deep</span>
+        </div>
+        <div style="font-size:13px;color:#a49dba;margin-top:5px">Violet-led. The Map hierarchy runs on lavender — most overtly femme, deep-space calm.</div>
+      </div>
+      <div style="margin:20px 24px 0;border-radius:14px;padding:18px 20px;background:linear-gradient(160deg,rgba(26,22,44,.68),rgba(12,10,24,.68));border:1px solid rgba(255,255,255,.07);box-shadow:inset 0 1px 0 rgba(255,255,255,.06)">
+        <div style="font-family:'JetBrains Mono',monospace;font-size:10px;letter-spacing:.14em;text-transform:uppercase;color:#7d7796;margin-bottom:9px">next, right now</div>
+        <div style="display:inline-flex;align-items:center;gap:10px;background:rgba(231,155,192,.11);border:1px solid rgba(231,155,192,.42);border-radius:11px;padding:10px 14px;box-shadow:0 0 24px rgba(231,155,192,.3)">
+          <span style="color:#e79bc0;font-size:16px">→</span><span style="font-size:14.5px;color:#fbf1f6;font-weight:500">Draft §2 of the paper</span>
+        </div>
+      </div>
+      <div style="padding:18px 24px 24px;display:flex;gap:16px;flex-wrap:wrap">
+        <div style="flex:1;min-width:225px;border-radius:14px;overflow:hidden;background:linear-gradient(165deg,rgba(26,22,44,.72),rgba(13,11,25,.72));border:1px solid rgba(255,255,255,.07);box-shadow:inset 0 1px 0 rgba(255,255,255,.06)">
+          <div style="display:flex;justify-content:space-between;padding:11px 14px;border-bottom:1px solid rgba(255,255,255,.05)"><span style="font-family:'JetBrains Mono',monospace;font-size:10px;letter-spacing:.12em;text-transform:uppercase;color:#6d6684">Today</span><span style="font-family:'JetBrains Mono',monospace;font-size:10px;color:#6d6684">Fri Jul 17</span></div>
+          <div style="padding:14px">
+            <div style="display:flex;align-items:center;gap:8px;margin-bottom:6px"><span style="width:7px;height:7px;border-radius:50%;background:#8a6fe0;box-shadow:0 0 8px rgba(138,111,224,.6)"></span><span style="font-size:11px;font-weight:600;letter-spacing:.04em;text-transform:uppercase;color:#a49dba">Job search</span></div>
+            <div style="font-size:14.5px;color:#f4f0fb;line-height:1.4;padding-left:15px;margin-bottom:7px">Follow up on the GRA leads</div>
+            <div style="margin-left:15px;background:rgba(231,155,192,.07);border:1px solid rgba(231,155,192,.24);border-radius:8px;padding:8px 11px"><div style="font-family:'JetBrains Mono',monospace;font-size:9.5px;letter-spacing:.1em;text-transform:uppercase;color:#a5788f;margin-bottom:3px">why this matters</div><div style="font-size:12.5px;line-height:1.4;color:#ecabca">Income and a role that fits — not one that extracts</div></div>
+          </div>
+          <div style="height:1px;background:rgba(255,255,255,.05);margin:0 14px"></div>
+          <div style="padding:14px">
+            <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:7px"><div style="display:flex;align-items:center;gap:8px"><span style="width:7px;height:7px;border-radius:50%;background:#a98fee;box-shadow:0 0 8px rgba(169,143,238,.55)"></span><span style="font-size:11px;font-weight:600;letter-spacing:.04em;text-transform:uppercase;color:#a49dba">Scholarly writing</span></div><span style="font-family:'JetBrains Mono',monospace;font-size:10px;color:#e8b56d;background:rgba(232,181,109,.11);border:1px solid rgba(232,181,109,.34);border-radius:20px;padding:2px 8px">4h chunk</span></div>
+            <div style="font-size:13px;color:#8b85a0;padding-left:15px;line-height:1.5"><span style="color:#6ccfa0">✓</span> outline done &nbsp; <span style="color:#e79bc0;text-shadow:0 0 10px rgba(231,155,192,.75)">→</span> <span style="color:#f4f0fb">draft §2</span> &nbsp; <span style="color:#4f4a63">☐</span> revise</div>
+          </div>
+          <div style="display:flex;flex-wrap:wrap;gap:6px;padding:12px 14px;border-top:1px solid rgba(255,255,255,.05)"><span style="font-size:11.5px;color:#ecabca;background:rgba(231,155,192,.12);border:1px solid rgba(231,155,192,.42);border-radius:7px;padding:5px 10px;box-shadow:0 0 16px rgba(231,155,192,.22)">↻ Fresh plan</span><span style="font-size:11.5px;color:#a49dba;background:rgba(255,255,255,.04);border:1px solid rgba(255,255,255,.09);border-radius:7px;padding:5px 10px">Low energy</span></div>
+        </div>
+        <div style="flex:1;min-width:190px;border-radius:14px;overflow:hidden;background:linear-gradient(165deg,rgba(26,22,44,.72),rgba(13,11,25,.72));border:1px solid rgba(255,255,255,.07);box-shadow:inset 0 1px 0 rgba(255,255,255,.06)">
+          <div style="padding:11px 14px;border-bottom:1px solid rgba(255,255,255,.05)"><span style="font-family:'JetBrains Mono',monospace;font-size:10px;letter-spacing:.12em;text-transform:uppercase;color:#6d6684">Map</span></div>
+          <div style="padding:14px;display:flex;flex-direction:column;gap:11px">
+            <div style="display:flex;align-items:center;gap:9px"><span style="width:9px;height:9px;border-radius:3px;background:#cdbcf5"></span><span style="font-size:13.5px;color:#f4f0fb;font-weight:500">Material survival</span></div>
+            <div style="display:flex;align-items:center;gap:9px;padding-left:16px"><span style="width:8px;height:8px;border-radius:3px;background:#a98fee"></span><span style="font-size:13px;color:#e0d9ec">Job search</span></div>
+            <div style="display:flex;align-items:center;gap:9px;padding-left:32px"><span style="width:7px;height:7px;border-radius:3px;background:#8a6fe0"></span><span style="font-size:12.5px;color:#c9c3d8">GRA applications</span></div>
+            <div style="display:flex;align-items:center;gap:9px;padding-left:48px"><span style="width:16px;height:16px;border-radius:50%;border:2px solid #7d8ff0;flex:0 0 auto;box-shadow:0 0 10px rgba(125,143,240,.45)"></span><span style="font-size:12.5px;color:#c9c3d8">Draft the cover letter</span></div>
+            <div style="height:1px;background:rgba(255,255,255,.05);margin:3px 0"></div>
+            <div style="display:flex;align-items:center;gap:9px"><span style="width:9px;height:9px;border-radius:3px;background:#57c0c2"></span><span style="font-size:12.5px;color:#c9c3d8">Meditate <span style="color:#7a7490;font-size:11px">· recurring</span></span></div>
+            <div style="display:flex;align-items:center;gap:9px"><span style="width:9px;height:9px;border-radius:3px;background:#db8ad4"></span><span style="font-size:12.5px;color:#c9c3d8">Rest is real labor <span style="color:#7a7490;font-size:11px">· strategy</span></span></div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- ── 3c — Cyber Duotone ── -->
+    <div id="3c" style="position:relative;width:540px;border-radius:20px;overflow:hidden;background:radial-gradient(135% 105% at 90% -14%,rgba(222,80,170,.20),transparent 50%),radial-gradient(135% 125% at 2% 114%,rgba(40,160,210,.19),transparent 55%),#03030b;box-shadow:0 34px 90px rgba(0,0,0,.72),inset 0 1px 0 rgba(255,255,255,.06);border:1px solid rgba(255,255,255,.08)">
+      <div style="height:2px;background:linear-gradient(90deg,#f07ab5,#58c4e6)"></div>
+      <div style="padding:20px 24px;border-bottom:1px solid rgba(255,255,255,.06)">
+        <div style="display:flex;align-items:center;gap:10px">
+          <span style="font-family:'JetBrains Mono',monospace;font-size:11px;font-weight:600;color:#03030b;background:#58c4e6;border-radius:6px;padding:3px 7px;letter-spacing:.05em">3c</span>
+          <span style="font-size:19px;font-weight:700;color:#eef3fb;letter-spacing:-.01em">Cyber Duotone</span>
+        </div>
+        <div style="font-size:13px;color:#93a0b8;margin-top:5px">Cyan-led, near-duotone. Fewest hues, coolest, most terminal — the cleanest to parse.</div>
+      </div>
+      <div style="margin:20px 24px 0;border-radius:6px;padding:18px 20px;background:linear-gradient(160deg,rgba(16,18,30,.7),rgba(8,9,17,.7));border:1px solid rgba(255,255,255,.07);box-shadow:inset 0 1px 0 rgba(255,255,255,.06)">
+        <div style="font-family:'JetBrains Mono',monospace;font-size:10px;letter-spacing:.14em;text-transform:uppercase;color:#6f7a92;margin-bottom:9px">next, right now</div>
+        <div style="display:inline-flex;align-items:center;gap:10px;border-radius:4px;padding:9px 13px;background:linear-gradient(180deg,rgba(240,122,181,.17),rgba(240,122,181,.07));border:1px solid rgba(240,122,181,.5);box-shadow:0 0 26px rgba(240,122,181,.3),inset 0 1px 0 rgba(255,255,255,.13)">
+          <span style="width:7px;height:7px;border-radius:50%;background:#f593c1;box-shadow:0 0 8px #f593c1;flex:0 0 auto"></span><span style="font-size:14px;color:#fdeff6;font-weight:500">Draft §2 of the paper</span>
+        </div>
+      </div>
+      <div style="padding:18px 24px 24px;display:flex;gap:16px;flex-wrap:wrap">
+        <div style="flex:1;min-width:225px;border-radius:6px;overflow:hidden;background:linear-gradient(165deg,rgba(16,18,30,.74),rgba(9,10,18,.74));border:1px solid rgba(255,255,255,.07);box-shadow:inset 0 1px 0 rgba(255,255,255,.06)">
+          <div style="display:flex;justify-content:space-between;padding:11px 14px;border-bottom:1px solid rgba(255,255,255,.05)"><span style="font-family:'JetBrains Mono',monospace;font-size:10px;letter-spacing:.12em;text-transform:uppercase;color:#818ca8">Today</span><span style="font-family:'JetBrains Mono',monospace;font-size:10px;color:#818ca8">Fri Jul 17</span></div>
+          <div style="padding:14px">
+            <div style="display:flex;align-items:center;gap:8px;margin-bottom:6px"><span style="width:7px;height:7px;border-radius:2px;background:#3aa0da;box-shadow:0 0 8px rgba(58,160,218,.65)"></span><span style="font-size:11px;font-weight:600;letter-spacing:.04em;text-transform:uppercase;color:#93a0b8">Job search</span></div>
+            <div style="font-size:14.5px;color:#eef3fb;line-height:1.4;padding-left:15px;margin-bottom:7px">Follow up on the GRA leads</div>
+            <div style="margin-left:15px;background:linear-gradient(180deg,rgba(240,122,181,.08),rgba(240,122,181,.03));border:1px solid rgba(240,122,181,.24);border-left:2px solid #f593c1;border-radius:3px;padding:8px 11px;box-shadow:inset 0 1px 0 rgba(255,255,255,.05)"><div style="font-family:'JetBrains Mono',monospace;font-size:9.5px;letter-spacing:.12em;text-transform:uppercase;color:#c98caa;margin-bottom:3px">// why this matters</div><div style="font-size:12.5px;line-height:1.45;color:#f6aecd">Income and a role that fits — not one that extracts</div></div>
+          </div>
+          <div style="height:1px;background:rgba(255,255,255,.05);margin:0 14px"></div>
+          <div style="padding:14px">
+            <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:7px"><div style="display:flex;align-items:center;gap:8px"><span style="width:7px;height:7px;border-radius:2px;background:#58c4e6;box-shadow:0 0 8px rgba(88,196,230,.6)"></span><span style="font-size:11px;font-weight:600;letter-spacing:.04em;text-transform:uppercase;color:#93a0b8">Scholarly writing</span></div><span style="font-family:'JetBrains Mono',monospace;font-size:10px;color:#eab36a;background:linear-gradient(180deg,rgba(234,179,106,.15),rgba(234,179,106,.05));border:1px solid rgba(234,179,106,.4);border-radius:3px;padding:2px 7px;box-shadow:inset 0 1px 0 rgba(255,255,255,.1)">◱ 4H</span></div>
+            <div style="font-size:13px;color:#7f8aa2;padding-left:15px;line-height:1.5"><span style="color:#4fd69a">✓</span> outline done &nbsp; <span style="color:#f593c1;text-shadow:0 0 10px rgba(240,122,181,.8)">→</span> <span style="color:#eef3fb">draft §2</span> &nbsp; <span style="color:#454e68">☐</span> revise</div>
+          </div>
+          <div style="display:flex;flex-wrap:wrap;gap:6px;padding:12px 14px;border-top:1px solid rgba(255,255,255,.05)"><span style="display:inline-flex;align-items:center;gap:6px;font-family:'JetBrains Mono',monospace;font-size:10.5px;letter-spacing:.04em;color:#f593c1;background:linear-gradient(180deg,rgba(240,122,181,.17),rgba(240,122,181,.06));border:1px solid rgba(240,122,181,.5);border-radius:4px;padding:5px 10px;box-shadow:0 0 14px rgba(240,122,181,.22),inset 0 1px 0 rgba(255,255,255,.13),inset 0 -1px 0 rgba(0,0,0,.32)"><span style="width:5px;height:5px;border-radius:50%;background:#f593c1;box-shadow:0 0 6px #f593c1"></span>↻ FRESH PLAN</span><span style="display:inline-flex;align-items:center;gap:6px;font-family:'JetBrains Mono',monospace;font-size:10.5px;letter-spacing:.04em;color:#93a0b8;background:linear-gradient(180deg,rgba(255,255,255,.05),rgba(255,255,255,.01));border:1px solid rgba(255,255,255,.12);border-radius:4px;padding:5px 10px;box-shadow:inset 0 1px 0 rgba(255,255,255,.07),inset 0 -1px 0 rgba(0,0,0,.32)"><span style="width:5px;height:5px;border-radius:50%;background:#3d4658"></span>LOW ENERGY</span></div>
+        </div>
+        <div style="flex:1;min-width:190px;border-radius:6px;overflow:hidden;background:linear-gradient(165deg,rgba(16,18,30,.74),rgba(9,10,18,.74));border:1px solid rgba(255,255,255,.07);box-shadow:inset 0 1px 0 rgba(255,255,255,.06)">
+          <div style="padding:11px 14px;border-bottom:1px solid rgba(255,255,255,.05)"><span style="font-family:'JetBrains Mono',monospace;font-size:10px;letter-spacing:.12em;text-transform:uppercase;color:#818ca8">Map</span></div>
+          <div style="padding:14px;display:flex;flex-direction:column;gap:11px">
+            <div style="display:flex;align-items:center;gap:9px"><span style="width:9px;height:9px;border-radius:3px;background:#9be2f0"></span><span style="font-size:13.5px;color:#eef3fb;font-weight:500">Material survival</span></div>
+            <div style="display:flex;align-items:center;gap:9px;padding-left:16px"><span style="width:8px;height:8px;border-radius:3px;background:#58c4e6"></span><span style="font-size:13px;color:#dbe2f0">Job search</span></div>
+            <div style="display:flex;align-items:center;gap:9px;padding-left:32px"><span style="width:7px;height:7px;border-radius:3px;background:#3aa0da"></span><span style="font-size:12.5px;color:#c5cddd">GRA applications</span></div>
+            <div style="display:flex;align-items:center;gap:9px;padding-left:48px"><span style="width:15px;height:15px;border-radius:2px;border:2px solid #4f7fe6;flex:0 0 auto;box-shadow:0 0 10px rgba(79,127,230,.45)"></span><span style="font-size:12.5px;color:#c5cddd">Draft the cover letter</span></div>
+            <div style="height:1px;background:rgba(255,255,255,.05);margin:3px 0"></div>
+            <div style="display:flex;align-items:center;gap:9px"><span style="width:9px;height:9px;border-radius:3px;background:#45cfc0"></span><span style="font-size:12.5px;color:#c5cddd">Meditate <span style="color:#6f7a92;font-size:11px">· recurring</span></span></div>
+            <div style="display:flex;align-items:center;gap:9px"><span style="width:9px;height:9px;border-radius:3px;background:#d071d8"></span><span style="font-size:12.5px;color:#c5cddd">Rest is real labor <span style="color:#6f7a92;font-size:11px">· strategy</span></span></div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+  </div>
+
+  <div style="max-width:730px;font-size:13.5px;line-height:1.6;color:#8b85a0"><a href="#3a" style="color:#ef92bd">3a Terminal Rose</a> · <a href="#3b" style="color:#a98fee">3b Violet Deep</a> · <a href="#3c" style="color:#58c4e6">3c Cyber Duotone</a>. All deeper &amp; broader in the dark than the round below. Say which lead you want (or mix — "3b's violet map with 3a's rose why-block"), and whether this depth is where you want it.</div>
+</section>
+
+<section style="padding:64px 56px 96px;display:flex;flex-direction:column;gap:34px">
+  <div style="max-width:720px;display:flex;flex-direction:column;gap:14px">
+    <div style="font-family:'JetBrains Mono',monospace;font-size:12px;font-weight:600;letter-spacing:.22em;text-transform:uppercase;color:#6b6580">Controlled Drift · atmosphere pass</div>
+    <div style="font-size:30px;font-weight:700;letter-spacing:-.02em;line-height:1.15;background:linear-gradient(100deg,#e6a7c0,#c9a2e0,#8fb0f0,#63c3d0);-webkit-background-clip:text;background-clip:text;-webkit-text-fill-color:transparent">Same palette — now with a body to it</div>
+    <div style="font-size:15.5px;line-height:1.6;color:#a09ab2">You liked 1a's calm, but it read flat. "Technofuture space femme" isn't more color — it's <b style="color:#e0d9ec;font-weight:600">material and atmosphere</b>: cosmic depth behind the surfaces, glass instead of matte, <b style="color:#e0d9ec;font-weight:600">selective bloom</b> on the one step that's <i>now</i>, and an iridescent warm→cool edge (rose→orchid→blue) that signs the whole thing. The palette + grammar from 1a are unchanged.</div>
+  </div>
+
+  <div style="display:flex;flex-wrap:wrap;gap:32px;align-items:flex-start">
+
+    <!-- ── 2a — Nebula ── -->
+    <div id="2a" style="position:relative;width:560px;border-radius:20px;overflow:hidden;background:radial-gradient(120% 90% at 88% -8%,rgba(150,95,205,.20),transparent 55%),radial-gradient(120% 110% at 5% 108%,rgba(70,120,220,.15),transparent 55%),radial-gradient(80% 70% at 50% 40%,rgba(220,120,160,.06),transparent 70%),#0a0912;box-shadow:0 30px 80px rgba(0,0,0,.6),inset 0 1px 0 rgba(255,255,255,.05);border:1px solid rgba(255,255,255,.06)">
+      <div style="height:2px;background:linear-gradient(90deg,#e08ba7,#c58fce,#7ea6ec,#5bb6b8)"></div>
+      <div style="padding:20px 24px;border-bottom:1px solid rgba(255,255,255,.05)">
+        <div style="display:flex;align-items:center;gap:10px">
+          <span style="font-family:'JetBrains Mono',monospace;font-size:11px;font-weight:600;color:#0a0912;background:#c58fce;border-radius:6px;padding:3px 7px;letter-spacing:.05em">2a</span>
+          <span style="font-size:19px;font-weight:700;color:#f3f0f8;letter-spacing:-.01em">Nebula</span>
+        </div>
+        <div style="font-size:13px;color:#a09ab2;margin-top:5px">1a's calm + cosmic depth, glass, a whisper of bloom. My pick.</div>
+      </div>
+
+      <!-- atmosphere hero -->
+      <div style="margin:20px 24px;border-radius:14px;padding:22px;position:relative;overflow:hidden;background:linear-gradient(160deg,rgba(30,26,44,.66),rgba(16,14,26,.66));border:1px solid rgba(255,255,255,.07);box-shadow:inset 0 1px 0 rgba(255,255,255,.06)">
+        <div style="font-family:'JetBrains Mono',monospace;font-size:10px;letter-spacing:.14em;text-transform:uppercase;color:#7a7490;margin-bottom:10px">next, right now</div>
+        <div style="display:inline-flex;align-items:center;gap:10px;background:rgba(224,139,167,.12);border:1px solid rgba(224,139,167,.4);border-radius:11px;padding:11px 15px;box-shadow:0 0 22px rgba(224,139,167,.28)">
+          <span style="color:#e08ba7;font-size:16px">→</span>
+          <span style="font-size:15px;color:#f6eef2;font-weight:500">Draft §2 of the paper</span>
+        </div>
+        <div style="font-size:12.5px;color:#8b85a0;margin-top:12px;line-height:1.5">The glow marks the <i>one</i> thing that's now — everything else stays quiet, so your eye lands here first.</div>
+      </div>
+
+      <!-- vignette -->
+      <div style="padding:4px 24px 24px;display:flex;gap:18px;flex-wrap:wrap">
+        <div style="flex:1;min-width:230px;border-radius:14px;overflow:hidden;background:linear-gradient(165deg,rgba(26,23,38,.72),rgba(18,16,27,.72));border:1px solid rgba(255,255,255,.07);box-shadow:inset 0 1px 0 rgba(255,255,255,.05)">
+          <div style="display:flex;justify-content:space-between;padding:11px 14px;border-bottom:1px solid rgba(255,255,255,.05)">
+            <span style="font-family:'JetBrains Mono',monospace;font-size:10px;letter-spacing:.12em;text-transform:uppercase;color:#6b6580">Today</span>
+            <span style="font-family:'JetBrains Mono',monospace;font-size:10px;color:#6b6580">Fri Jul 17</span>
+          </div>
+          <div style="padding:14px">
+            <div style="display:flex;align-items:center;gap:8px;margin-bottom:6px"><span style="width:7px;height:7px;border-radius:50%;background:#5f88db;box-shadow:0 0 8px rgba(95,136,219,.6)"></span><span style="font-size:11px;font-weight:600;letter-spacing:.04em;text-transform:uppercase;color:#a09ab2">Job search</span></div>
+            <div style="font-size:14.5px;color:#f3f0f8;line-height:1.4;padding-left:15px;margin-bottom:7px">Follow up on the GRA leads</div>
+            <div style="margin-left:15px;background:rgba(224,139,167,.07);border:1px solid rgba(224,139,167,.24);border-radius:8px;padding:8px 11px">
+              <div style="font-family:'JetBrains Mono',monospace;font-size:9.5px;letter-spacing:.1em;text-transform:uppercase;color:#a5788a;margin-bottom:3px">why this matters</div>
+              <div style="font-size:12.5px;line-height:1.4;color:#e8a3ba">Income and a role that fits — not one that extracts</div>
+            </div>
+          </div>
+          <div style="height:1px;background:rgba(255,255,255,.05);margin:0 14px"></div>
+          <div style="padding:14px">
+            <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:7px">
+              <div style="display:flex;align-items:center;gap:8px"><span style="width:7px;height:7px;border-radius:50%;background:#7ea6ec;box-shadow:0 0 8px rgba(126,166,236,.55)"></span><span style="font-size:11px;font-weight:600;letter-spacing:.04em;text-transform:uppercase;color:#a09ab2">Scholarly writing</span></div>
+              <span style="font-family:'JetBrains Mono',monospace;font-size:10px;color:#e4b169;background:rgba(228,177,105,.1);border:1px solid rgba(228,177,105,.32);border-radius:20px;padding:2px 8px">4h chunk</span>
+            </div>
+            <div style="font-size:13px;color:#8b85a0;padding-left:15px;line-height:1.5"><span style="color:#6ccb9b">✓</span> outline done &nbsp; <span style="color:#e08ba7;text-shadow:0 0 10px rgba(224,139,167,.7)">→</span> <span style="color:#f3f0f8">draft §2</span> &nbsp; <span style="color:#4f4a5e">☐</span> revise</div>
+          </div>
+          <div style="display:flex;flex-wrap:wrap;gap:6px;padding:12px 14px;border-top:1px solid rgba(255,255,255,.05)">
+            <span style="font-size:11.5px;color:#f0c88a;background:rgba(228,177,105,.12);border:1px solid rgba(228,177,105,.4);border-radius:7px;padding:5px 10px;box-shadow:0 0 16px rgba(228,177,105,.2)">↻ Fresh plan</span>
+            <span style="font-size:11.5px;color:#a09ab2;background:rgba(255,255,255,.04);border:1px solid rgba(255,255,255,.09);border-radius:7px;padding:5px 10px">Low energy</span>
+            <span style="font-size:11.5px;color:#a09ab2;background:rgba(255,255,255,.04);border:1px solid rgba(255,255,255,.09);border-radius:7px;padding:5px 10px">I'm stuck</span>
+          </div>
+        </div>
+        <div style="flex:1;min-width:200px;border-radius:14px;overflow:hidden;background:linear-gradient(165deg,rgba(26,23,38,.72),rgba(18,16,27,.72));border:1px solid rgba(255,255,255,.07);box-shadow:inset 0 1px 0 rgba(255,255,255,.05)">
+          <div style="padding:11px 14px;border-bottom:1px solid rgba(255,255,255,.05)"><span style="font-family:'JetBrains Mono',monospace;font-size:10px;letter-spacing:.12em;text-transform:uppercase;color:#6b6580">Map</span></div>
+          <div style="padding:14px;display:flex;flex-direction:column;gap:11px">
+            <div style="display:flex;align-items:center;gap:9px"><span style="width:9px;height:9px;border-radius:3px;background:#aec4ef"></span><span style="font-size:13.5px;color:#f3f0f8;font-weight:500">Material survival</span></div>
+            <div style="display:flex;align-items:center;gap:9px;padding-left:16px"><span style="width:8px;height:8px;border-radius:3px;background:#7ea6ec"></span><span style="font-size:13px;color:#e0d9ec">Job search</span></div>
+            <div style="display:flex;align-items:center;gap:9px;padding-left:32px"><span style="width:7px;height:7px;border-radius:3px;background:#5f88db"></span><span style="font-size:12.5px;color:#c9c3d8">GRA applications</span></div>
+            <div style="display:flex;align-items:center;gap:9px;padding-left:48px"><span style="width:16px;height:16px;border-radius:50%;border:2px solid #4f9fe0;flex:0 0 auto;box-shadow:0 0 10px rgba(79,159,224,.45)"></span><span style="font-size:12.5px;color:#c9c3d8">Draft the cover letter</span></div>
+            <div style="height:1px;background:rgba(255,255,255,.05);margin:3px 0"></div>
+            <div style="display:flex;align-items:center;gap:9px"><span style="width:9px;height:9px;border-radius:3px;background:#5bb6b8"></span><span style="font-size:12.5px;color:#c9c3d8">Meditate <span style="color:#7a7490;font-size:11px">· recurring</span></span></div>
+            <div style="display:flex;align-items:center;gap:9px"><span style="width:9px;height:9px;border-radius:3px;background:#c58fce"></span><span style="font-size:12.5px;color:#c9c3d8">Rest is real labor <span style="color:#7a7490;font-size:11px">· strategy</span></span></div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- ── 2b — Nebula · Aurora (pushed) ── -->
+    <div id="2b" style="position:relative;width:560px;border-radius:20px;overflow:hidden;background:radial-gradient(120% 90% at 90% -10%,rgba(175,100,225,.30),transparent 52%),radial-gradient(120% 120% at 0% 110%,rgba(60,130,235,.24),transparent 55%),radial-gradient(90% 80% at 45% 55%,rgba(230,120,175,.12),transparent 68%),#080711;box-shadow:0 30px 80px rgba(0,0,0,.65),inset 0 1px 0 rgba(255,255,255,.06);border:1px solid rgba(255,255,255,.08)">
+      <div style="height:3px;background:linear-gradient(90deg,#f28cb6,#d59ae8,#7fb2f5,#49c8d6)"></div>
+      <div style="padding:20px 24px;border-bottom:1px solid rgba(255,255,255,.06)">
+        <div style="display:flex;align-items:center;gap:10px">
+          <span style="font-family:'JetBrains Mono',monospace;font-size:11px;font-weight:600;color:#080711;background:#d59ae8;border-radius:6px;padding:3px 7px;letter-spacing:.05em">2b</span>
+          <span style="font-size:19px;font-weight:700;color:#f5f2fc;letter-spacing:-.01em">Nebula · Aurora</span>
+        </div>
+        <div style="font-size:13px;color:#a8a2c0;margin-top:5px">Pushed — deeper nebula, iridescence on accents, stronger bloom.</div>
+      </div>
+
+      <div style="margin:20px 24px;border-radius:14px;padding:22px;position:relative;overflow:hidden;background:linear-gradient(160deg,rgba(34,28,52,.6),rgba(14,12,26,.6));border:1px solid rgba(255,255,255,.09);box-shadow:inset 0 1px 0 rgba(255,255,255,.08)">
+        <div style="font-family:'JetBrains Mono',monospace;font-size:10px;letter-spacing:.14em;text-transform:uppercase;color:#8781a0;margin-bottom:10px">next, right now</div>
+        <div style="display:inline-flex;align-items:center;gap:10px;border-radius:11px;padding:11px 15px;background:linear-gradient(100deg,rgba(242,140,182,.2),rgba(213,154,232,.16));border:1px solid rgba(242,140,182,.5);box-shadow:0 0 30px rgba(242,140,182,.38)">
+          <span style="color:#f7a7c6;font-size:16px">→</span>
+          <span style="font-size:15px;color:#fdf3f7;font-weight:500">Draft §2 of the paper</span>
+        </div>
+        <div style="font-size:12.5px;color:#948eae;margin-top:12px;line-height:1.5">More glow and an aurora wash on the accent — brighter, more "space," slightly more to parse.</div>
+      </div>
+
+      <div style="padding:4px 24px 24px;display:flex;gap:18px;flex-wrap:wrap">
+        <div style="flex:1;min-width:230px;border-radius:14px;overflow:hidden;background:linear-gradient(165deg,rgba(28,24,46,.66),rgba(16,14,28,.66));border:1px solid rgba(255,255,255,.09);box-shadow:inset 0 1px 0 rgba(255,255,255,.07)">
+          <div style="display:flex;justify-content:space-between;padding:11px 14px;border-bottom:1px solid rgba(255,255,255,.06)">
+            <span style="font-family:'JetBrains Mono',monospace;font-size:10px;letter-spacing:.12em;text-transform:uppercase;color:#6f6a90">Today</span>
+            <span style="font-family:'JetBrains Mono',monospace;font-size:10px;color:#6f6a90">Fri Jul 17</span>
+          </div>
+          <div style="padding:14px">
+            <div style="display:flex;align-items:center;gap:8px;margin-bottom:6px"><span style="width:7px;height:7px;border-radius:50%;background:#7fb2f5;box-shadow:0 0 10px rgba(127,178,245,.75)"></span><span style="font-size:11px;font-weight:600;letter-spacing:.04em;text-transform:uppercase;color:#a8a2c0">Job search</span></div>
+            <div style="font-size:14.5px;color:#f5f2fc;line-height:1.4;padding-left:15px;margin-bottom:7px">Follow up on the GRA leads</div>
+            <div style="margin-left:15px;background:linear-gradient(120deg,rgba(242,140,182,.1),rgba(213,154,232,.07));border:1px solid rgba(242,140,182,.28);border-radius:8px;padding:8px 11px">
+              <div style="font-family:'JetBrains Mono',monospace;font-size:9.5px;letter-spacing:.1em;text-transform:uppercase;color:#b07f96;margin-bottom:3px">why this matters</div>
+              <div style="font-size:12.5px;line-height:1.4;color:#f5aecb">Income and a role that fits — not one that extracts</div>
+            </div>
+          </div>
+          <div style="height:1px;background:rgba(255,255,255,.06);margin:0 14px"></div>
+          <div style="padding:14px">
+            <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:7px">
+              <div style="display:flex;align-items:center;gap:8px"><span style="width:7px;height:7px;border-radius:50%;background:#7fb2f5;box-shadow:0 0 10px rgba(127,178,245,.7)"></span><span style="font-size:11px;font-weight:600;letter-spacing:.04em;text-transform:uppercase;color:#a8a2c0">Scholarly writing</span></div>
+              <span style="font-family:'JetBrains Mono',monospace;font-size:10px;color:#f5c67e;background:rgba(242,189,106,.12);border:1px solid rgba(242,189,106,.36);border-radius:20px;padding:2px 8px">4h chunk</span>
+            </div>
+            <div style="font-size:13px;color:#948eae;padding-left:15px;line-height:1.5"><span style="color:#5fe0a6">✓</span> outline done &nbsp; <span style="color:#f7a7c6;text-shadow:0 0 12px rgba(242,140,182,.9)">→</span> <span style="color:#f5f2fc">draft §2</span> &nbsp; <span style="color:#4a4468">☐</span> revise</div>
+          </div>
+          <div style="display:flex;flex-wrap:wrap;gap:6px;padding:12px 14px;border-top:1px solid rgba(255,255,255,.06)">
+            <span style="font-size:11.5px;color:#151020;background:linear-gradient(100deg,#f2bd6a,#f0a878);border:none;border-radius:7px;padding:5px 10px;font-weight:600;box-shadow:0 0 20px rgba(242,189,106,.4)">↻ Fresh plan</span>
+            <span style="font-size:11.5px;color:#a8a2c0;background:rgba(255,255,255,.05);border:1px solid rgba(255,255,255,.11);border-radius:7px;padding:5px 10px">Low energy</span>
+            <span style="font-size:11.5px;color:#a8a2c0;background:rgba(255,255,255,.05);border:1px solid rgba(255,255,255,.11);border-radius:7px;padding:5px 10px">I'm stuck</span>
+          </div>
+        </div>
+        <div style="flex:1;min-width:200px;border-radius:14px;overflow:hidden;background:linear-gradient(165deg,rgba(28,24,46,.66),rgba(16,14,28,.66));border:1px solid rgba(255,255,255,.09);box-shadow:inset 0 1px 0 rgba(255,255,255,.07)">
+          <div style="padding:11px 14px;border-bottom:1px solid rgba(255,255,255,.06)"><span style="font-family:'JetBrains Mono',monospace;font-size:10px;letter-spacing:.12em;text-transform:uppercase;color:#6f6a90">Map</span></div>
+          <div style="padding:14px;display:flex;flex-direction:column;gap:11px">
+            <div style="display:flex;align-items:center;gap:9px"><span style="width:9px;height:9px;border-radius:3px;background:#b3cdf5"></span><span style="font-size:13.5px;color:#f5f2fc;font-weight:500">Material survival</span></div>
+            <div style="display:flex;align-items:center;gap:9px;padding-left:16px"><span style="width:8px;height:8px;border-radius:3px;background:#7fb2f5"></span><span style="font-size:13px;color:#e4def0">Job search</span></div>
+            <div style="display:flex;align-items:center;gap:9px;padding-left:32px"><span style="width:7px;height:7px;border-radius:3px;background:#5a97ea"></span><span style="font-size:12.5px;color:#cdc7dc">GRA applications</span></div>
+            <div style="display:flex;align-items:center;gap:9px;padding-left:48px"><span style="width:16px;height:16px;border-radius:50%;border:2px solid #49c8d6;flex:0 0 auto;box-shadow:0 0 12px rgba(73,200,214,.55)"></span><span style="font-size:12.5px;color:#cdc7dc">Draft the cover letter</span></div>
+            <div style="height:1px;background:rgba(255,255,255,.06);margin:3px 0"></div>
+            <div style="display:flex;align-items:center;gap:9px"><span style="width:9px;height:9px;border-radius:3px;background:#49c8d6"></span><span style="font-size:12.5px;color:#cdc7dc">Meditate <span style="color:#8781a0;font-size:11px">· recurring</span></span></div>
+            <div style="display:flex;align-items:center;gap:9px"><span style="width:9px;height:9px;border-radius:3px;background:#d59ae8"></span><span style="font-size:12.5px;color:#cdc7dc">Rest is real labor <span style="color:#8781a0;font-size:11px">· strategy</span></span></div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+  </div>
+
+  <div style="max-width:720px;font-size:13.5px;line-height:1.6;color:#8b85a0">Same 1a palette + grammar in both. <a href="#2a" style="color:#c58fce">2a Nebula</a> keeps it calm (bloom only on "now"); <a href="#2b" style="color:#d59ae8">2b Aurora</a> pushes glow + iridescence for more "space." The <b style="color:#c9c3d8;font-weight:600">flat 1a &amp; luminous 1b</b> below are the earlier round for reference. Pick a lane — or say "2a but a bit more glow" and I'll tune, then wire it through the app.</div>
+</section>
+
+<section style="padding:64px 56px 120px;display:flex;flex-direction:column;gap:40px">
+  <div style="max-width:720px;display:flex;flex-direction:column;gap:14px">
+    <div style="font-family:'JetBrains Mono',monospace;font-size:12px;font-weight:600;letter-spacing:.22em;text-transform:uppercase;color:#6b6580">Controlled Drift · color system</div>
+    <div style="font-size:30px;font-weight:700;letter-spacing:-.02em;color:#f3f0f8;line-height:1.15">A grammar for color, so your eye always knows where it is</div>
+    <div style="font-size:15.5px;line-height:1.6;color:#a09ab2">The palette grew into ~10 competing bright hues with no logic between them — that's the noise. The fix is a <b style="color:#e0d9ec;font-weight:600">grammar</b>: spend saturation only where it carries meaning, keep everything else calm.</div>
+    <div style="display:flex;flex-wrap:wrap;gap:10px;margin-top:6px">
+      <div style="font-size:13px;color:#c9c3d8;background:#16131f;border:1px solid #2c2740;border-radius:9px;padding:9px 13px;line-height:1.4"><b style="color:#86a5e6;font-weight:600">Structure = cool.</b> The Map hierarchy is one blue family in lightness steps — depth is value, not a rainbow.</div>
+      <div style="font-size:13px;color:#c9c3d8;background:#16131f;border:1px solid #2c2740;border-radius:9px;padding:9px 13px;line-height:1.4"><b style="color:#e08ba7;font-weight:600">Execution = warm.</b> Rose = why it matters · gold = do it. Warm vs cool = act-now vs the map.</div>
+      <div style="font-size:13px;color:#c9c3d8;background:#16131f;border:1px solid #2c2740;border-radius:9px;padding:9px 13px;line-height:1.4"><b style="color:#c58fce;font-weight:600">Kind accents, sparingly.</b> Only cross-cutting types (recurring, strategy) get a quiet hue.</div>
+      <div style="font-size:13px;color:#c9c3d8;background:#16131f;border:1px solid #2c2740;border-radius:9px;padding:9px 13px;line-height:1.4"><b style="color:#6ccb9b;font-weight:600">State stays tiny.</b> Done · now · blocked · parked — desaturated, never alarm-red.</div>
+    </div>
+  </div>
+
+  <div style="display:flex;flex-wrap:wrap;gap:32px;align-items:flex-start">
+
+    <!-- ── OPTION 1a — Cool Deep ── -->
+    <div id="1a" style="width:560px;background:#121018;border:1px solid #262233;border-radius:20px;overflow:hidden;box-shadow:0 30px 70px rgba(0,0,0,.5)">
+      <div style="display:flex;align-items:center;justify-content:space-between;padding:20px 24px;border-bottom:1px solid #241f2e">
+        <div>
+          <div style="display:flex;align-items:center;gap:10px">
+            <span style="font-family:'JetBrains Mono',monospace;font-size:11px;font-weight:600;color:#08070d;background:#86a5e6;border-radius:6px;padding:3px 7px;letter-spacing:.05em">1a</span>
+            <span style="font-size:19px;font-weight:700;color:#f3f0f8;letter-spacing:-.01em">Cool Deep</span>
+          </div>
+          <div style="font-size:13px;color:#a09ab2;margin-top:5px">Calm &amp; muted — lowest noise. My pick for the accessibility goal.</div>
+        </div>
+      </div>
+
+      <!-- legend -->
+      <div style="padding:22px 24px;display:flex;flex-direction:column;gap:20px;border-bottom:1px solid #241f2e">
+        <div>
+          <div style="font-family:'JetBrains Mono',monospace;font-size:10px;letter-spacing:.16em;text-transform:uppercase;color:#6b6580;margin-bottom:9px">Structure — one cool family, lightness = depth</div>
+          <div style="display:flex;border-radius:10px;overflow:hidden;border:1px solid #2c2740">
+            <div style="flex:1;height:46px;background:#aec4ef"></div>
+            <div style="flex:1;height:46px;background:#7ea6ec"></div>
+            <div style="flex:1;height:46px;background:#5f88db"></div>
+            <div style="flex:1;height:46px;background:#4f9fe0"></div>
+          </div>
+          <div style="display:flex;margin-top:6px;font-size:11px;color:#8b85a0">
+            <div style="flex:1">Goal</div><div style="flex:1">Project</div><div style="flex:1">Sub-project</div><div style="flex:1">Task</div>
+          </div>
+        </div>
+        <div style="display:flex;gap:26px;flex-wrap:wrap">
+          <div>
+            <div style="font-family:'JetBrains Mono',monospace;font-size:10px;letter-spacing:.16em;text-transform:uppercase;color:#6b6580;margin-bottom:9px">Execution — warm</div>
+            <div style="display:flex;gap:16px">
+              <div style="display:flex;align-items:center;gap:8px"><span style="width:22px;height:22px;border-radius:7px;background:#e08ba7"></span><span style="font-size:12px;color:#c9c3d8">rose <span style="color:#7a7490">why</span></span></div>
+              <div style="display:flex;align-items:center;gap:8px"><span style="width:22px;height:22px;border-radius:7px;background:#e4b169"></span><span style="font-size:12px;color:#c9c3d8">gold <span style="color:#7a7490">do</span></span></div>
+            </div>
+          </div>
+          <div>
+            <div style="font-family:'JetBrains Mono',monospace;font-size:10px;letter-spacing:.16em;text-transform:uppercase;color:#6b6580;margin-bottom:9px">Kind</div>
+            <div style="display:flex;gap:14px">
+              <div style="display:flex;align-items:center;gap:7px"><span style="width:18px;height:18px;border-radius:6px;background:#5bb6b8"></span><span style="font-size:12px;color:#c9c3d8">recurring</span></div>
+              <div style="display:flex;align-items:center;gap:7px"><span style="width:18px;height:18px;border-radius:6px;background:#c58fce"></span><span style="font-size:12px;color:#c9c3d8">strategy</span></div>
+              <div style="display:flex;align-items:center;gap:7px"><span style="width:18px;height:18px;border-radius:6px;background:#948fce"></span><span style="font-size:12px;color:#c9c3d8">workstream</span></div>
+            </div>
+          </div>
+          <div>
+            <div style="font-family:'JetBrains Mono',monospace;font-size:10px;letter-spacing:.16em;text-transform:uppercase;color:#6b6580;margin-bottom:9px">State</div>
+            <div style="display:flex;gap:14px">
+              <div style="display:flex;align-items:center;gap:7px"><span style="width:18px;height:18px;border-radius:6px;background:#6ccb9b"></span><span style="font-size:12px;color:#c9c3d8">done</span></div>
+              <div style="display:flex;align-items:center;gap:7px"><span style="width:18px;height:18px;border-radius:6px;background:#8792a8"></span><span style="font-size:12px;color:#c9c3d8">blocked</span></div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- vignette -->
+      <div style="padding:22px 24px;display:flex;gap:18px;flex-wrap:wrap">
+        <!-- Today -->
+        <div style="flex:1;min-width:230px;background:#1a1724;border:1px solid #2c2740;border-radius:14px;overflow:hidden">
+          <div style="display:flex;justify-content:space-between;padding:11px 14px;border-bottom:1px solid #241f2e">
+            <span style="font-family:'JetBrains Mono',monospace;font-size:10px;letter-spacing:.12em;text-transform:uppercase;color:#6b6580">Today</span>
+            <span style="font-family:'JetBrains Mono',monospace;font-size:10px;color:#6b6580">Fri Jul 17</span>
+          </div>
+          <div style="padding:14px">
+            <div style="display:flex;align-items:center;gap:8px;margin-bottom:6px"><span style="width:7px;height:7px;border-radius:50%;background:#5f88db"></span><span style="font-size:11px;font-weight:600;letter-spacing:.04em;text-transform:uppercase;color:#a09ab2">Job search</span></div>
+            <div style="font-size:14.5px;color:#f3f0f8;line-height:1.4;padding-left:15px;margin-bottom:7px">Follow up on the GRA leads</div>
+            <div style="margin-left:15px;background:#1e1420;border:1px solid #43283a;border-radius:8px;padding:8px 11px">
+              <div style="font-family:'JetBrains Mono',monospace;font-size:9.5px;letter-spacing:.1em;text-transform:uppercase;color:#7a5566;margin-bottom:3px">why this matters</div>
+              <div style="font-size:12.5px;line-height:1.4;color:#e08ba7">Income and a role that fits — not one that extracts</div>
+            </div>
+          </div>
+          <div style="height:1px;background:#241f2e;margin:0 14px"></div>
+          <div style="padding:14px">
+            <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:7px">
+              <div style="display:flex;align-items:center;gap:8px"><span style="width:7px;height:7px;border-radius:50%;background:#7ea6ec"></span><span style="font-size:11px;font-weight:600;letter-spacing:.04em;text-transform:uppercase;color:#a09ab2">Scholarly writing</span></div>
+              <span style="font-family:'JetBrains Mono',monospace;font-size:10px;color:#e4b169;background:#241a10;border:1px solid #4a3820;border-radius:20px;padding:2px 8px">4h chunk</span>
+            </div>
+            <div style="font-size:13px;color:#8b85a0;padding-left:15px;line-height:1.5"><span style="color:#6ccb9b">✓</span> outline done &nbsp; <span style="color:#e08ba7">→</span> <span style="color:#f3f0f8">draft §2</span> &nbsp; <span style="color:#4f4a5e">☐</span> revise</div>
+          </div>
+          <div style="display:flex;flex-wrap:wrap;gap:6px;padding:12px 14px;border-top:1px solid #241f2e">
+            <span style="font-size:11.5px;color:#e4b169;background:#241a10;border:1px solid #4a3820;border-radius:7px;padding:5px 10px">↻ Fresh plan</span>
+            <span style="font-size:11.5px;color:#a09ab2;background:#241f31;border:1px solid #322c42;border-radius:7px;padding:5px 10px">Low energy</span>
+            <span style="font-size:11.5px;color:#a09ab2;background:#241f31;border:1px solid #322c42;border-radius:7px;padding:5px 10px">I'm stuck</span>
+          </div>
+        </div>
+        <!-- Map -->
+        <div style="flex:1;min-width:200px;background:#1a1724;border:1px solid #2c2740;border-radius:14px;overflow:hidden">
+          <div style="padding:11px 14px;border-bottom:1px solid #241f2e"><span style="font-family:'JetBrains Mono',monospace;font-size:10px;letter-spacing:.12em;text-transform:uppercase;color:#6b6580">Map</span></div>
+          <div style="padding:14px;display:flex;flex-direction:column;gap:11px">
+            <div style="display:flex;align-items:center;gap:9px"><span style="width:9px;height:9px;border-radius:3px;background:#aec4ef"></span><span style="font-size:13.5px;color:#f3f0f8;font-weight:500">Material survival</span></div>
+            <div style="display:flex;align-items:center;gap:9px;padding-left:16px"><span style="width:8px;height:8px;border-radius:3px;background:#7ea6ec"></span><span style="font-size:13px;color:#e0d9ec">Job search</span></div>
+            <div style="display:flex;align-items:center;gap:9px;padding-left:32px"><span style="width:7px;height:7px;border-radius:3px;background:#5f88db"></span><span style="font-size:12.5px;color:#c9c3d8">GRA applications</span></div>
+            <div style="display:flex;align-items:center;gap:9px;padding-left:48px"><span style="width:16px;height:16px;border-radius:50%;border:2px solid #4f9fe0;flex:0 0 auto"></span><span style="font-size:12.5px;color:#c9c3d8">Draft the cover letter</span></div>
+            <div style="height:1px;background:#241f2e;margin:3px 0"></div>
+            <div style="display:flex;align-items:center;gap:9px"><span style="width:9px;height:9px;border-radius:3px;background:#5bb6b8"></span><span style="font-size:12.5px;color:#c9c3d8">Meditate <span style="color:#7a7490;font-size:11px">· recurring</span></span></div>
+            <div style="display:flex;align-items:center;gap:9px"><span style="width:9px;height:9px;border-radius:3px;background:#c58fce"></span><span style="font-size:12.5px;color:#c9c3d8">Rest is real labor <span style="color:#7a7490;font-size:11px">· strategy</span></span></div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- ── OPTION 1b — Luminous ── -->
+    <div id="1b" style="width:560px;background:#0e1020;border:1px solid #23263c;border-radius:20px;overflow:hidden;box-shadow:0 30px 70px rgba(0,0,0,.5)">
+      <div style="display:flex;align-items:center;justify-content:space-between;padding:20px 24px;border-bottom:1px solid #1e2138">
+        <div>
+          <div style="display:flex;align-items:center;gap:10px">
+            <span style="font-family:'JetBrains Mono',monospace;font-size:11px;font-weight:600;color:#05060e;background:#66b6f0;border-radius:6px;padding:3px 7px;letter-spacing:.05em">1b</span>
+            <span style="font-size:19px;font-weight:700;color:#f1f3fc;letter-spacing:-.01em">Luminous</span>
+          </div>
+          <div style="font-size:13px;color:#9aa1c6;margin-top:5px">Same grammar, more technofuture glow — cooler, higher energy.</div>
+        </div>
+      </div>
+
+      <!-- legend -->
+      <div style="padding:22px 24px;display:flex;flex-direction:column;gap:20px;border-bottom:1px solid #1e2138">
+        <div>
+          <div style="font-family:'JetBrains Mono',monospace;font-size:10px;letter-spacing:.16em;text-transform:uppercase;color:#656c94;margin-bottom:9px">Structure — one cool family, lightness = depth</div>
+          <div style="display:flex;border-radius:10px;overflow:hidden;border:1px solid #2c3050">
+            <div style="flex:1;height:46px;background:#a9d4f2"></div>
+            <div style="flex:1;height:46px;background:#66b6f0"></div>
+            <div style="flex:1;height:46px;background:#4a93e6"></div>
+            <div style="flex:1;height:46px;background:#43c6e8"></div>
+          </div>
+          <div style="display:flex;margin-top:6px;font-size:11px;color:#828ab0">
+            <div style="flex:1">Goal</div><div style="flex:1">Project</div><div style="flex:1">Sub-project</div><div style="flex:1">Task</div>
+          </div>
+        </div>
+        <div style="display:flex;gap:26px;flex-wrap:wrap">
+          <div>
+            <div style="font-family:'JetBrains Mono',monospace;font-size:10px;letter-spacing:.16em;text-transform:uppercase;color:#656c94;margin-bottom:9px">Execution — warm</div>
+            <div style="display:flex;gap:16px">
+              <div style="display:flex;align-items:center;gap:8px"><span style="width:22px;height:22px;border-radius:7px;background:#f28cb6"></span><span style="font-size:12px;color:#cdd2e8">rose <span style="color:#7b82a4">why</span></span></div>
+              <div style="display:flex;align-items:center;gap:8px"><span style="width:22px;height:22px;border-radius:7px;background:#f2bd6a"></span><span style="font-size:12px;color:#cdd2e8">gold <span style="color:#7b82a4">do</span></span></div>
+            </div>
+          </div>
+          <div>
+            <div style="font-family:'JetBrains Mono',monospace;font-size:10px;letter-spacing:.16em;text-transform:uppercase;color:#656c94;margin-bottom:9px">Kind</div>
+            <div style="display:flex;gap:14px">
+              <div style="display:flex;align-items:center;gap:7px"><span style="width:18px;height:18px;border-radius:6px;background:#46d0c8"></span><span style="font-size:12px;color:#cdd2e8">recurring</span></div>
+              <div style="display:flex;align-items:center;gap:7px"><span style="width:18px;height:18px;border-radius:6px;background:#e58fd6"></span><span style="font-size:12px;color:#cdd2e8">strategy</span></div>
+              <div style="display:flex;align-items:center;gap:7px"><span style="width:18px;height:18px;border-radius:6px;background:#a98bf2"></span><span style="font-size:12px;color:#cdd2e8">workstream</span></div>
+            </div>
+          </div>
+          <div>
+            <div style="font-family:'JetBrains Mono',monospace;font-size:10px;letter-spacing:.16em;text-transform:uppercase;color:#656c94;margin-bottom:9px">State</div>
+            <div style="display:flex;gap:14px">
+              <div style="display:flex;align-items:center;gap:7px"><span style="width:18px;height:18px;border-radius:6px;background:#5fe0a6"></span><span style="font-size:12px;color:#cdd2e8">done</span></div>
+              <div style="display:flex;align-items:center;gap:7px"><span style="width:18px;height:18px;border-radius:6px;background:#8a93b4"></span><span style="font-size:12px;color:#cdd2e8">blocked</span></div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- vignette -->
+      <div style="padding:22px 24px;display:flex;gap:18px;flex-wrap:wrap">
+        <div style="flex:1;min-width:230px;background:#16182c;border:1px solid #2c3050;border-radius:14px;overflow:hidden">
+          <div style="display:flex;justify-content:space-between;padding:11px 14px;border-bottom:1px solid #1e2138">
+            <span style="font-family:'JetBrains Mono',monospace;font-size:10px;letter-spacing:.12em;text-transform:uppercase;color:#656c94">Today</span>
+            <span style="font-family:'JetBrains Mono',monospace;font-size:10px;color:#656c94">Fri Jul 17</span>
+          </div>
+          <div style="padding:14px">
+            <div style="display:flex;align-items:center;gap:8px;margin-bottom:6px"><span style="width:7px;height:7px;border-radius:50%;background:#4a93e6"></span><span style="font-size:11px;font-weight:600;letter-spacing:.04em;text-transform:uppercase;color:#9aa1c6">Job search</span></div>
+            <div style="font-size:14.5px;color:#f1f3fc;line-height:1.4;padding-left:15px;margin-bottom:7px">Follow up on the GRA leads</div>
+            <div style="margin-left:15px;background:#241326;border:1px solid #4a2648;border-radius:8px;padding:8px 11px">
+              <div style="font-family:'JetBrains Mono',monospace;font-size:9.5px;letter-spacing:.1em;text-transform:uppercase;color:#8a5673;margin-bottom:3px">why this matters</div>
+              <div style="font-size:12.5px;line-height:1.4;color:#f28cb6">Income and a role that fits — not one that extracts</div>
+            </div>
+          </div>
+          <div style="height:1px;background:#1e2138;margin:0 14px"></div>
+          <div style="padding:14px">
+            <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:7px">
+              <div style="display:flex;align-items:center;gap:8px"><span style="width:7px;height:7px;border-radius:50%;background:#66b6f0"></span><span style="font-size:11px;font-weight:600;letter-spacing:.04em;text-transform:uppercase;color:#9aa1c6">Scholarly writing</span></div>
+              <span style="font-family:'JetBrains Mono',monospace;font-size:10px;color:#f2bd6a;background:#251a0e;border:1px solid #4a3618;border-radius:20px;padding:2px 8px">4h chunk</span>
+            </div>
+            <div style="font-size:13px;color:#828ab0;padding-left:15px;line-height:1.5"><span style="color:#5fe0a6">✓</span> outline done &nbsp; <span style="color:#f28cb6">→</span> <span style="color:#f1f3fc">draft §2</span> &nbsp; <span style="color:#484f6e">☐</span> revise</div>
+          </div>
+          <div style="display:flex;flex-wrap:wrap;gap:6px;padding:12px 14px;border-top:1px solid #1e2138">
+            <span style="font-size:11.5px;color:#f2bd6a;background:#251a0e;border:1px solid #4a3618;border-radius:7px;padding:5px 10px">↻ Fresh plan</span>
+            <span style="font-size:11.5px;color:#9aa1c6;background:#21243c;border:1px solid #2c3050;border-radius:7px;padding:5px 10px">Low energy</span>
+            <span style="font-size:11.5px;color:#9aa1c6;background:#21243c;border:1px solid #2c3050;border-radius:7px;padding:5px 10px">I'm stuck</span>
+          </div>
+        </div>
+        <div style="flex:1;min-width:200px;background:#16182c;border:1px solid #2c3050;border-radius:14px;overflow:hidden">
+          <div style="padding:11px 14px;border-bottom:1px solid #1e2138"><span style="font-family:'JetBrains Mono',monospace;font-size:10px;letter-spacing:.12em;text-transform:uppercase;color:#656c94">Map</span></div>
+          <div style="padding:14px;display:flex;flex-direction:column;gap:11px">
+            <div style="display:flex;align-items:center;gap:9px"><span style="width:9px;height:9px;border-radius:3px;background:#a9d4f2"></span><span style="font-size:13.5px;color:#f1f3fc;font-weight:500">Material survival</span></div>
+            <div style="display:flex;align-items:center;gap:9px;padding-left:16px"><span style="width:8px;height:8px;border-radius:3px;background:#66b6f0"></span><span style="font-size:13px;color:#dfe3f4">Job search</span></div>
+            <div style="display:flex;align-items:center;gap:9px;padding-left:32px"><span style="width:7px;height:7px;border-radius:3px;background:#4a93e6"></span><span style="font-size:12.5px;color:#cdd2e8">GRA applications</span></div>
+            <div style="display:flex;align-items:center;gap:9px;padding-left:48px"><span style="width:16px;height:16px;border-radius:50%;border:2px solid #43c6e8;flex:0 0 auto"></span><span style="font-size:12.5px;color:#cdd2e8">Draft the cover letter</span></div>
+            <div style="height:1px;background:#1e2138;margin:3px 0"></div>
+            <div style="display:flex;align-items:center;gap:9px"><span style="width:9px;height:9px;border-radius:3px;background:#46d0c8"></span><span style="font-size:12.5px;color:#cdd2e8">Meditate <span style="color:#7b82a4;font-size:11px">· recurring</span></span></div>
+            <div style="display:flex;align-items:center;gap:9px"><span style="width:9px;height:9px;border-radius:3px;background:#e58fd6"></span><span style="font-size:12.5px;color:#cdd2e8">Rest is real labor <span style="color:#7b82a4;font-size:11px">· strategy</span></span></div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+  </div>
+
+  <div style="max-width:720px;font-size:13.5px;line-height:1.6;color:#8b85a0">Both use the exact same grammar — they differ only in <b style="color:#c9c3d8;font-weight:600">temperature</b>. <a href="#1a" style="color:#86a5e6">1a</a> is quieter (better for the noise/accessibility goal); <a href="#1b" style="color:#66b6f0">1b</a> pushes the technofuture glow. Tell me which base feels right and I'll wire it through the whole app as the default skin — the other becomes a preset you can flip to.</div>
+</section>
+</x-dc>
+</body>
+</html>
+
