@@ -103,6 +103,8 @@ def today_fixed_time(item, today=None):
       day_of_week     — list of tag dicts or name strings
       time_of_day     — "HH:MM" string
       duration_min    — int (not used here; passed through by scheduler)
+      active          — bool; only consumed when interval_unit == "as_needed" (surfaces every
+                        day while True; ignored by every scheduled unit)
 
     today: date to check against (default: dt.date.today()).
     """

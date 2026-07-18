@@ -91,3 +91,14 @@ def test_recurring_items_for_today_timed_item_keeps_real_fixed_time():
 def test_recurring_items_for_today_as_needed_excluded():
     objs = [_obj("Deep clean fridge", "as_needed")]
     assert recurring_items_for_today(objs, dt.date(2026, 7, 17)) == []
+
+
+def test_recurring_items_for_today_active_as_needed_included_and_flagged():
+    # Exercises the REAL property-read path (pval("active", "checkbox")) through the actual
+    # Anytype-shaped object, not a hand-built item dict — proves the real key is wired, not just
+    # today_fixed_time's branching logic in isolation.
+    objs = [_obj("Clean the fridge", "as_needed", active={"checkbox": True})]
+    results = recurring_items_for_today(objs, dt.date(2026, 7, 17))
+    assert len(results) == 1
+    assert results[0]["name"] == "Clean the fridge"
+    assert results[0]["as_needed"] is True
