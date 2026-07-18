@@ -52,6 +52,33 @@ def _inherit_is_workstream(projects):
                 break
 
 
+def synthetic_recurring_row(obj, proj_id_to_name, duration_min, as_needed):
+    """Build the task-shaped row an untimed / persisted recurring rides through the plan on — the
+    SAME machinery a real task gets (the LLM composes/places it, a ref token resolves it,
+    completion routes to the recurring 'done for today'). Shared by load_active_items (due-today
+    untimed recurrings) and plan_generate's persistence re-injection (a missed non-appointment
+    recurring). `duration_min`/`as_needed` are passed by the caller so each call site keeps its
+    own source for them."""
+    rprops = {p.get("key"): p for p in obj.get("properties", [])}
+    proj_ids = _prop_val(rprops, "gsdo_project_link", "objects") or []
+    linked = []
+    for x in proj_ids:
+        pid = x.get("id") if isinstance(x, dict) else x
+        nm = proj_id_to_name.get(pid)
+        if nm:
+            linked.append(nm)
+    return {
+        "id": obj.get("id"), "name": obj.get("name"), "status": "Ready",
+        "duration_min": duration_min,
+        "affective": None, "access": [], "blocked_on": None,
+        "context": _prop_val(rprops, "gsdo_context", "text"),
+        "due_date": None,
+        "linked_projects": linked,
+        "is_recurring": True,
+        "as_needed": as_needed,
+    }
+
+
 def load_active_items(sid):
     """Load Goals, Projects, Tasks (Active/Needs-Clarifying), Strategies from Anytype."""
     data = g.fetch_all_objects(sid)
@@ -259,24 +286,10 @@ def load_active_items(sid):
             obj = recurring_obj_by_id.get(r["id"])
             if obj is None:
                 continue
-            rprops = {p.get("key"): p for p in obj.get("properties", [])}
-            proj_ids = _prop_val(rprops, "gsdo_project_link", "objects") or []
-            linked = []
-            for x in proj_ids:
-                pid = x.get("id") if isinstance(x, dict) else x
-                nm = proj_id_to_name.get(pid)
-                if nm:
-                    linked.append(nm)
-            tasks.append({
-                "id": r["id"], "name": r["name"], "status": "Ready",
-                "duration_min": r.get("duration_min"),
-                "affective": None, "access": [], "blocked_on": None,
-                "context": _prop_val(rprops, "gsdo_context", "text"),
-                "due_date": None,
-                "linked_projects": linked,
-                "is_recurring": True,
-                "as_needed": r.get("as_needed", False),
-            })
+            tasks.append(synthetic_recurring_row(
+                obj, proj_id_to_name,
+                duration_min=r.get("duration_min"),
+                as_needed=r.get("as_needed", False)))
 
     # Focus Period + resolved calendar facts — loaded HERE, the one seam both the terminal
     # (run) and live (plan_generate.build_context) paths call, so the feature reaches every
