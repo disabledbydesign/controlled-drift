@@ -70,12 +70,21 @@ export function bevel(T: Theme): string {
 export function appBg(T: Theme, sky?: string): string {
   const C = T.c;
   if (T.mode === 'hardware') {
-    // instrument-panel surface: top sheen + faint anodized hairlines (no repeating motif)
-    // + theme corner washes  [comment and first three layers verbatim from v4]
+    // Top sheen + theme corner washes. NO hairline grid.
+    //
+    // ⚠ DECIDED BY JUNE 2026-07-18, and this is the one place the three sources disagreed:
+    //   · the gallery COMPONENT KIT (5c) has a 26px hairline grid
+    //   · the gallery HARDWARE PHONE (4c) has NO grid at all — corner washes only
+    //   · v4 had a 29px grid plus this top sheen
+    // She said she did not like the grid, and that the backgrounds "looked like generic html
+    // every time, so we ended up taking it back out". So: follow the PHONE, keep the sheen,
+    // drop both grid layers. Her framing was build-then-revise — this is deliberately the
+    // plain version, not a final answer.
+    //
+    // PARKED CONCEPT (hers, worth not losing): "dark glass sounds cool though in concept."
+    // Revisiting the hardware backdrop is a later to-do, not a gap in the port.
     return (
       'linear-gradient(180deg,rgba(255,255,255,.035),transparent 32%),' +
-      'repeating-linear-gradient(0deg,rgba(255,255,255,.017) 0 1px,transparent 1px 29px),' +
-      'repeating-linear-gradient(90deg,rgba(255,255,255,.013) 0 1px,transparent 1px 29px),' +
       `${T.effects.ambient},${C.bg}`
     );
   }
