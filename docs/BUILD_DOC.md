@@ -130,6 +130,31 @@ directs, reviews, approves — she does not generate. Never use the AskUserQuest
   means nothing. **Always use `gsdo_anytype.fetch_all_objects(sid)`**, which pages
   `GET /spaces/{sid}/objects`. This cost two wrong claims to June in one session (that she had no
   Strategy objects, and that Focus Period was not a type).
+- **⚠ FIELD-SEMANTICS LEAK: there is a THIRD write path and it is unvalidated (found 2026-07-18).**
+  `capture_fields.py` opens by calling itself "the single source of truth for BOTH write paths"
+  (capture + memory pass). It is not — `gsdo_objects.create/update` accept **arbitrary
+  `properties={name: value}` with no content validation**, and `cd_mcp_server.py` passes agent
+  input straight through. So any agent writing directly (including via the `drift` skill) bypasses
+  every rule the validator enforces.
+
+  **Observed damage:** of 14 populated `Affective` values in June's space, the ones written by
+  agents are status/findings, not affect — *"Portal down as of 2026-07-08 — blocked on that, not
+  on June"*, *"Confirmed 2026-07-02: screen does NOT allow AI tools."* That content belongs in
+  `Blocked on` and `Context`, both of which exist.
+
+  **June's field model (2026-07-18), the one agents must follow:**
+  - `Affective` — **affective conditions only**: "I'm stressed about this," "I'm putting it off,"
+    "I'm hyperfixated." Her feelings about the item.
+  - `Access notes` — extends the access-condition TAGS in open text. Currently unpopulated.
+  - `Blocked on` — blockers.
+  - `Context` — findings, confirmations, everything else.
+
+  **Not yet fixed.** The proximate fix is to route agent writes through `capture_fields`-style
+  validation; the structural fix is that field semantics live only in the capture prompt, where a
+  direct-writing agent never sees them. Note the capture PROMPT is already correct — it says
+  *"how June feels about THIS item, in her words ('dreading it')... Never a number or rating."*
+  The prompt is not the problem; its reach is.
+
 - **Frontend dev-loop gotchas (2026-07-18).**
   - `agent-browser screenshot` **hangs indefinitely** — reproduced at the raw CDP layer on a blank
     page in fresh headless Chrome, so it is environmental, not app-related. **Do not debug it.**
