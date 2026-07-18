@@ -124,6 +124,20 @@ directs, reviews, approves — she does not generate. Never use the AskUserQuest
   properties*. Creating something whose name matches an existing object silently no-ops the fields.
   Tracked in `docs/create_vs_update_design.md`.
 - **Anytype schema tag/property DELETE is async** — poll until gone; `find_property` caches.
+- **⚠ RENAME A SELECT OPTION BEFORE running the builder that lists the new name (hit 2026-07-18).**
+  `ensure_select_options` adds any missing option **by NAME**. So running a `build_*.py` whose
+  option list already says the new name, while the old name is still live, does not rename
+  anything — it **creates a second, empty option** and leaves the space split between two tags
+  meaning the same thing. Correct order: rename the tag in place first, *then* run the builder
+  (which then finds the new name and no-ops). Recovery if you get it backwards: the new tag is
+  referenced by zero objects, so delete it (poll until gone) and rename the original.
+- **A select value is stored on the object as a TAG ID, not a string** — so renaming an option is a
+  single tag write that changes what every object displays, with no object touched and no
+  half-migrated state. `PATCH /spaces/{sid}/properties/{pid}/tags/{tid}` `{"name": ...}`. Prefer
+  this over re-tagging objects. Anytype keeps the tag's internal key stable across a rename, so
+  the key can end up disagreeing with the display name (live example: the tag displaying
+  `Fun / hobby` has key `wellbeing`, and `Work` has key `obligation`). **Never match a select by
+  its key** — and note keys are not unique, `Wellbeing` and `Fun / hobby` share `wellbeing`.
 - **⚠ `POST /spaces/{sid}/search` RETURNS A BROKEN SUBSET.** A `query:""` search returned 99 Tasks
   and 1 Page from a space that actually holds **296 objects across 9 types** — no Goals, no
   Projects, no Strategies. It silently under-reports rather than erroring, so "0 results" from it
@@ -219,8 +233,9 @@ already landed several sections**, and re-deriving from the spec alone would dup
 |---|---|---|
 | §2 Recurring mirrors Task | ✅ **LIVE** | Recurring has all 7 mirrored fields; `Has target`/`Target` gone. Built by the parallel thread (c0850ad). |
 | §3 `Active` flag | ✅ schema live | Plus a `Fixed appointment` checkbox the parallel thread added. Scheduler wiring not audited. |
-| §4 block-level attrs | 🔶 **PARTIAL** | Project has `Affective` + `Block chunk min`. **`Access conditions` is MISSING on Project.** The shared `effective()` resolver on the Python side is unaudited (the TypeScript one exists in `app/src/model/fields.ts`). |
-| §6 access-condition options | ❌ **NOT DONE** | Live tags are only the original three. Missing `Requires-deep-thinking`, `Involves-bureaucracy`, `Induces-pain`. |
+| §4 block-level attrs | 🔶 **PARTIAL** | Project now has `Affective`, `Block chunk min` **and `Access conditions`** (added + read-back-confirmed live 2026-07-18). Still unaudited: the shared `effective()` resolver on the Python side (the TypeScript one exists in `app/src/model/fields.ts`), and nothing yet READS Project-level access conditions. |
+| §6 access-condition options | ✅ **LIVE 2026-07-18** | All six tags confirmed live: the original three plus `Requires-deep-thinking`, `Involves-bureaucracy`, `Induces-pain`. Shared key across Task / Recurring / Project. ⚠ `Induces-pain` is a tag, never a scalar (guard #3). Do not add more without the §2 earns-its-place judgement — unnamed conditions go in `Access notes`. |
+| §12 `Side`: Obligation → Work | ✅ **LIVE 2026-07-18** | Renamed **in place on the tag**, so all 15 objects kept their tag id and no object value was rewritten; all 15 read back as `Work`. Review sheet: `docs/side_rename_2026-07-18_review.md`. ⚠ The tag's internal key is still `obligation` — cosmetic, nothing reads it. `daily_plan.NON_HOBBY_SIDES` now accepts both names. |
 | §9 Strategy | ✅ **DECIDED 2026-07-18 — no schema change** | See "Strategy decision" below. |
 | §17 Focus Period | ⬜ likely a real schema change | ⚠ **CORRECTION 2026-07-18:** Focus Period IS an Anytype type with **7 live objects**. An earlier note here said it was not — that came from reading `describe_model.py`, which reports only the five core types. `workday_start` is probably a genuine schema addition. Verify with `fetch_all_objects`, not `describe_model.py`. |
 | §1 write layer · §5 type conversion · §14 Today deltas · §11 logging | ⬜ not started | The bulk of Track B. |

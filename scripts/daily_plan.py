@@ -1052,6 +1052,14 @@ def include_hobby_block():
     except (FileNotFoundError, json.JSONDecodeError):
         return HOBBY_BLOCK_DEFAULT
 
+# Side values that mean "this is NOT self-directed hobby work", so a task linked to such a project
+# stays schedulable even when it is also linked to a Fun/hobby one. Side is matched by its DISPLAY
+# name, so a renamed option has to be listed here or the match silently stops firing. "Obligation"
+# was renamed to "Work" on 2026-07-18 (backend spec §12); the old name is kept alongside the new one
+# so any not-yet-refreshed cache, fixture or export still classifies correctly.
+NON_HOBBY_SIDES = ("Work", "Obligation", "Wellbeing")
+
+
 def partition_by_side(tasks, projects):
     """Split tasks into (schedulable, hobby_excluded).
 
@@ -1074,7 +1082,7 @@ def partition_by_side(tasks, projects):
             schedulable.append(t)  # necessary rest always stays, whatever it's linked to
             continue
         sides = [side_by_name.get(pn) for pn in (t.get("linked_projects") or [])]
-        is_hobby = any(s == "Fun / hobby" for s in sides) and not any(s in ("Obligation", "Wellbeing") for s in sides)
+        is_hobby = any(s == "Fun / hobby" for s in sides) and not any(s in NON_HOBBY_SIDES for s in sides)
         (hobby_excluded if is_hobby else schedulable).append(t)
     return schedulable, hobby_excluded
 

@@ -32,6 +32,22 @@ def test_wellbeing_work_now_stays_in_the_plan():
     assert wellbeing == []
 
 
+def test_work_is_the_renamed_obligation_and_still_counts_as_non_hobby():
+    """The live "Obligation" option was renamed to "Work" on 2026-07-18 (backend spec §12).
+
+    partition_by_side matches Side by its DISPLAY name, so the rename could have silently stopped
+    the match from firing — a task linked to both a Work project and a Fun/hobby one would then
+    have been misread as pure hobby work and held out of the plan. Both names are accepted."""
+    projects = [{"name": "Job Search", "side": "Work"},
+                {"name": "Autograder", "side": "Fun / hobby"}]
+    tasks = [{"name": "apply Acme", "linked_projects": ["Job Search"]},
+             {"name": "dual", "linked_projects": ["Autograder", "Job Search"]},
+             {"name": "hack on autograder", "linked_projects": ["Autograder"]}]
+    schedulable, hobby = dp.partition_by_side(tasks, projects)
+    assert [t["name"] for t in schedulable] == ["apply Acme", "dual"]
+    assert [t["name"] for t in hobby] == ["hack on autograder"]
+
+
 def test_mixed_side_task_stays_schedulable():
     # links to BOTH a fun/hobby and an obligation project → schedulable (survival-relevant)
     tasks = [{"name": "dual", "linked_projects": ["Autograder", "Job Search"]}]

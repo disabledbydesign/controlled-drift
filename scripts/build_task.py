@@ -19,9 +19,17 @@ def build_task():
                                      ["Ready", "In Design", "Parked", "Needs Clarifying", "Blocked", "Done"])
     p_blocked    = g.ensure_property("Blocked on", "text")
     p_affective  = g.ensure_property("Affective", "text")           # reused; capacity signal, never a scalar
+    # Access conditions — the queryable access/capacity tags. A condition earns a TAG only when it
+    # is both queryable and load-bearing for planning (AI_LAYER_SPEC §2); everything else stays in
+    # the free-text "Access notes" and feeds the promotion loop. The three added 2026-07-18 were
+    # promoted deliberately (backend spec §6) — do not add more without that same judgement.
+    # ⚠ Induces-pain is the physical-pain cost of doing the task: a capacity signal, and a TAG,
+    # never a 1-5 scalar (guard #3).
     p_access     = g.ensure_property("Access conditions", "multi_select",
                                      ["Can-be-done-lying-down", "Involves-leaving-house",
-                                      "Requires-talking-to-a-person"])
+                                      "Requires-talking-to-a-person",
+                                      "Requires-deep-thinking", "Involves-bureaucracy",
+                                      "Induces-pain"])
     p_access_nts = g.ensure_property("Access notes", "text")  # open annotations → §6 promotion loop
     p_autonomous = g.ensure_property("AI autonomous", "checkbox")
     p_docs       = g.ensure_property("Relevant docs", "text")       # reused

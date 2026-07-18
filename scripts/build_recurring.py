@@ -26,7 +26,9 @@ def build_recurring():
     p_affective  = g.ensure_property("Affective", "text")             # build_task.py:21 — capacity signal, NEVER scalar-flatten (guard #3)
     p_access     = g.ensure_property("Access conditions", "multi_select",
                                      ["Can-be-done-lying-down", "Involves-leaving-house",
-                                      "Requires-talking-to-a-person"])  # build_task.py:22-24 verbatim
+                                      "Requires-talking-to-a-person",
+                                      "Requires-deep-thinking", "Involves-bureaucracy",
+                                      "Induces-pain"])  # build_task.py verbatim
     p_access_nts = g.ensure_property("Access notes", "text")           # build_task.py:25
     p_autonomous = g.ensure_property("AI autonomous", "checkbox")      # build_task.py:26
     p_docs       = g.ensure_property("Relevant docs", "text")          # build_task.py:27
