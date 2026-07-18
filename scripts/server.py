@@ -10,6 +10,7 @@ Routes:
   GET  /                serve the overlay (docs/overlay_daily.html) — June's daily surface, untouched
   GET  /app/*           serve the NEW surface's built bundle (app/dist) — runs ALONGSIDE "/"
   GET  /api/schema      relation vocabularies (live) + per-level controls/notes + field semantics
+  GET  /api/tree        the whole live object graph as nested nodes + the orphan buckets
   GET  /api/plan        the cached daily plan (JSON) — instant, no LLM
   GET  /api/map         orient_map.render_map(...) verbatim (text) — deterministic, no LLM
   GET  /api/actions     the variable button schema (JSON)
@@ -56,6 +57,7 @@ import block_duration
 import gsdo_anytype as g
 import cd_paths
 import api_schema
+import api_tree
 
 # The LLM backends the overlay can switch between live (mirrors plan_generate's accepted set).
 # June changes this from the gear panel without restarting; the choice persists in settings.json.
@@ -497,6 +499,16 @@ class Handler(BaseHTTPRequestHandler):
                 self._send(200, api_schema.build_schema())
             except Exception as e:
                 self._send(500, {"error": f"schema read failed: {e}"})
+            return
+
+        if urlparse(self.path).path == "/api/tree":
+            # The Review tab's whole content. Same failure posture as /api/schema: a live-read
+            # failure must be a visible 500, never a partial tree — and `api_tree` itself raises
+            # rather than returning a graph that quietly lost objects.
+            try:
+                self._send(200, api_tree.build_tree())
+            except Exception as e:
+                self._send(500, {"error": f"tree read failed: {e}"})
             return
 
         if self.path == "/app" or self.path.startswith("/app/"):

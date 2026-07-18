@@ -147,6 +147,37 @@ def test_get_schema_failure_is_a_visible_500_not_a_stub(live_server, monkeypatch
         assert e.code == 500 and "anytype unreachable" in e.read().decode()
 
 
+def test_get_tree_route(live_server, monkeypatch):
+    base, _ = live_server
+    monkeypatch.setattr(server.api_tree, "build_tree",
+                        lambda: {"nodes": [{"id": "g1", "level": "GOAL", "type": "Goal",
+                                            "title": "Material survival", "vals": {},
+                                            "children": []}],
+                                 "strategies": [],
+                                 "orphans": {"orphan_tasks": {"label": "x", "nodes": []}},
+                                 "counts": {"objects_fetched": 1}})
+    status, body = _get(base, "/api/tree")
+    assert status == 200
+    payload = json.loads(body)
+    assert payload["nodes"][0]["level"] == "GOAL"
+    assert set(payload) >= {"nodes", "strategies", "orphans", "counts"}
+
+
+def test_get_tree_failure_is_a_visible_500_not_a_partial_tree(live_server, monkeypatch):
+    """A tree that quietly lost objects is the exact failure the orphan buckets exist to
+    prevent, so a read failure must surface — never degrade to a shorter tree."""
+    base, _ = live_server
+
+    def boom():
+        raise RuntimeError("2 object(s) would be dropped")
+    monkeypatch.setattr(server.api_tree, "build_tree", boom)
+    try:
+        _get(base, "/api/tree")
+        assert False, "expected 500"
+    except urllib.error.HTTPError as e:
+        assert e.code == 500 and "would be dropped" in e.read().decode()
+
+
 # --- the new surface's bundle at /app/ --------------------------------------
 
 @pytest.fixture
