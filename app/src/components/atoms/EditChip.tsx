@@ -4,6 +4,15 @@ export interface EditChipProps {
   T: Theme;
   /** v4 dispatched `up({detail:id,_returnFrom:'today'})` here; the caller now owns that. */
   onClick: () => void;
+  /**
+   * The visible word. Defaults to v4's `edit`, which is what `CheckPage`'s atom gallery still
+   * shows. `RowActions` passes `open editor` instead: on a plan row the word `edit` now belongs
+   * to the timing trigger (June's ruling), and two controls saying it was the collision this
+   * prop exists to end. The SHAPE is the point of reusing this component — the bordered box is
+   * already this codebase's way of saying "through to the object editor", as against the
+   * underlined text of the controls that write in place.
+   */
+  label?: string;
 }
 
 /**
@@ -22,7 +31,7 @@ export interface EditChipProps {
  * Vertical padding is capped at 3px for the reason given in `RoundCheck`: `TaskRow`'s ~26px row
  * pitch means anything taller overlaps the neighbouring row.
  */
-export function EditChip({ T, onClick }: EditChipProps) {
+export function EditChip({ T, onClick, label = 'edit' }: EditChipProps) {
   const C = T.c;
   return (
     <button
@@ -52,7 +61,7 @@ export function EditChip({ T, onClick }: EditChipProps) {
           padding: '2px 9px',
         }}
       >
-        edit
+        {label}
       </span>
     </button>
   );

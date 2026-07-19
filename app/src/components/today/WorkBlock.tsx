@@ -1,5 +1,5 @@
 import type { PlanBlockItem } from "../../fixtures/index.ts";
-import { EditChip, TaskCheck } from "../atoms/index.ts";
+import { TaskCheck } from "../atoms/index.ts";
 import { ArcStep } from "./ArcStep.tsx";
 import { RowActions } from "./RowActions.tsx";
 import type { TodayCtx } from "./types.ts";
@@ -130,9 +130,12 @@ export function WorkBlock({
         </span>
         {/* Inline in the row (A1). `kind="block"` is load-bearing twice over: the removal drops
             every row of the project, and the length control says "chunk length" rather than
-            "duration" — how long she works on this in a sitting, not how long one thing takes. */}
+            "duration" — how long she works on this in a sitting, not how long one thing takes.
+
+            A5 — the row's own `EditChip` is gone from here for the reason given in `TaskRow`:
+            it put the word `edit` on this line twice. The way into the block's object editor is
+            now the fourth item inside the panel, dispatching on this same project id. */}
         <RowActions ctx={ctx} id={item.id} kind="block" durationMin={item.chunkMin} />
-        <EditChip T={ctx.T} onClick={() => ctx.openDetail(item.id)} />
       </div>
       {open ? (
         <div

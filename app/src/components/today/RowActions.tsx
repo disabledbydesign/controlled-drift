@@ -10,11 +10,18 @@
  *
  * A4 · THE WORD IS `edit`, the title is `edit timing`. Transcribed from the old surface
  *      (`docs/overlay_daily.html:2128`). "when" was the rebuild's invention and she rejected it.
- *      ⚠ THIS COLLIDES, AND THE COLLISION IS REPORTED RATHER THAN SILENTLY RESOLVED: the v4
- *      mockup's `EditChip` already renders the visible word "edit" on the same row line, and it
- *      opens the object editor. The old surface had no such chip, so the word was free there and
- *      is not free here. Both are labelled `edit` until June rules on it; they are separated for
- *      assistive tech by `aria-label` ("edit timing" vs "open editor") and by `title`.
+ *      ⚠ IT COLLIDED, AND JUNE RULED — see A5. The v4 mockup's `EditChip` rendered the same
+ *      visible word on the same row line and opened the object editor; the old surface had no
+ *      such chip, so the word was free there and was not free here.
+ *
+ * A5 · ONE `edit` PER ROW. Her ruling: *"Maybe we make the detail view another item in the edit
+ *      menu?"*, and against the alternative of renaming the chip `details`: *"the details page
+ *      was designed so i could edit it."* Both controls genuinely edit, so a rename could not
+ *      resolve it. The row's `EditChip` is gone from `TaskRow` and `WorkBlock`; the route into
+ *      the object editor is the fourth item in this panel, labelled `open editor`.
+ *      ⚠ This costs one tap. She chose that knowingly, on a phone surface, over one word
+ *      meaning two things. `EditChip` itself is NOT deleted — `CheckPage`'s atom gallery renders
+ *      it, and its default word is still `edit`.
  *
  * A1 · THE TRIGGER IS INLINE IN THE ROW, and opening the panel does not move anything.
  *      The inline trigger is TRANSCRIBED — the old surface called `editChipHtml` inside
@@ -65,6 +72,7 @@ import { useState } from 'react';
 import type { FormEvent } from 'react';
 import type { PlanItem } from '../../fixtures/index.ts';
 import { node } from '../../model/index.ts';
+import { EditChip } from '../atoms/index.ts';
 import { moveOptions } from './moveTargets.ts';
 import type { MoveRefusal } from './moveTargets.ts';
 import type { TodayCtx } from './types.ts';
@@ -289,6 +297,31 @@ export function RowActions({ ctx, id, kind, durationMin }: RowActionsProps) {
         )}
 
         {chip('not today', () => ctx.notToday(id, kind))}
+
+        {/**
+         * A5 — THE FOURTH ITEM IS THE WAY THROUGH TO THE OBJECT EDITOR, and it is the only one
+         * here that does not write. The row used to carry `EditChip` beside this trigger, which
+         * put the word `edit` on the line twice; June's ruling was to fold that route in here
+         * rather than rename it, because the editor pane is a surface she edits IN, so `details`
+         * would have been an untrue name for it.
+         *
+         * It keeps `EditChip`'s bordered box — the shape this codebase already uses for "through
+         * to the object editor" — precisely so it does not read like the three underlined text
+         * controls above, which all mutate in place. No new visual vocabulary was introduced;
+         * only the word changed, and it says where it goes rather than what it does.
+         *
+         * The panel closes on the way out: she is leaving this surface, and coming back into a
+         * panel she has finished with is not what leaving meant.
+         */}
+        <EditChip
+          T={ctx.T}
+          label="open editor"
+          onClick={() => {
+            closePanel();
+            ctx.openDetail(id);
+          }}
+        />
+
         {chip('close', closePanel)}
       </div>
     </span>

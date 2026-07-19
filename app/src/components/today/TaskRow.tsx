@@ -1,6 +1,6 @@
 import type { PlanTaskItem } from '../../fixtures/index.ts';
 import { nearestProject, node, planItemDone, toggleDone } from '../../model/index.ts';
-import { EditChip, RoundCheck } from '../atoms/index.ts';
+import { RoundCheck } from '../atoms/index.ts';
 import { RowActions } from './RowActions.tsx';
 import { movingRowStyle, planDrag } from './placement.ts';
 import { moveOptions } from './moveTargets.ts';
@@ -176,10 +176,13 @@ export function TaskRow({ ctx, item, entryKey, showProj }: TaskRowProps) {
         {/* A1 — INLINE IN THE ROW, as the old surface had it (`editChipHtml` inside `.item-top`,
             `docs/overlay_daily.html:2236`). It no longer occupies a line of its own: that line was
             added to EVERY row of a phone list, and the panel it opened pushed the rows below it
-            down. The panel is now a floating pane anchored to this trigger. `EditChip` stays what
-            it is — the way into the object editor. */}
+            down. The panel is now a floating pane anchored to this trigger.
+
+            A5 — THE ROW'S `EditChip` IS GONE FROM HERE. It rendered the word `edit` on this same
+            line, beside a trigger June ruled must also say `edit`. The route into the object
+            editor is not lost: it is the fourth item inside the panel (`RowActions`), which
+            costs one tap and is what she chose over two controls sharing a word. */}
         <RowActions ctx={ctx} id={item.id} kind="task" durationMin={item.durationMin} />
-        <EditChip T={ctx.T} onClick={() => ctx.openDetail(item.id)} />
       </div>
       {held.length && heldOpen ? (
         <div style={{ paddingLeft: '78px', marginTop: '3px' }}>

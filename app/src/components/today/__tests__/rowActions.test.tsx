@@ -27,6 +27,7 @@
 
 import { afterEach, describe, expect, it } from 'vitest';
 import { cleanup, fireEvent, render, screen } from '@testing-library/react';
+import { EditChip } from '../../atoms/index.ts';
 import { RowActions } from '../RowActions.tsx';
 import { PriorityList } from '../PriorityList.tsx';
 import { TaskRow } from '../TaskRow.tsx';
@@ -108,17 +109,24 @@ describe('A1 — the panel expands without knocking anything around', () => {
     expect(panel().style.right).toBe('0px');
   });
 
-  /** The trigger sits IN the row's own line, as `editChipHtml` did inside `.item-top`. */
-  it('puts the trigger on the row’s own line, beside the editor chip', () => {
+  /**
+   * The trigger sits IN the row's own line, as `editChipHtml` did inside `.item-top`.
+   *
+   * ⚠ This used to anchor the assertion to the row's `EditChip`, which shared the line. That
+   * chip is gone from the row (A5), so the anchor is now the row's CHECK — which is
+   * unambiguously on the row's own line and is not going anywhere.
+   */
+  it('puts the trigger on the row’s own line, beside the check', () => {
     const plan = freshPlan();
     const task = plan.blocks.flatMap((b) => b.items).find((it) => it.kind === 'task')!;
     const { ctx } = ctxWith({}, plan);
     render(<TaskRow ctx={ctx} item={task as never} entryKey="0-0" showProj />);
     const trigger = screen.getByLabelText('edit timing');
-    const editor = screen.getByLabelText('open editor');
-    // Same containing line ⇒ the trigger did not get its own row. Named positively on both sides.
-    expect(trigger.closest('[data-row-line]')).toBe(editor.closest('[data-row-line]'));
-    expect(trigger.closest('[data-row-line]')).toBeTruthy();
+    const line = trigger.closest('[data-row-line]');
+    expect(line).toBeTruthy();
+    // Named positively on both sides: the line the trigger is on is the line the check is on.
+    expect(line!.contains(screen.getByLabelText('mark done'))).toBe(true);
+    expect(line!.textContent).toContain('edit');
   });
 });
 
@@ -501,5 +509,139 @@ describe('reaching the real rows', () => {
     render(<PriorityList ctx={ctx} />);
     fireEvent.click(screen.getByText('not today'));
     expect(notToday).toHaveBeenCalledWith('l3pdzq', 'block');
+  });
+});
+
+/**
+ * ── ONE `edit` PER ROW ───────────────────────────────────────────────────────
+ *
+ * June ruled the timing trigger back to the word `edit` (A4). The v4 rebuild's `EditChip`
+ * already rendered that same word on the same line and opened the object editor, so the row
+ * carried the word twice, separated only by `aria-label`.
+ *
+ * Her decision, in her words: *"Maybe we make the detail view another item in the edit menu?"*
+ * — and, when renaming the other chip to `details` was offered instead, *"the details page was
+ * designed so i could edit it."* Both controls genuinely edit, so renaming one cannot resolve
+ * it; one of them has to stop being a row control.
+ *
+ * ⚠ This costs a tap to reach the editor. That is a known, accepted trade she chose knowingly,
+ * on a surface whose primary use is a phone.
+ *
+ * The editor item is a NAVIGATION among three controls that write in place. It therefore keeps
+ * the codebase's existing vocabulary for "the way into the object editor" — `EditChip`'s
+ * bordered box — rather than the underlined text of the three that mutate. No new visual
+ * vocabulary was introduced.
+ */
+describe('one `edit` per row — the object editor moved into the panel', () => {
+  /** Every button on screen whose whole word is `edit`. Counting buttons, not text nodes, so a
+   *  chip's inner span cannot be double-counted as a second control. */
+  function editButtons(container: HTMLElement): HTMLElement[] {
+    return Array.from(container.querySelectorAll('button')).filter(
+      (b) => (b.textContent || '').trim() === 'edit',
+    );
+  }
+
+  function firstTask() {
+    const plan = freshPlan();
+    return plan.blocks.flatMap((b) => b.items).find((it) => it.kind === 'task')!;
+  }
+
+  function firstBlock() {
+    const plan = freshPlan();
+    return plan.blocks.flatMap((b) => b.items).find((it) => it.kind === 'block')!;
+  }
+
+  it('a task row carries the word edit exactly once, and it is the timing trigger', () => {
+    const plan = freshPlan();
+    const { ctx } = ctxWith({}, plan);
+    const { container } = render(
+      <TaskRow ctx={ctx} item={firstTask() as never} entryKey="0-0" showProj />,
+    );
+    const found = editButtons(container);
+    expect(found).toHaveLength(1);
+    expect(found[0]!.getAttribute('aria-label')).toBe('edit timing');
+  });
+
+  it('a work block row carries the word edit exactly once, and it is the timing trigger', () => {
+    const plan = freshPlan();
+    const { ctx } = ctxWith({}, plan);
+    const { container } = render(
+      <WorkBlock
+        ctx={ctx}
+        item={firstBlock() as never}
+        entryKey="0-0"
+        bandIndex={0}
+        itemIndex={0}
+      />,
+    );
+    const found = editButtons(container);
+    expect(found).toHaveLength(1);
+    expect(found[0]!.getAttribute('aria-label')).toBe('edit timing');
+  });
+
+  it('the panel opens the object editor for THIS row', () => {
+    const { ctx, openDetail } = ctxWith({ editOpen: { t1: true } });
+    render(<RowActions ctx={ctx} id="t1" kind="task" durationMin={0} />);
+    fireEvent.click(screen.getByLabelText('open editor'));
+    expect(openDetail).toHaveBeenCalledWith('t1');
+  });
+
+  /** A block's panel dispatches on the PROJECT id it was given — the same id its removal and
+   *  its chunk length use. Asserted separately so the two kinds cannot be confused. */
+  it('the panel opens the object editor for a BLOCK row’s own object', () => {
+    const { ctx, openDetail } = ctxWith({ editOpen: { p9: true } });
+    render(<RowActions ctx={ctx} id="p9" kind="block" durationMin={0} />);
+    fireEvent.click(screen.getByLabelText('open editor'));
+    expect(openDetail).toHaveBeenCalledWith('p9');
+  });
+
+  it('says open editor in words, not only to assistive tech', () => {
+    const { ctx } = ctxWith({ editOpen: { t1: true } });
+    render(<RowActions ctx={ctx} id="t1" kind="task" durationMin={0} />);
+    expect(screen.getByText('open editor')).toBeTruthy();
+  });
+
+  /**
+   * A1 must not regress. The editor item is INSIDE the floating pane, so it is subject to the
+   * same `position:absolute` that keeps the rows below from moving — it cannot have added a
+   * line of height to the row.
+   */
+  it('puts the editor item inside the floating pane, not back in the row', () => {
+    const { ctx } = ctxWith({ editOpen: { t1: true } });
+    render(<RowActions ctx={ctx} id="t1" kind="task" durationMin={0} />);
+    expect(panel().contains(screen.getByLabelText('open editor'))).toBe(true);
+    expect(panel().style.position).toBe('absolute');
+  });
+
+  /** Leaving for another screen closes what she opened here, so returning does not land her in
+   *  a panel she has finished with. */
+  it('closes the panel when she leaves for the editor', () => {
+    const { ctx, up } = ctxWith({ editOpen: { t1: true } });
+    render(<RowActions ctx={ctx} id="t1" kind="task" durationMin={0} />);
+    fireEvent.click(screen.getByLabelText('open editor'));
+    expect(up).toHaveBeenCalledWith({ editOpen: {} });
+  });
+
+  /**
+   * It is a navigation, and it must not read as one of the three writes. The three that mutate
+   * are underlined text; this one is the bordered box the codebase already uses for the way into
+   * the editor. Both sides asserted positively.
+   */
+  it('does not dress the editor item like the controls that write in place', () => {
+    const { ctx } = ctxWith({ editOpen: { t1: true } });
+    render(<RowActions ctx={ctx} id="t1" kind="task" durationMin={0} />);
+    expect(screen.getByText('not today').style.textDecoration).toBe('underline');
+    const editor = screen.getByText('open editor');
+    expect(editor.style.textDecoration).toBe('');
+    expect(editor.style.border).toContain('1px solid');
+  });
+
+  /** `EditChip` is still a live atom — `CheckPage`'s gallery renders it and its default word is
+   *  unchanged. Removing it from the plan rows must not have removed it from the codebase. */
+  it('leaves EditChip itself intact for its other caller', () => {
+    const { ctx } = ctxWith();
+    const { container } = render(<EditChip T={ctx.T} onClick={() => {}} />);
+    expect(editButtons(container)).toHaveLength(1);
+    expect(screen.getByLabelText('open editor')).toBeTruthy();
   });
 });

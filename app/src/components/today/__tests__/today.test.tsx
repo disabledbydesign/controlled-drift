@@ -366,8 +366,14 @@ describe('the theme SHAPE fork', () => {
 });
 
 describe('navigation out of Today', () => {
-  it('the edit chip opens the detail editor for that item', () => {
-    const { ctx, openDetail } = ctxWith();
+  /**
+   * ⚠ REACHED THROUGH THE PANEL NOW (A5). The row used to carry its own `EditChip`; it said
+   * `edit`, and so does the timing trigger June ruled back into the row, so one of the two had
+   * to stop being a row control. The destination is unchanged — this still asserts that the
+   * plan row reaches the object editor for its own id.
+   */
+  it('the panel opens the detail editor for that item', () => {
+    const { ctx, openDetail } = ctxWith({ editOpen: { l3pdzq: true } });
     render(<TodayPanel ctx={ctx} />);
     fireEvent.click(screen.getAllByLabelText('open editor')[0]!);
     expect(openDetail).toHaveBeenCalledWith('l3pdzq');
