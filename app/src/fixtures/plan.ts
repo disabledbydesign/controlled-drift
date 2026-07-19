@@ -14,6 +14,9 @@ export const seedPlan: Plan = {
   date: 'Wed Jul 16',
   generated: 'Built this morning at 9:02.',
   shape: 'schedule',
+  // v4's fixture predates the server's `header` line and has no equivalent of it. Empty rather
+  // than invented — a made-up reason in the fixture is exactly what the real one replaces.
+  header: '',
   woven:
     'Two threads carry today: the scholarly work that’s nearly closed out, and keeping the material floor intact. The papers that just need finishing go first while focus is high; job-search outreach takes the lower-stakes afternoon. Creative and build work isn’t scheduled — it’s on the Map when you want it.',
   blocks: [

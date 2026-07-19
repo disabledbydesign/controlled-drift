@@ -430,7 +430,7 @@ function emptyGraph(): Graph {
 
 /** An empty plan, for the same reason. */
 function emptyPlan(): Plan {
-  return { date: '', generated: '', shape: 'schedule', woven: '', blocks: [] };
+  return { date: '', generated: '', shape: 'schedule', header: '', woven: '', blocks: [] };
 }
 
 /**

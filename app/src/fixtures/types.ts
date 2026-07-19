@@ -206,7 +206,21 @@ export interface PlanBlock {
 export interface Plan {
   date: string;
   generated: string;
-  shape: string;
+  /**
+   * ⚠ Narrowed from `string` 2026-07-18. As a bare string, `shape === 'schedule'` typechecked
+   * against any value, so a wire-word change or a typo would silently render every plan — clock
+   * plans included — through the wrong branch, permanently and with no error.
+   *
+   * NOTE the two names for one shape: the backend writes `"clock"` (`plan_generate.py:1398`);
+   * `adapt.ts` normalizes it to `'schedule'`. Follow both call sites before changing either.
+   */
+  shape: 'priority' | 'schedule';
+  /**
+   * The server's one-line statement of what today's shape is and why (`plan_generate.py:361`).
+   * The ONLY honest source for that reason: `resolve_output_shape` reaches `priority` by more
+   * than one path, so anything the client composes locally would assert a cause it cannot know.
+   */
+  header: string;
   woven: string;
   blocks: PlanBlock[];
 }

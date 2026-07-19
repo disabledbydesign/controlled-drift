@@ -109,6 +109,8 @@ interface LivePlanItem {
 export interface LivePlan {
   woven_frame?: string;
   shape?: string;
+  /** One line naming what today's shape is and why (`plan_generate.py:361`). */
+  header?: string;
   blocks?: { label: string; time: string; framing: string; items: LivePlanItem[] }[];
   items?: LivePlanItem[];
   appointments?: LivePlanItem[];
@@ -205,6 +207,11 @@ export function planFromLive(live: LivePlan): Plan {
     // fabricating "Built this morning at 9:02."
     generated: '',
     shape,
+    // The server's own reason for that shape, carried verbatim. NOT composed here: the client
+    // cannot know which branch of `resolve_output_shape` produced the shape, so a locally
+    // written sentence would sometimes assert a cause that is not the cause. Absent becomes
+    // `''` — never the string "undefined" on a surface she reads.
+    header: String(live.header ?? ''),
     woven: live.woven_frame ?? '',
     blocks,
   };
