@@ -18,6 +18,7 @@ import {
 } from '../screens/index.ts';
 import { starfield } from '../theme/starfield.ts';
 import { SignalBar } from './SignalBar.tsx';
+import { nativeResize } from './native.ts';
 import type { AppTab } from './tabs.ts';
 import type { Surface as SurfaceType } from './useSurface.ts';
 
@@ -156,6 +157,15 @@ export function DeskShell({ T, surface }: DeskShellProps) {
       if (drag.current) document.body.style.cursor = '';
     };
   }, [up, ui.widths]);
+
+  // ── native window resize — v4:733 per-tab W, onto the real OS window ──────
+  // Inert in a browser (`native.ts` no-ops without `?native=1`). In the pywebview desktop app
+  // it animates the whole window to the tab's width the way v4 animated its frame div. `ui.detail`
+  // widens Today/Add 392→872, the SAME condition the browser's max-width uses below (594). Fires
+  // on mount too, so the first tab sizes correctly.
+  useEffect(() => {
+    nativeResize(tab, !!ui.detail);
+  }, [tab, ui.detail]);
 
   /**
    * v4 `dragHandle(wkey, rkey)` (718) — the 7px column divider.

@@ -47,3 +47,9 @@ docs/handoff_2026-07-13_review_surface_pass.md
 docs/*_migration_*_review.md
 docs/context_cleanup_*_review.md
 docs/side_rename_*_review.md
+Controlled Drift.app/
+scripts/desktop/AppIcon.iconset/
+scripts/desktop/icon_master.png
+scripts/desktop/appicon.icns
+scripts/desktop/__pycache__/
+scripts/__pycache__/

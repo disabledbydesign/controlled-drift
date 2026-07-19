@@ -3,6 +3,7 @@ import type { Theme, ThemeName } from '@tokens';
 import { AppShell } from './AppShell.tsx';
 import { DeskShell } from './DeskShell.tsx';
 import { useSurface } from './useSurface.ts';
+import { isNative } from './native.ts';
 import type { DataSource } from './useAppState.ts';
 
 /**
@@ -93,7 +94,13 @@ export interface SurfaceProps {
  * so it is an input to `useSurface` — it just is not what decides who owns the state.
  */
 export function Surface({ T, name, setTheme, source }: SurfaceProps) {
-  const wide = useIsDesktop();
+  // The desktop app (`?native=1`) is definitionally desktop: it drives its own window width per
+  // tab (down to 392px for Today), so the viewport breakpoint must NOT be allowed to flip it to
+  // the phone shell at those narrow widths. `isNative()` is a synchronous read of the URL, so
+  // this is settled on the first render — no phone→desktop flash. In a browser it's false and
+  // the 900px breakpoint decides exactly as before. See `native.ts`.
+  const wideByViewport = useIsDesktop();
+  const wide = isNative() || wideByViewport;
   const surface = useSurface({ T, name, setTheme, wide, source });
   return wide ? <DeskShell T={T} surface={surface} /> : <AppShell T={T} surface={surface} />;
 }
