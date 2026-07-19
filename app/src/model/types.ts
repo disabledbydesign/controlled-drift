@@ -212,5 +212,12 @@ export type WriteIntent =
   | { op: 'complete'; id: string; done: boolean }
   /** `POST /api/recurring/active` `{id, active}` — note the UI stores the INVERSE, `paused`. */
   | { op: 'recurringActive'; id: string; active: boolean }
+  /**
+   * `POST /api/object/{id}/clear-field` `{field}` — REMOVE a property so it inherits again.
+   * Deliberately not a `patchVals` with an empty value: key-presence IS the spec §4 tri-state,
+   * and an empty write would set an explicit "none" (or, for a multi_select, delete the
+   * property while reporting a set). The server refuses formats it cannot actually clear.
+   */
+  | { op: 'clearField'; id: string; field: string }
   /** No endpoint yet — contract §1. Carries why, so the failure message can say it. */
   | { op: 'unsupported'; id: string; what: string };

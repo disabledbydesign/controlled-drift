@@ -98,11 +98,21 @@ describe('write intents', () => {
     expect(w).toMatchObject({ level: 'STRATEGY', parentId: null });
   });
 
-  /** No endpoint — must be REPORTED, never shown as a success that vanishes on reload. */
-  it('clearVal and setType declare themselves unsupported', () => {
+  /**
+   * `clearVal` WAS `unsupported` because `POST /api/object/{id}/clear-field` was unbuilt —
+   * removal-vs-empty was unverified against the live API, and shipping a guess would have
+   * silently broken the spec §4 tri-state. It is built and verified now (2026-07-18), so this
+   * pins the real intent. It must stay a `clearField`, never a `patchVals` with an empty value:
+   * for a multi_select an empty write DELETES the property while reporting a set.
+   */
+  it('clearVal removes the field through clear-field, not through an empty patch', () => {
     expect(clearVal(graph(), 't1', 'status').write).toEqual({
-      op: 'unsupported', id: 't1', what: 'inherit again (clear-field)',
+      op: 'clearField', id: 't1', field: 'status',
     });
+  });
+
+  /** No endpoint — must be REPORTED, never shown as a success that vanishes on reload. */
+  it('setType declares itself unsupported', () => {
     expect(setType(graph(), 't1', 'Recurring').write).toEqual({
       op: 'unsupported', id: 't1', what: 'change the type',
     });

@@ -140,16 +140,19 @@ export function clearVal(graph: Graph, id: string, k: string): MutationResult {
     return { ...n, vals: v };
   });
   if (!res.node) return noop(graph);
-  // ⚠ NO ENDPOINT. `POST /api/object/{id}/clear-field` is contract §1 NEW and unbuilt, and the
-  // distinction it carries is the whole tri-state of spec §4: a property REMOVED inherits again,
-  // a property set to '' is an intentional "none". Patching '' here would silently destroy that,
-  // so this reports honestly instead of writing the wrong thing.
+  // WIRED 2026-07-18. `POST /api/object/{id}/clear-field` (contract §1 NEW) is now built —
+  // `api_write.clear_field`. It REMOVES the property rather than setting it empty, which is the
+  // whole tri-state of spec §4: a property removed inherits again, a property set to '' is an
+  // intentional "none". This previously reported `unsupported` because whether Anytype could
+  // remove a property value was unverified; it has since been verified live, and the answer is
+  // format-dependent — the server refuses (400, a sentence) for a format with no removal path,
+  // so an unclearable field still fails honestly rather than silently.
   return {
     graph: res.graph,
     toast: 'Inheriting',
     ui: null,
     node: res.node,
-    write: { op: 'unsupported', id, what: 'inherit again (clear-field)' },
+    write: { op: 'clearField', id, field: k },
   };
 }
 

@@ -2,8 +2,10 @@ import type { CSSProperties, ReactNode } from 'react';
 import { alpha } from '@tokens';
 import { Switch } from '../atoms/index.ts';
 import {
+  effective,
   hasSchedulableAncestor,
   INHERIT,
+  isOwnValue,
   setVal,
   toggleMulti,
 } from '../../model/index.ts';
@@ -60,9 +62,23 @@ export function Field({ ctx, n, spec }: FieldProps) {
   const ok = spec[3];
   const hint = spec[4];
 
+  // ── the inheritance gate, v4:572 — BOTH conjuncts ──────────────────────────
+  // Hoisted ABOVE the control construction (v4 evaluated it after) because the control now has
+  // to be built from a different value when inheriting — see `raw` below.
+  const gated = INHERIT.has(vk) && hasSchedulableAncestor(idx, n);
+  const inheriting = gated && !isOwnValue(n, vk);
+  const eff = inheriting ? effective(idx, n, vk) : null;
+
   // v4: `const v = n.vals[vk] || ''`. `vals` is an open bag, so the coercion is explicit
   // here; falsy in, '' out — identical inputs collapse identically.
-  const raw = n.vals[vk];
+  //
+  // ⚠ CHANGED 2026-07-18 (June): while INHERITING, the control is built from the EFFECTIVE
+  // value rather than the node's own (absent) one, so the editor SHOWS the selections being
+  // inherited instead of rendering blank. Her ask: "have the UI display the editor either way,
+  // but greyed out if inheriting (but in a way that still renders visible what those selections
+  // it's inheriting are)." `InheritRow` makes that copy non-interactive; nothing here writes,
+  // because an inheriting node's handlers are never reachable once it is wrapped.
+  const raw = inheriting ? eff?.val : n.vals[vk];
   const v = raw ? String(raw) : '';
 
   const base: CSSProperties = {
@@ -266,9 +282,14 @@ export function Field({ ctx, n, spec }: FieldProps) {
   // v4:571 — only a toggle sits on the same line as its label.
   const inline = kind === 'toggle';
 
-  // ── the inheritance gate, v4:572 — BOTH conjuncts ──────────────────────────
-  if (INHERIT.has(vk) && hasSchedulableAncestor(idx, n)) {
-    return <InheritRow ctx={ctx} n={n} vk={vk} label={label} hint={hint} editor={ctl} />;
+  if (gated) {
+    // `key` carries the row's IDENTITY, so `InheritRow`'s local "opened the editor but
+    // haven't written yet" state resets when she moves to another object or another field
+    // rather than leaking across. React does this correctly; a hand-rolled id comparison
+    // inside the component did not.
+    return (
+      <InheritRow key={id + vk} ctx={ctx} n={n} vk={vk} label={label} hint={hint} editor={ctl} />
+    );
   }
 
   const lab = (

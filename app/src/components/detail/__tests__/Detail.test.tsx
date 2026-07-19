@@ -149,7 +149,46 @@ describe('the two states of an inheritable field — inherited, or set here', ()
     const b = block(container, 'Access conditions');
     expect(b.textContent).toContain('Inheriting from Sell phone case');
     expect(b.textContent).toContain('none set');
-    expect(b.textContent).not.toContain('Involves leaving house');
+    // ⚠ REVISED 2026-07-18 (June): this used to assert the option labels were ABSENT, because
+    // the dashed box REPLACED the editor while inheriting. She asked for the opposite — the
+    // editor is now always rendered, greyed, showing what is being inherited. So the labels
+    // are present by design. What still distinguishes this state is that the editor is not
+    // operable and the source line names the ancestor the walk stopped at.
+    const shown = [...b.querySelectorAll('div')].find((d) => d.getAttribute('aria-disabled') === 'true');
+    expect(shown).toBeTruthy();
+    expect(shown!.style.pointerEvents).toBe('none');
+  });
+
+  /**
+   * THE BUG JUNE HIT, 2026-07-18. Her screenshot showed "Nothing to inherit from a parent yet"
+   * and, on clicking Custom: "Could not save access — it is NOT saved. api_write: 'access' did
+   * not persist (wrote [], read back: absent)."
+   *
+   * With nothing above it, Custom had nothing to copy down, so it wrote `''`. For a multi_select
+   * `''` coerces to `[]`, and an empty write DELETES the property in Anytype (verified live) —
+   * so the write failed its own read-back and she got an error for pressing a button.
+   *
+   * A field with nothing to inherit therefore must NOT write on the Custom click at all. It
+   * opens the editor and waits; the first option she picks is the first write, and that write
+   * has something real to store. No test covered this case before — the existing Custom test
+   * uses a node WITH an ancestor value, where the old code happened to work.
+   */
+  it('Custom with nothing to inherit opens the editor WITHOUT writing an empty value', () => {
+    const { container, apply } = open('r-kitchen'); // no ancestor sets access
+    const b = block(container, 'Access conditions');
+    expect(b.textContent).toContain('Nothing to inherit from a parent yet');
+
+    fireEvent.click(within(b).getByRole('button', { name: 'Custom' }));
+
+    // The click must not have produced a write of any kind.
+    expect(apply).not.toHaveBeenCalled();
+    // And the editor must now be live — not the greyed, non-operable inheriting copy.
+    // Scoped to THIS field's editor via one of its own option buttons: `block()` can return a
+    // wrapper holding a neighbouring field, and a loose `querySelectorAll` would then find that
+    // neighbour's greyed editor and pass/fail for the wrong reason.
+    const after = block(container, 'Access conditions');
+    const opt = within(after).getByRole('button', { name: 'Involves leaving house' });
+    expect(opt.closest('[aria-disabled="true"]')).toBeNull();
   });
 
   it('Inherit deletes the key; Custom copies the inherited value down', () => {
