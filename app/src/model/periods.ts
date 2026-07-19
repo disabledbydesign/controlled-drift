@@ -63,101 +63,97 @@ export function formFromPeriod(p: Period): FocusForm {
 }
 
 /**
- * v4:893 — the form the author flow hands to the reflect-back view.
+ * The form <-> WIRE-FIELDS translation.
  *
- * ⚠ v4 hardcodes `start:'2026-07-21', end:'2026-07-27'` and derives the name by cutting the
- * draft at the first `.`/`,`/newline and capping it at 48 chars. Both are MOCKUP STAND-INS for
- * the LLM structuring pass described in `AI_LAYER_SPEC.md` §2 ("she *says it*, the AI
- * structures it into these fields and reflects it back"). Ported verbatim so the flow is
- * drivable; Track B replaces the body of this function, not its shape.
+ * ── what replaced `formFromDraft`, and why it had to go ──────────────────────
+ * v4's `formFromDraft` built the reflect-back form on the client: it hardcoded
+ * `start:'2026-07-21', end:'2026-07-27'` and derived the name by cutting her draft at the first
+ * `.`/`,`/newline. The screen it fed is headed "Here's what I heard" and tells her "It reads
+ * back what it heard for you to check." No model had run. The surface was claiming a
+ * comprehension that never happened, and the dates it showed her were two constants.
  *
- * The intent is carried through UNCHANGED (`intent: draft`) — spec §14/§17: intent is the
- * user's own words and is never reworded. There is no transform here and none may be added.
+ * `POST /api/focus/author` is what actually structures her words (`AI_LAYER_SPEC.md` §2: she
+ * says it, the AI structures it into these fields and reflects it back). The structured answer
+ * comes back as the server's flat snake_case dict, so the client's job is no longer to invent a
+ * form but to TRANSLATE one. That is `formFromFields`; `fieldsFromForm` is the way back.
+ *
+ * Intent is still carried through UNCHANGED in both directions — spec §14/§17: intent is her own
+ * words and is never reworded. There is no transform here and none may be added.
+ *
+ * ⚠ `daysOn` is a STRING here and a LIST on the wire, mirroring `adapt.ts` `periodFromLive`
+ * (`list(p.days_on).join(', ')`). Both directions handle the seam; `focusFields.test.ts`
+ * round-trips them against each other rather than trusting the table twice.
  */
-export function formFromDraft(draft: string): FocusForm {
-  const first = draft.split(/[.,\n]/)[0] ?? '';
+
+/** A wire-side field dict — the server's own key names. */
+type Fields = Record<string, unknown>;
+
+function str(v: unknown): string {
+  return v === null || v === undefined ? '' : String(v);
+}
+
+function list(v: unknown): string[] {
+  return Array.isArray(v) ? v.map((x) => str(x)) : [];
+}
+
+/** The form as the three write routes read it. Every editable field, or it does not save. */
+export function fieldsFromForm(form: FocusForm): Fields {
   return {
-    name: first.slice(0, 48),
-    start: '2026-07-21',
-    end: '2026-07-27',
-    intent: draft,
-    front: [],
-    note: '',
-    availStart: '',
-    availEnd: '',
-    daysOff: [],
-    daysOn: '',
-    output: 'Auto',
-    workdayStart: '',
-    workdayEnd: '',
-    paused: [],
+    name: form.name,
+    start_date: form.start,
+    end_date: form.end,
+    intent: form.intent,
+    foreground_projects: form.front.slice(),
+    availability_note: form.note || '',
+    availability_start: form.availStart || '',
+    availability_end: form.availEnd || '',
+    days_off: form.daysOff.slice(),
+    // '' must become [], never [''] — an empty string entry writes a blank day and reads back
+    // as a day she never named.
+    days_on: form.daysOn
+      .split(',')
+      .map((d) => d.trim())
+      .filter((d) => d.length > 0),
+    output_format: form.output || 'Auto',
+    workday_start: form.workdayStart || '',
+    workday_end: form.workdayEnd || '',
+    paused_projects: form.paused.slice(),
   };
 }
 
-/** v4:923 — a new period's id: `'fp'+Math.random().toString(36).slice(2,6)`. */
-function newPeriodId(): string {
-  return 'fp' + Math.random().toString(36).slice(2, 6);
+/** The structure step's answer as the form June checks field by field. */
+export function formFromFields(fields: Fields): FocusForm {
+  const f = fields || {};
+  return {
+    name: str(f.name),
+    start: str(f.start_date),
+    end: str(f.end_date),
+    intent: str(f.intent),
+    front: list(f.foreground_projects),
+    note: str(f.availability_note),
+    availStart: str(f.availability_start),
+    availEnd: str(f.availability_end),
+    daysOff: list(f.days_off),
+    daysOn: list(f.days_on).join(', '),
+    output: str(f.output_format) || 'Auto',
+    workdayStart: str(f.workday_start),
+    workdayEnd: str(f.workday_end),
+    paused: list(f.paused_projects),
+  };
 }
 
 /**
- * v4 `saveFocus(view)` (920), as a pure function.
+ * ⚠ `saveFocus` WAS HERE AND IS GONE. It rebuilt the periods array locally and returned a toast
+ * ("Focus period updated" / "Focus period saved"). Nothing left the browser, so every field June
+ * edited — name, dates, intent, availability window, note, plan shape, workday hours, days off,
+ * foreground and paused projects — was gone on reload, under a message saying it had saved.
  *
- * `edit` writes the form back onto the period `editId` names; anything else (v4's `else`
- * branch, reached from `view==='author'`) appends a NEW period with `when:'upcoming'`.
+ * The write now goes to `POST /api/focus/commit` (new) or `POST /api/focus/update` (edit in
+ * place) through `shell/useAppState.ts` `saveFocusPeriod`, and the confirmation waits for the
+ * server, which re-fetches and verifies every written field before answering ok.
  *
- * ⚠ Two v4 behaviours preserved as-is rather than tidied:
- *   1. In edit mode, if no period matches `editId`, v4 still flashes "Focus period updated"
- *      and closes. Nothing was written. Same here.
- *   2. The new period keeps `name: f.name || 'New focus period'`, but the EDIT branch has no
- *      such fallback — editing a name to empty stores an empty name.
+ * It is deleted rather than left unused on purpose: an exported function with exactly the right
+ * name and shape is an invitation to wire the editor back to it.
+ *
+ * `PeriodResult` stays — `applyPeriods` still takes one — but nothing produces one now.
  */
-export function saveFocus(
-  periods: readonly Period[],
-  view: 'edit' | 'author',
-  editId: string | null,
-  form: FocusForm,
-): PeriodResult {
-  // v4:921-922 build `front`/`paused`/`extra` from the form. The comma-string fallbacks v4
-  // wraps these in (`(f.front||'').split(',')…`) are unreachable: both producers of a form —
-  // `formFromPeriod` and `formFromDraft` — supply arrays, and `FocusForm` types them as
-  // arrays. Dropped rather than ported dead.
-  const extra = {
-    front: form.front.slice(),
-    note: form.note || '',
-    availStart: form.availStart || '',
-    availEnd: form.availEnd || '',
-    daysOff: form.daysOff.slice(),
-    daysOn: form.daysOn || '',
-    output: form.output || 'Auto',
-    workdayStart: form.workdayStart || '',
-    workdayEnd: form.workdayEnd || '',
-    paused: form.paused.slice(),
-  };
-
-  if (view === 'edit') {
-    return {
-      periods: periods.map((p) =>
-        p.id === editId
-          ? { ...p, name: form.name, start: form.start, end: form.end, intent: form.intent, ...extra }
-          : p,
-      ),
-      toast: 'Focus period updated',
-    };
-  }
-
-  return {
-    periods: [
-      ...periods,
-      {
-        id: newPeriodId(),
-        when: 'upcoming',
-        name: form.name || 'New focus period',
-        start: form.start,
-        end: form.end,
-        intent: form.intent,
-        ...extra,
-      },
-    ],
-    toast: 'Focus period saved',
-  };
-}

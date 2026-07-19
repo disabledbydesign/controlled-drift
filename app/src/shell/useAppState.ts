@@ -19,6 +19,14 @@ import {
 } from '../api/capture.ts';
 import type { WeedEntry, WhenToken } from '../api/capture.ts';
 import { apiGet, apiSend } from '../api/client.ts';
+import {
+  FOCUS_POLL_MS,
+  commitFocus,
+  focusResult,
+  focusStatus,
+  startAuthor,
+  updateFocus,
+} from '../api/focus.ts';
 import { graphFromTree, periodsFromLive, planFromLive, schemaFromResponse } from '../api/adapt.ts';
 import type { LivePlan, PeriodsResponse, TreeResponse } from '../api/adapt.ts';
 import type {
@@ -32,6 +40,7 @@ import type {
   PlanResult,
   WriteIntent,
 } from '../model/index.ts';
+import { fieldsFromForm, formFromFields } from '../model/index.ts';
 import type { ChipEditTarget } from '../components/rows/index.ts';
 import type { FocusView } from '../components/focus/index.ts';
 import { logFailure } from './errorLog.ts';
@@ -432,6 +441,26 @@ export interface AppState {
    * server confirmed the write — callers must not clear her text on `false`.
    */
   logDay: (text: string, tags: string[]) => Promise<boolean>;
+  /**
+   * Write a focus period — `commit` for a new one, `update` for an edit in place.
+   *
+   * Returns whether it LANDED, so the caller only closes the editor on a real write. `false`
+   * covers both a refusal (a field still empty) and a failure; each has already reported itself
+   * in its own register, and neither should discard what she typed.
+   */
+  /**
+   * Hand her words to the structure step and get back the form she checks.
+   *
+   * `null` means no form was produced — busy, failed, or nothing understood. Each has already
+   * reported itself; the caller must NOT fall back to building a form locally, which is the
+   * fabrication this replaced.
+   */
+  authorFocus: (text: string) => Promise<FocusForm | null>;
+  saveFocusPeriod: (
+    view: 'edit' | 'author',
+    editId: string | null,
+    form: FocusForm,
+  ) => Promise<boolean>;
   /**
    * Record (or un-record) a chunk of work on a block — `POST /api/complete` / `/api/uncomplete`
    * with the block's id, which on the wire is its `project_id`.
@@ -968,6 +997,180 @@ export function useAppState(source: DataSource = 'live'): AppState {
     [succeed],
   );
 
+  /**
+   * Say that something is still needed — NOT that something went wrong.
+   *
+   * Deliberately not `fail`: `fail` writes the error log, and a period she has not finished
+   * filling in is not a defect. Filling that log with non-defects is how it stops being useful
+   * for finding real ones. See `signals.ts` on why `notice` is a third kind rather than a
+   * politer failure.
+   */
+  const notify = useCallback((msg: string) => {
+    setToast((prev) => ({ kind: 'notice', msg, nodeId: null, seq: (prev?.seq ?? 0) + 1 }));
+  }, []);
+
+  /**
+   * Which fields she still has to fill in, as one plain sentence.
+   *
+   * The server sends ready-to-read labels (`missing_required` → `['start date','end date']`), so
+   * this joins them and says what to do. No metaphor, no error register, no blame — the period
+   * is not broken, it is unfinished.
+   */
+  const missingSentence = (missing: string[]): string => {
+    const names =
+      missing.length > 1
+        ? missing.slice(0, -1).join(', ') + ' and ' + missing[missing.length - 1]
+        : (missing[0] ?? 'a required field');
+    return `That focus period needs ${names} before it can be saved. Nothing else you typed was lost.`;
+  };
+
+  /**
+   * STRUCTURE HER WORDS — `POST /api/focus/author`, then poll, then read the result.
+   *
+   * ⚠ WHAT THIS REPLACED, AND WHY IT WAS THE WORST BUG ON THIS SCREEN. "Structure this →" ran
+   * `formFromDraft`, a client-side stand-in that hardcoded `start:'2026-07-21'`,
+   * `end:'2026-07-27'` and named the period by cutting her sentence at the first comma. The next
+   * screen is headed "Here's what I heard" and tells her it "reads back what it heard for you to
+   * check". No model had run. The surface claimed a comprehension that never happened and showed
+   * her two constants as the dates it had understood.
+   *
+   * ⚠ ASYNCHRONOUS. The POST answers 202 and the structure step (an LLM call, ~30s) runs on a
+   * thread. The answer never comes back from the POST: poll `/api/focus/status` — focus has its
+   * OWN status route, not the shared `/api/status` — and then read `/api/focus/result`.
+   *
+   * Returns the form for her to check, or `null`. It returns null rather than a form of blanks
+   * whenever the step did not produce one: a blank form under the heading "Here's what I heard"
+   * is the same fabrication in a quieter voice.
+   */
+  const authorFocus = useCallback(
+    async (text: string): Promise<FocusForm | null> => {
+      const body = text.trim();
+      if (!body) return null;
+      if (!live) {
+        fail('Not connected to the server — those words were NOT structured.');
+        return null;
+      }
+      if (generatingRef.current) {
+        notify('Something else is still running. Your words are still here — try again in a moment.');
+        return null;
+      }
+      generatingRef.current = 'focus-author';
+      setGenerating('Reading what you wrote');
+      try {
+        const start = await startAuthor(body);
+        // Busy is ORDINARY, not breakage — one LLM job at a time, shared with plan generation.
+        if (start.kind === 'busy') {
+          notify('Something else was already running. Your words are still here — try again in a moment.');
+          return null;
+        }
+        if (start.kind === 'failed') {
+          fail(`Those words were NOT structured. ${start.error}`);
+          return null;
+        }
+
+        const deadline = Date.now() + POLL_TIMEOUT_MS;
+        let lastReadError = '';
+        for (;;) {
+          // Status is checked BEFORE the first sleep: a job that finished quickly should not
+          // cost a fixed wait, and the first read is what tells us it is running at all.
+          const st = await focusStatus();
+          if (st.ok && st.data.state === 'error') {
+            fail(`Reading what you wrote failed. ${st.data.error ?? ''}`.trim());
+            return null;
+          }
+          if (st.ok && st.data.state !== 'running') break;
+          if (!st.ok) lastReadError = st.error;
+          if (Date.now() >= deadline) {
+            // Deliberately not "it failed": the run may still be going. What is true is that we
+            // stopped waiting.
+            fail(
+              lastReadError
+                ? `Still reading what you wrote, and the server stopped answering. ${lastReadError}`
+                : 'Still reading what you wrote after five minutes. Nothing was saved.',
+            );
+            return null;
+          }
+          await sleep(FOCUS_POLL_MS);
+        }
+
+        const res = await focusResult();
+        if (!res.ok) {
+          fail(`Those words were structured, but the answer could not be read. ${res.error}`);
+          return null;
+        }
+        const fields = res.data.fields;
+        if (res.data.empty || !fields) {
+          // No fields means nothing was understood. Saying so beats a form of blanks presented
+          // as what it heard.
+          notify('Nothing came back for that. Your words are still here — try saying it again.');
+          return null;
+        }
+        return formFromFields(fields);
+      } finally {
+        generatingRef.current = null;
+        setGenerating(null);
+      }
+    },
+    [live, fail, notify],
+  );
+
+  /**
+   * THE FOCUS PERIOD WRITE — `POST /api/focus/commit` for a new one, `POST /api/focus/update`
+   * for an edit in place.
+   *
+   * It used to be `saveFocus`, a pure local state change: every field she edited was gone on
+   * reload, under a toast reading "Focus period updated". Both endpoints were already live and
+   * nothing called them.
+   *
+   * ⚠ THREE OUTCOMES, NOT TWO. `api/focus.ts` translates the routes' `{"blocked":[...]}`-on-a-200
+   * refusal into its own variant, and it lands here as a NOTICE naming the field — never as a
+   * success (which would claim a save the server declined) and never as a failure (which would
+   * tell her something broke when she has simply not put an end date in yet).
+   *
+   * ⚠ The success signal comes only after the server confirms, and the period list is then
+   * RE-READ rather than patched from the form: what the Focus tab shows is what persisted. Both
+   * routes already re-fetch and verify every written field before answering ok, so their
+   * confirmation is worth waiting for.
+   */
+  const saveFocusPeriod = useCallback(
+    async (view: 'edit' | 'author', editId: string | null, form: FocusForm): Promise<boolean> => {
+      if (!live) {
+        fail('Not connected to the server — that focus period was NOT saved.');
+        return false;
+      }
+      const fields = fieldsFromForm(form);
+      // Her own words are the raw text both routes record alongside the structured fields.
+      const raw = form.intent || '';
+      const res =
+        view === 'edit' && editId
+          ? await updateFocus(editId, fields, raw)
+          : await commitFocus(fields, raw);
+
+      if (res.kind === 'needs') {
+        notify(missingSentence(res.missing));
+        return false;
+      }
+      if (res.kind === 'failed') {
+        fail(`That focus period was NOT saved. ${res.error}`);
+        return false;
+      }
+
+      // Read back, so the list shows the server's period rather than the form's hopes.
+      const after = await apiGet<PeriodsResponse>('/api/periods');
+      if (after.ok) {
+        setPeriods(periodsFromLive(after.data));
+      } else {
+        // The WRITE succeeded — both routes proved it before answering. Saying "not saved" here
+        // would be a false claim about her data; what failed is the re-read.
+        fail(`That focus period was saved, but the list could not be re-read. ${after.error}`);
+        return true;
+      }
+      succeed(view === 'edit' ? 'Focus period updated' : 'Focus period saved', null);
+      return true;
+    },
+    [live, fail, succeed, notify],
+  );
+
   const dismissToast = useCallback(() => setToast(null), []);
 
   /**
@@ -1366,6 +1569,8 @@ export function useAppState(source: DataSource = 'live'): AppState {
     applyPeriods,
     fail,
     logDay,
+    authorFocus,
+    saveFocusPeriod,
     chunkBlock,
     regenerate,
     generating,

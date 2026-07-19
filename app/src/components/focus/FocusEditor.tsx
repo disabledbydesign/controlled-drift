@@ -1,4 +1,3 @@
-import { formFromDraft, saveFocus } from '../../model/index.ts';
 import type { FocusForm } from '../../model/index.ts';
 import { FEditor } from './FEditor.tsx';
 import { FField, FSub, inputStyle } from './fields.tsx';
@@ -38,7 +37,7 @@ export interface FocusEditorProps {
  * consumer was `fRow`, which has no call site (see `fields.tsx`). NOT PORTED.
  */
 export function FocusEditor({ ctx, view }: FocusEditorProps) {
-  const { T, ui, up, periods, applyPeriods, closeEditor } = ctx;
+  const { T, ui, up, closeEditor, authorFocus, saveFocusPeriod } = ctx;
   const C = T.c;
   const form = ui.focusReflect;
 
@@ -76,10 +75,22 @@ export function FocusEditor({ ctx, view }: FocusEditorProps) {
   const inp = inputStyle(T);
 
   if (view === 'author' && !form) {
-    const structure = () => {
+    /**
+     * ⚠ THIS NOW ASKS THE MODEL. It used to call `formFromDraft`, which hardcoded
+     * `start:'2026-07-21'`/`end:'2026-07-27'` and named the period by cutting her sentence at
+     * the first comma — and then the next screen said "Here's what I heard". `authorFocus`
+     * runs the real structure step (`POST /api/focus/author`).
+     *
+     * A `null` answer means nothing was produced (busy, failed, or nothing understood) and it
+     * has already said so. The read-back screen must NOT open on it: a form the client filled
+     * in itself, under that heading, is exactly the claim being removed here.
+     */
+    const structure = async () => {
       const d = ui.focusDraft.trim();
       if (!d) return;
-      up({ focusReflect: formFromDraft(d) });
+      const structured = await authorFocus(d);
+      if (!structured) return;
+      up({ focusReflect: structured });
     };
     return (
       <div style={page}>
@@ -125,9 +136,19 @@ export function FocusEditor({ ctx, view }: FocusEditorProps) {
   const setF = <K extends keyof FocusForm>(k: K, v: FocusForm[K]) =>
     up({ focusReflect: { ...form, [k]: v } });
 
-  const onSave = () => {
-    applyPeriods(saveFocus(periods, view, ui.focusEditId, form));
-    closeEditor();
+  /**
+   * ⚠ THIS NOW WRITES TO THE SERVER, AND ONLY CLOSES ON A REAL WRITE.
+   *
+   * It used to call `saveFocus` — a pure local state change — and then close unconditionally
+   * under a toast reading "Focus period updated". Every field died on reload.
+   *
+   * The editor stays open when the write did not land. That matters most on a REFUSAL: closing
+   * would discard the whole form, so the notice naming the missing field would point at a screen
+   * she can no longer get back to.
+   */
+  const onSave = async () => {
+    const landed = await saveFocusPeriod(view, ui.focusEditId, form);
+    if (landed) closeEditor();
   };
 
   return (

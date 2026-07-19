@@ -14,12 +14,12 @@
  */
 
 import { describe, it, expect, afterEach } from 'vitest';
-import { render, screen, fireEvent, cleanup, within } from '@testing-library/react';
-import { formFromPeriod, formFromDraft, saveFocus } from '../../../model/index.ts';
+import { render, screen, fireEvent, cleanup, waitFor, within } from '@testing-library/react';
+import { formFromPeriod } from '../../../model/index.ts';
 import type { FocusForm } from '../../../model/index.ts';
 import { FocusPanel } from '../FocusPanel.tsx';
 import { FocusOverlay } from '../FocusOverlay.tsx';
-import { focusCtxWith, freshPeriods } from './harness.ts';
+import { BASE_AUTHORED_FORM, focusCtxWith, freshPeriods } from './harness.ts';
 
 afterEach(cleanup);
 
@@ -172,15 +172,37 @@ describe('intent is the user’s own words', () => {
     });
   });
 
-  it('the author flow carries the draft into intent unchanged', () => {
+  it('the author flow hands her draft to the structure step with no transform', async () => {
+    // Was: `formFromDraft(messy).intent === messy`. The client no longer builds the form at
+    // all, so the equivalent guarantee is that her words reach the model unedited — no
+    // trimming, no cutting at the first comma.
     const messy = '  jobs first,  caregiving from sat.  ';
-    expect(formFromDraft(messy).intent).toBe(messy);
+    const { ctx, authorFocus } = focusCtxWith({
+      focusView: 'author',
+      focusReflect: null,
+      focusDraft: messy,
+    });
+    render(<FocusOverlay ctx={ctx} open />);
+    fireEvent.click(screen.getByText('Structure this →'));
+    await waitFor(() => expect(authorFocus).toHaveBeenCalledWith(messy.trim()));
   });
 
-  it('saveFocus writes intent through untouched', () => {
+  it('the write receives her intent untouched', async () => {
     const form = { ...formFromPeriod(NOW), intent: '  odd   spacing.  ' };
-    const r = saveFocus(freshPeriods(), 'edit', 'fp-now', form);
-    expect(r.periods.find((p) => p.id === 'fp-now')!.intent).toBe('  odd   spacing.  ');
+    const { ctx, saveFocusPeriod } = focusCtxWith({
+      focusView: 'edit',
+      focusEditId: 'fp-now',
+      focusReflect: form,
+    });
+    render(<FocusOverlay ctx={ctx} open />);
+    fireEvent.click(screen.getByText('Save changes'));
+    await waitFor(() =>
+      expect(saveFocusPeriod).toHaveBeenCalledWith(
+        'edit',
+        'fp-now',
+        expect.objectContaining({ intent: '  odd   spacing.  ' }),
+      ),
+    );
   });
 });
 
@@ -297,7 +319,7 @@ describe('the author flow', () => {
     expect(up).not.toHaveBeenCalled();
   });
 
-  it('structures a draft into a form and reflects it back', () => {
+  it('structures a draft through the model and reflects THAT back', async () => {
     const { ctx, up } = focusCtxWith({
       focusView: 'author',
       focusReflect: null,
@@ -305,15 +327,15 @@ describe('the author flow', () => {
     });
     render(<FocusOverlay ctx={ctx} open />);
     fireEvent.click(screen.getByText('Structure this →'));
-    expect(up).toHaveBeenCalledWith({
-      focusReflect: formFromDraft('jobs first this week, caregiving from Saturday'),
-    });
+    // The form shown is the one the STRUCTURE STEP returned (the harness stands in for the
+    // server), not one the client assembled from her text.
+    await waitFor(() => expect(up).toHaveBeenCalledWith({ focusReflect: BASE_AUTHORED_FORM }));
   });
 
   it('the reflect-back screen uses the confirm wording, not the edit wording', () => {
     const { ctx } = focusCtxWith({
       focusView: 'author',
-      focusReflect: formFromDraft('jobs first this week'),
+      focusReflect: BASE_AUTHORED_FORM,
     });
     render(<FocusOverlay ctx={ctx} open />);
     expect(screen.getByText('Here’s what I heard')).toBeTruthy();
@@ -321,63 +343,16 @@ describe('the author flow', () => {
   });
 });
 
-// ── saveFocus ───────────────────────────────────────────────────────────────
-
-describe('saveFocus', () => {
-  it('writes back to the named period and leaves the others alone', () => {
-    const before = freshPeriods();
-    const form: FocusForm = {
-      ...formFromPeriod(NOW),
-      name: 'Renamed',
-      workdayStart: '07:00',
-      daysOff: ['2026-07-19', '2026-07-20'],
-      paused: ['Crafts'],
-    };
-    const r = saveFocus(before, 'edit', 'fp-now', form);
-    const after = r.periods.find((p) => p.id === 'fp-now')!;
-    expect(after.name).toBe('Renamed');
-    expect(after.workdayStart).toBe('07:00');
-    expect(after.daysOff).toEqual(['2026-07-19', '2026-07-20']);
-    expect(after.paused).toEqual(['Crafts']);
-    expect(after.when).toBe('now'); // `when` is not a form field and must survive
-    expect(r.periods.find((p) => p.id === 'fp-next')).toEqual(before[1]);
-    expect(r.toast).toBe('Focus period updated');
-    // pure: the input array is untouched
-    expect(before.find((p) => p.id === 'fp-now')!.name).toBe(NOW.name);
-  });
-
-  it('appends a new upcoming period in author mode', () => {
-    const before = freshPeriods();
-    const r = saveFocus(before, 'author', null, formFromDraft('a lighter fortnight'));
-    expect(r.periods.length).toBe(before.length + 1);
-    const added = r.periods[r.periods.length - 1]!;
-    expect(added.when).toBe('upcoming');
-    expect(added.intent).toBe('a lighter fortnight');
-    expect(added.id).not.toBe('');
-    expect(r.toast).toBe('Focus period saved');
-  });
-
-  it('falls back to a placeholder name only on the author path', () => {
-    const blank = { ...formFromDraft('x'), name: '' };
-    expect(saveFocus(freshPeriods(), 'author', null, blank).periods.at(-1)!.name).toBe(
-      'New focus period',
-    );
-    // ⚠ v4 has no such fallback on the edit path — an emptied name stays empty. Pinned so the
-    // asymmetry is a decision, not an accident.
-    const edited = saveFocus(freshPeriods(), 'edit', 'fp-now', { ...formFromPeriod(NOW), name: '' });
-    expect(edited.periods.find((p) => p.id === 'fp-now')!.name).toBe('');
-  });
-
-  it('lists and the arrays inside them are copies, not shared references', () => {
-    const before = freshPeriods();
-    const form = formFromPeriod(NOW);
-    const r = saveFocus(before, 'edit', 'fp-now', form);
-    const after = r.periods.find((p) => p.id === 'fp-now')!;
-    expect(after.front).not.toBe(form.front);
-    expect(after.daysOff).not.toBe(form.daysOff);
-    expect(after.paused).not.toBe(form.paused);
-  });
-});
+// ── the local period write is GONE ──────────────────────────────────────────
+//
+// `saveFocus` rebuilt the periods array in memory and returned "Focus period updated" — the
+// bug this change removes. Its tests went with it rather than being kept green against a
+// function nothing calls, which would have read as coverage of a working save.
+//
+// What replaced them, and where:
+//   the request, the field mapping, the three outcomes -> shell/__tests__/saveFocus.test.tsx
+//   the button calling it and staying open on refusal  -> ./focusEditorSave.test.tsx
+//   the wire <-> form key translation                  -> model/__tests__/focusFields.test.ts
 
 // ── the overlay ─────────────────────────────────────────────────────────────
 
@@ -394,17 +369,22 @@ describe('FocusOverlay', () => {
     expect(screen.getByText('Edit focus period')).toBeTruthy();
   });
 
-  it('saving calls the period seam and then closes', () => {
-    const { ctx, applyPeriods, closeEditor } = focusCtxWith({
+  it('saving writes to the server and then closes', async () => {
+    const { ctx, saveFocusPeriod, closeEditor } = focusCtxWith({
       focusView: 'edit',
       focusEditId: 'fp-now',
       focusReflect: { ...formFromPeriod(NOW), name: 'Saved name' },
     });
     render(<FocusOverlay ctx={ctx} open />);
     fireEvent.click(screen.getByText('Save changes'));
-    expect(applyPeriods).toHaveBeenCalledTimes(1);
-    const result = applyPeriods.mock.calls[0]![0];
-    expect(result.periods.find((p: { id: string }) => p.id === 'fp-now').name).toBe('Saved name');
-    expect(closeEditor).toHaveBeenCalledTimes(1);
+    await waitFor(() =>
+      expect(saveFocusPeriod).toHaveBeenCalledWith(
+        'edit',
+        'fp-now',
+        expect.objectContaining({ name: 'Saved name' }),
+      ),
+    );
+    // Closing is now CONDITIONAL on the write landing (the harness default is that it does).
+    await waitFor(() => expect(closeEditor).toHaveBeenCalledTimes(1));
   });
 });

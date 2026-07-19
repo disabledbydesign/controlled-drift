@@ -56,7 +56,7 @@ export {
 } from './plan.ts';
 export type { PlanResult, PlanWorkItem, AddressedItem } from './plan.ts';
 
-export { formFromPeriod, formFromDraft, saveFocus } from './periods.ts';
+export { formFromPeriod, fieldsFromForm, formFromFields } from './periods.ts';
 export type { PeriodResult, FocusForm } from './periods.ts';
 
 export {

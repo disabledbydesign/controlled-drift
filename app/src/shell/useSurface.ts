@@ -137,6 +137,8 @@ export function useSurface({ T, name, setTheme, wide, source }: SurfaceOptions):
     ui: st.ui,
     up: st.up,
     applyPeriods: st.applyPeriods,
+    authorFocus: st.authorFocus,
+    saveFocusPeriod: st.saveFocusPeriod,
     openEditor: (view, editId, reflect) =>
       st.up({
         detail: '__focus__',

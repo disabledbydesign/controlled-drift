@@ -50,6 +50,29 @@ export interface FocusCtx {
   /** Period mutations — v4's in-place write + `bump()`. See `model/periods.ts`. */
   applyPeriods: (result: PeriodResult) => void;
   /**
+   * Hand her spoken draft to the structure step (`POST /api/focus/author`) and get back the
+   * form she checks.
+   *
+   * ⚠ `null` means NO form was produced — the server was busy, the step failed, or nothing was
+   * understood. Each case has already told her. The caller must not fall back to building a
+   * form locally: the screen this feeds is headed "Here's what I heard", and a client-built
+   * form under that heading claims a comprehension that did not happen. That stand-in
+   * (`formFromDraft`, with two hardcoded dates) is what this replaced.
+   */
+  authorFocus: (text: string) => Promise<FocusForm | null>;
+  /**
+   * Write the period — `POST /api/focus/commit` for a new one, `/api/focus/update` for an edit.
+   *
+   * Returns whether it LANDED. `false` covers both a refusal (a required field still empty) and
+   * a failure; both have already been reported in their own register, and on either the editor
+   * must stay open holding her work rather than discarding the form.
+   */
+  saveFocusPeriod: (
+    view: 'edit' | 'author',
+    editId: string | null,
+    form: FocusForm,
+  ) => Promise<boolean>;
+  /**
    * v4's `up({detail:'__focus__', focusView:…, focusEditId:…, focusReflect:…})` (816, 836).
    *
    * A callback rather than a `FocusUi` field because `detail` is shell-wide routing state;
