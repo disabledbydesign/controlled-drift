@@ -211,6 +211,10 @@ export function planFromLive(live: LivePlan): Plan {
     // fabricating "Built this morning at 9:02."
     generated: '',
     shape,
+    // How many appointments were folded into `blocks[0]` above. `/api/task/move` indexes its
+    // `position` against the server's own list, which keeps appointments separate — so this is
+    // the offset between the rendered order and the contract's. See `Plan.apptCount`.
+    apptCount: appts.length,
     // The server's own reason for that shape, carried verbatim. NOT composed here: the client
     // cannot know which branch of `resolve_output_shape` produced the shape, so a locally
     // written sentence would sometimes assert a cause that is not the cause. Absent becomes

@@ -137,6 +137,30 @@ describe('planFromLive', () => {
     expect(items).toHaveLength(2);
   });
 
+  /**
+   * The move contract depends on this number. The server indexes `/api/task/move`'s `position`
+   * against a list that does NOT contain appointments; this adapter folds them into the front of
+   * the first block. Without the count carried through, a position computed from the rendered
+   * list is off by exactly the number of appointments — a wrong-slot move on any day she has one,
+   * silent because both indices are in range.
+   */
+  it('records how many appointments it folded into the first block', () => {
+    const plan = planFromLive({
+      shape: 'priority',
+      items: [{ id: 't1', task: 'later' }],
+      appointments: [
+        { id: 'a1', task: 'Therapy', time: '11:00' },
+        { id: 'a2', task: 'Dentist', time: '15:00' },
+      ],
+    });
+    expect(plan.apptCount).toBe(2);
+  });
+
+  it('records a zero appointment offset when there are none to fold in', () => {
+    const plan = planFromLive({ shape: 'priority', items: [{ id: 't1' }] });
+    expect(plan.apptCount).toBe(0);
+  });
+
   it('gives a priority-shape plan an UNLABELLED container band, so no header renders', () => {
     const plan = planFromLive({ shape: 'priority', items: [{ id: 't1' }] });
     expect(plan.shape).toBe('priority');

@@ -230,6 +230,19 @@ export interface Plan {
   header: string;
   woven: string;
   blocks: PlanBlock[];
+  /**
+   * How many APPOINTMENTS `planFromLive` prepended into `blocks[0].items`.
+   *
+   * ⚠ Declared 2026-07-19, for `/api/task/move`. The server keeps appointments in their OWN
+   * top-level key and indexes `position` against a list that does NOT contain them; the client
+   * folds them into the front of the first block so they render as the fixed-time anchors they
+   * are. The two index spaces therefore differ by exactly this number, and a position computed
+   * from the rendered list would move the item to the wrong slot on any day she has an
+   * appointment — silently, since both indices are valid.
+   *
+   * Only `blocks[0]` is offset; every later block folds nothing in. Absent means zero.
+   */
+  apptCount?: number;
 }
 
 // ── periods ─────────────────────────────────────────────────────────────────
