@@ -190,8 +190,13 @@ describe('the generation controls issue the request the server implements', () =
       );
     });
 
+    // ⚠ `operation:'generate'` is load-bearing, not incidental. The server defaults a free-text
+    // message to `reorder`, which reshuffles the plan already on screen. A message like this one
+    // is a statement about her capacity — answering it needs a reselection from the whole task
+    // list. June's decision, 2026-07-19.
     expect(send).toHaveBeenCalledWith('POST', '/api/negotiate', {
       message: 'I only have 30 min and need to stay horizontal',
+      operation: 'generate',
     });
   });
 });

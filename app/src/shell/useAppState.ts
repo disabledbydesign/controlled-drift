@@ -1115,7 +1115,17 @@ export function useAppState(source: DataSource = 'live'): AppState {
             : await apiSend<{ state?: string; started?: boolean }>(
                 'POST',
                 '/api/negotiate',
-                req.kind === 'preset' ? { preset_id: req.presetId } : { message: req.message },
+                req.kind === 'preset'
+                  ? { preset_id: req.presetId }
+                  : // ⚠ `operation:'generate'` is REQUIRED here — June's decision 2026-07-19.
+                    // The server defaults a free-text message to `reorder` (`server.py:978`),
+                    // which only reshuffles what is already on screen. But the box asks
+                    // "e.g. I only have 30 min and need to stay horizontal" — that is a
+                    // statement about her capacity, and answering it needs the model to
+                    // RESELECT from the whole task list, not shuffle a plan built for a
+                    // different day. `generate` routes to `generate_plan(extra=message)`, which
+                    // is the path that actually carries her words into the prompt.
+                    { message: req.message, operation: 'generate' },
               );
         if (!start.ok) {
           fail(`Could not start a new plan, so the plan on screen has not changed. ${start.error}`);
