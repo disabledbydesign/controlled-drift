@@ -14,6 +14,9 @@ Routes:
   GET  /api/plan        the cached daily plan (JSON) — instant, no LLM
   GET  /api/map         orient_map.render_map(...) verbatim (text) — deterministic, no LLM
   GET  /api/actions     the variable button schema (JSON)
+  GET  /api/shot/{name} one stored friction snapshot as image/png — the picture a Log entry
+                        carries. Names are only ever ones shot_store generated, so the path is
+                        contained; anything else is 400.
   GET  /api/status      generation state {idle|running|error} + plan timestamp (for polling)
   POST /api/refresh     start a fresh generation (async, 202); poll /api/status  [logs surfaced]
   POST /api/negotiate   {preset_id}|{message} -> start a renegotiation (async, 202); poll status
@@ -26,6 +29,11 @@ Routes:
   GET  /api/session     ?stream=capture|negotiate -> recent session log entries (the receipt)
   POST /api/capture     {text} -> weed input into typed/linked Anytype objects (async, 202)
   POST /api/capture/undo {id}  -> archive a just-captured object + log the undo (sync)
+  POST /api/logday      {text, tags:["day"|"issue"]} -> June's own faithful record, verbatim into
+                                signal_log (sync). Optionally carries the friction snapshot and
+                                its context: {shot: png data URL, view, target, via, marks, size}
+                                -> {ok, tags, shot: filename|null}. A bad `shot` fails the WHOLE
+                                request rather than saving the text alone.
   POST /api/log/correction {msg, kind?, objectId?, before?} -> record a write the APP could not
                                 complete, into corrections_log so it survives a reload (sync)
 
@@ -62,6 +70,7 @@ import focus_period_author
 import focus_store
 import daily_plan
 import signal_log
+import shot_store
 import corrections_log
 import chunk_log
 import block_duration
@@ -610,6 +619,28 @@ class Handler(BaseHTTPRequestHandler):
         _path = urlparse(self.path).path
         if _path == "/" or _path == "/index.html":
             self._serve_app("/app/")
+            return
+
+        # The one path-parameter GET outside _object_route. A snapshot has to be readable to be
+        # worth storing: this is what the triage pass (and June) open to see what she was looking
+        # at. Containment is total — shot_store.read_png only accepts names it generated itself.
+        if _path.startswith("/api/shot/"):
+            name = unquote(_path[len("/api/shot/"):])
+            try:
+                data = shot_store.read_png(name)
+            except ValueError:
+                self._send(400, {"error": "not a snapshot name"})
+                return
+            except FileNotFoundError:
+                self._send(404, {"error": "no such snapshot"})
+                return
+            self.send_response(200)
+            self.send_header("Content-Type", "image/png")
+            self.send_header("Content-Length", str(len(data)))
+            # Names are unique and content never changes, so this is safe to cache hard.
+            self.send_header("Cache-Control", "private, max-age=31536000, immutable")
+            self.end_headers()
+            self.wfile.write(data)
             return
 
         # The old overlay is NOT deleted, just moved. It was the daily driver until today and the
@@ -1247,6 +1278,12 @@ class Handler(BaseHTTPRequestHandler):
             # uncategorized via signal_log (source="log_day"); the tags ride in reference so a later
             # "review my issues" pass can find them, and Phase 7 still extracts from the raw text.
             # Sync, no LLM. We never narrate a classification back — only a plain acknowledgment.
+            #
+            # 2026-07-19: an entry may now carry a SNAPSHOT of what she was looking at, plus which
+            # view she was on and which element she pressed. The reason is that the text-only path
+            # made her translate the friction into words at the exact moment she had least capacity
+            # to do it — she had to leave the screen to describe the screen. All three are optional
+            # and additive: an entry without them is byte-identical to what this wrote before.
             body = self._read_json_body()
             text = (body.get("text") or "").strip()
             if not text:
@@ -1257,13 +1294,57 @@ class Handler(BaseHTTPRequestHandler):
             raw_tags = body.get("tags")
             tags = ([t for t in raw_tags if t in ("day", "issue")]
                     if isinstance(raw_tags, list) else []) or ["day"]
+
+            reference = {"kind": "log_day", "tags": tags}
+
+            # ⚠ The snapshot is written BEFORE the signal record, and a failure here fails the
+            # WHOLE request. The alternative — log the text and drop the image — would tell her
+            # the capture landed while quietly discarding the half that carried the context. A
+            # refused write she can retry beats a silent partial one. (No silent failures.)
+            shot = body.get("shot")
+            if shot:
+                try:
+                    reference["shot"] = shot_store.save_png(shot)
+                except ValueError as e:
+                    self._send(400, {"error": str(e)})
+                    return
+                except Exception as e:
+                    self._send(500, {"error": str(e)})
+                    return
+
+            # Where she was and what she pressed. Stored verbatim and NOT interpreted — same
+            # discipline as the raw text. `target` is best-effort from the DOM and may be absent
+            # or coarse; that is fine, it is a hint for triage, never a claim.
+            view = body.get("view")
+            if isinstance(view, dict):
+                reference["view"] = view
+            target = body.get("target")
+            if isinstance(target, dict):
+                reference["target"] = target
+
+            # Which way in she used. Recorded so an entry point that turns out to go unused can be
+            # FOUND and retired instead of quietly accumulating — June's ask, 2026-07-19. It is a
+            # record of a mechanism, not of her, and it is never used to prompt or nudge her.
+            via = body.get("via")
+            if via in ("longpress", "shortcut", "rightclick", "button"):
+                reference["via"] = via
+
+            # The drawn marks as GEOMETRY, next to the pixels. A circle in the image tells a later
+            # reader something is wrong there; the geometry tells it where and how big, which is
+            # the part a picture alone leaves ambiguous. Stored verbatim, never interpreted here.
+            marks = body.get("marks")
+            if isinstance(marks, list) and marks:
+                reference["marks"] = marks
+            size = body.get("size")
+            if isinstance(size, dict):
+                reference["size"] = size          # mark coords are meaningless without this
+
             try:
-                signal_log.log_signal(text, source="log_day",
-                                      reference={"kind": "log_day", "tags": tags})
+                signal_log.log_signal(text, source="log_day", reference=reference)
             except Exception as e:
                 self._send(500, {"error": str(e)})
                 return
-            self._send(200, {"ok": True, "tags": tags})
+            self._send(200, {"ok": True, "tags": tags, "shot": reference.get("shot")})
             return
 
         if self.path == "/api/log/correction":
