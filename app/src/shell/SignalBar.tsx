@@ -56,6 +56,10 @@ export function SignalBar({
   }, [auto, ms, seq, onDismiss]);
 
   if (!sig || !p || p.mode !== 'bar') return null;
+  // ⚠ A notice persists exactly like a failure, so `p.persist` alone cannot tell them apart —
+  // dispatch on the KIND. Without this a "you have not put an end date in yet" renders red with
+  // `role="alert"`, telling her something broke when nothing did.
+  if (sig.kind === 'notice') return <NoticeBar T={T} sig={sig} onDismiss={onDismiss} />;
   return p.persist ? (
     <FailureBar T={T} sig={sig} onDismiss={onDismiss} />
   ) : (
@@ -146,6 +150,68 @@ function FailureBar({ T, sig, onDismiss }: { T: Theme; sig: Signal; onDismiss: (
       >
         !
       </span>
+      <span style={{ flex: 1, minWidth: 0, fontSize: '12.5px', lineHeight: 1.5, color: C.text }}>
+        {sig.msg}
+      </span>
+      <button
+        onClick={onDismiss}
+        aria-label="dismiss"
+        style={{
+          flex: '0 0 auto',
+          background: 'none',
+          border: 'none',
+          color: C.dim,
+          fontSize: '13px',
+          cursor: 'pointer',
+          padding: '0 2px',
+          fontFamily: 'inherit',
+          lineHeight: 1.5,
+        }}
+      >
+        ✕
+      </button>
+    </div>
+  );
+}
+
+/**
+ * The notice bar — "you have not filled this in yet".
+ *
+ * Same shape and same persistence as the failure bar, because it has the same problem: its
+ * result is not visible at the control, so a bar that fades leaves her believing a write landed.
+ * Everything that says BREAKAGE is dropped: the red rule and glyph become the neutral gold
+ * accent, and `role="status"` announces at the next pause instead of `role="alert"` cutting in.
+ * Nothing went wrong here — she is being told what is still needed.
+ */
+function NoticeBar({ T, sig, onDismiss }: { T: Theme; sig: Signal; onDismiss: () => void }) {
+  const C = T.c;
+  return (
+    <div
+      key={sig.seq}
+      role="status"
+      aria-live="polite"
+      data-signal="notice"
+      style={{
+        position: 'fixed',
+        left: '50%',
+        bottom: '22px',
+        transform: 'translateX(-50%)',
+        width: 'calc(100% - 28px)',
+        maxWidth: '440px',
+        display: 'flex',
+        alignItems: 'flex-start',
+        gap: '10px',
+        background: C.panel,
+        border: '1px solid ' + C.gold,
+        boxShadow: '0 8px 26px rgba(0,0,0,.45), inset 3px 0 0 ' + C.gold,
+        borderRadius: T.r.ctl,
+        padding: '11px 12px 11px 14px',
+        zIndex: 60,
+        animation: 'panelin .16s ease',
+        backdropFilter: T.blur,
+        WebkitBackdropFilter: T.blur,
+      }}
+    >
       <span style={{ flex: 1, minWidth: 0, fontSize: '12.5px', lineHeight: 1.5, color: C.text }}>
         {sig.msg}
       </span>

@@ -37,8 +37,17 @@
  * `localStorage.setItem('cd.verboseSignals','1')`, or load the page with `?verbose=1`.
  */
 
-/** What kind of thing happened. Failure is not a louder success; it is a different case. */
-export type SignalKind = 'success' | 'failure';
+/**
+ * What kind of thing happened. Failure is not a louder success; it is a different case.
+ *
+ * `notice` is the THIRD case, added for the focus write path: the server declined a write
+ * because a required field is still empty ("you have not put an end date in yet"). That is
+ * neither of the other two. It is not a success — nothing was written, and unlike a success its
+ * result is invisible at the control, so it has to be read. It is not a failure either — nothing
+ * broke, and routing it through `fail` would both address her as if something had gone wrong and
+ * fill the error log with non-defects.
+ */
+export type SignalKind = 'success' | 'failure' | 'notice';
 
 /**
  * One thing the app has to tell the user about.
@@ -103,8 +112,11 @@ export function verboseSignals(): boolean {
  * (a move, where the row leaves the list you were looking at).
  */
 export function present(sig: Signal): Presentation {
-  if (sig.kind === 'failure') {
-    // Loud, textual, and it does not go away on its own.
+  if (sig.kind === 'failure' || sig.kind === 'notice') {
+    // Textual, and it does not go away on its own. A notice shares the persistence for a
+    // different reason than a failure does: not because it is alarming, but because its result
+    // is invisible at the control — if it fades before she reads it she believes the write
+    // landed. `SignalBar` renders the two with different wording and different urgency.
     return { mode: 'bar', persist: true, ms: 0 };
   }
   if (verboseSignals()) {
