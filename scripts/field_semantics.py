@@ -2152,6 +2152,64 @@ def describe_many(names):
     return "\n\n".join(out)
 
 
+PROMPT_LEGEND_HEADER = (
+    "## What these fields mean\n"
+    "(Rendered from scripts/field_semantics.py, the one definition of each field. Nothing below "
+    "restates these — if a rule here and a rule later disagree, this is the field's meaning and "
+    "the later text is about how to PLAN with it.)")
+
+
+def prompt_legend(names, include_examples=False, path=None):
+    """The prompt-facing grain: what these fields MEAN, for a model that READS June's data.
+
+    WHY THIS EXISTS (2026-07-19). The write side reads this module; the models that REASON about
+    her data did not. `plan_generate` never imported it, so the planning prompt was handed bare
+    `affective: ...` values and `[Engagement]` labels with no statement of what either field is —
+    while `prompts/daily_list.md` and four header strings in `daily_plan.py` each carried their
+    OWN hand-copied restatement of the same meanings, already drifted apart from each other. This
+    renders that text once, from the source, so a correction lands in the prompt too. It is
+    deduplication, not a new payload.
+
+    What it deliberately does NOT include:
+      - `DOES` (what writes/reads the field at runtime). That text addresses a build agent in the
+        second person and names Python modules; a planning model has no decision attached to it.
+      - `observed` (live-data notes) and `source` (spec citations) — provenance for a human
+        reviewing the definition, not input to composing a day.
+      - EXAMPLES, unless asked. June's constraint, confirmed against her own stored plans: "if you
+        give one specific example, the model may replicate your example in its output for the text
+        fields." So `include_examples=True` REFUSES a field carrying fewer than three deliberately
+        dissimilar illustrations, and when it does emit them it carries EXAMPLES_BANNER with them.
+        A prompt cannot silently acquire a template through this seam.
+
+    Raises KeyError on a name this module does not define — a legend that quietly skipped a field
+    would leave the prompt referring to a meaning that never arrived.
+    """
+    blocks = []
+    for name in names:
+        e = resolved(name, path)
+        if e is None:
+            raise KeyError(f"field_semantics.prompt_legend: no entry for {name!r} — a field with "
+                           f"no documented meaning must not be given one here")
+        out = [f"**{e['field']}** (on {', '.join(e['types'])}) — {e['means']}"]
+        if e.get("not_this"):
+            out.append(f"  NOT this field: {e['not_this']}")
+        for what, where in (e.get("instead") or {}).items():
+            out.append(f"  {what} belongs in: {where}")
+        for rule in e.get("usage") or []:
+            out.append(f"  Rule: {rule}")
+        if include_examples:
+            ex = e.get("examples") or []
+            if len(ex) < 3:
+                raise ValueError(
+                    f"field_semantics.prompt_legend: {e['field']!r} has {len(ex)} illustration(s); "
+                    f"fewer than three reads as a template and gets copied verbatim into June's "
+                    f"records. Add illustrations or leave include_examples off.")
+            out.append(f"  Illustrations ({EXAMPLES_BANNER}):")
+            out += [f"    - {x}" for x in ex]
+        blocks.append("\n".join(out))
+    return PROMPT_LEGEND_HEADER + "\n\n" + "\n\n".join(blocks)
+
+
 # The fields an agent writing free text is most likely to mis-route — the leak's actual shape.
 FREE_TEXT_ROUTING = ("Affective", "Blocked on", "Context", "Access notes", "Barriers")
 

@@ -19,6 +19,7 @@ sys.path.insert(0, os.path.dirname(__file__))
 from anytype_test import call
 import gsdo_anytype as g
 import grain
+import field_semantics
 import chunk_log
 import resolve
 import when_resolve
@@ -405,6 +406,12 @@ def capacity_level(capacity):
     return "low" if any(m in c for m in _LOW_MARKERS) else "normal"
 
 
+# The fields the plan context prints values for and therefore has to define. Deliberately short:
+# every field added here is tokens on every generation. `Goal engagement` is NOT here — see the
+# note at the "## Active goals" header below.
+PROMPT_LEGEND_FIELDS = ("Affective", "Engagement")
+
+
 def format_context(goals, projects, tasks, strategies, today_recurrings, neglected, capacity,
                    period=None, is_off=False, in_window=False):
     """Build the context block that gets injected into the daily_list.md prompt."""
@@ -412,6 +419,17 @@ def format_context(goals, projects, tasks, strategies, today_recurrings, neglect
 
     lines.append(f"Current time: {dt.datetime.now().strftime('%A %B %d, %Y — %I:%M %p')}")
     lines.append(f"Capacity signal: {capacity or '(none given)'}")
+    lines.append("")
+
+    # The two fields whose values this context prints raw — `affective: ...` on projects and
+    # tasks, and each project's `[Engagement]` label — defined ONCE, from the module. Before
+    # this, the planning model got the values with no statement of what the fields are, while
+    # four header strings below and five paragraphs of prompts/daily_list.md each carried their
+    # own hand-copied restatement of the same two meanings, already drifted apart. Those copies
+    # are gone; this is where the meaning lives now, so a correction in field_semantics (or one
+    # of June's overrides) reaches the planner. Scoped to these two on purpose — a field the
+    # prompt does not print is an unmotivated cost at ~29s median generation.
+    lines.append(field_semantics.prompt_legend(PROMPT_LEGEND_FIELDS))
     lines.append("")
 
     if period:
@@ -463,6 +481,10 @@ def format_context(goals, projects, tasks, strategies, today_recurrings, neglect
 
     if goals:
         lines.append("## Active goals")
+        # This glosses `Goal engagement`, a DIFFERENT field from a Project's `Engagement` — the
+        # legend at the top defines only the latter. Left as a hand-written gloss on purpose:
+        # adding a third field to the legend costs tokens on every generation, and this line is
+        # the only place a goal's engagement is described. If it goes into the legend, delete it.
         lines.append("(engagement: Steady → normal; Backburner → note but de-emphasize. What's "
                      "elevated right now comes from the Focus Period foreground, not the tag.)")
         for g_ in goals:
@@ -482,10 +504,14 @@ def format_context(goals, projects, tasks, strategies, today_recurrings, neglect
 
     if projects:
         lines.append("## Active projects")
-        lines.append("(engagement: Steady → a normal daily move; Open → available, not pushed;"
-                     " unset → treat as active, never hidden. What's elevated right now is set by"
-                     " the Focus Period foreground, not the tag — don't inflate a project's space"
-                     " just for its label. Backburner projects are excluded before you see this.)")
+        # What Steady/Open/Backburner MEAN is stated once, in the field legend at the top. What
+        # stays here is plan policy the legend does not carry: how an unset value is treated, and
+        # that the foreground — not the label — is what elevates a project.
+        lines.append("(each project shows its [Engagement] — see the field legend above for what"
+                     " each value means. Unset → treat as active, never hidden. What's elevated"
+                     " right now is set by the Focus Period foreground, not the tag — don't"
+                     " inflate a project's space just for its label. Backburner projects are"
+                     " excluded before you see this.)")
         lines.append("(sub-projects are indented under their parent)")
 
         fg = set((period or {}).get("foreground") or [])
@@ -595,9 +621,10 @@ def format_context(goals, projects, tasks, strategies, today_recurrings, neglect
 
         if block_projects:
             lines.append("### Block-organized work — one 'Work on X' unit per project, scheduled as"
-                         " ONE chunk of time (not a task list). Each carries its [Engagement]"
-                         " (Steady → a normal daily move; Open → pull in only if there's room, and"
-                         " never on a rest/low-energy focus). Its steps are shown below as its arc —"
+                         " ONE chunk of time (not a task list). Each carries its [Engagement] —"
+                         " the field legend above says what each value means; on a rest or"
+                         " low-energy focus an Open one is the first to leave for another day."
+                         " Its steps are shown below as its arc —"
                          " context for you, not separate plan items.")
             _STATE_MARK = {"done": "[x]", "here": "[ ] (next)", "ahead": "[ ]"}
             for p in block_projects:
@@ -612,9 +639,10 @@ def format_context(goals, projects, tasks, strategies, today_recurrings, neglect
                     lines.append("  - (no individual steps tracked — a bare chunk of time)")
         if daily_projects or no_project:
             lines.append("### Daily tasks — discrete chores + standalone actions, scheduled one at a"
-                         " time. Each project header carries its [Engagement] (Steady → its chores"
-                         " belong today; Open → pull one in only if the day has room, never on a"
-                         " rest/low-energy focus). A due-today recurring chore with no set time"
+                         " time. Each project header carries its [Engagement] — the field legend"
+                         " above says what each value means, and it governs a Daily-life"
+                         " project's chores exactly as it governs block work. A due-today"
+                         " recurring chore with no set time"
                          " (dishes, laundry, a walk) is listed right here, mixed in with the rest —"
                          " place it wherever it actually fits your day, exactly like any other task."
                          " Only a recurring item with a REAL clock time (an appointment, meds at a"
