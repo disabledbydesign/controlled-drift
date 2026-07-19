@@ -42,6 +42,47 @@ export function workItems(plan: Plan): PlanWorkItem[] {
 }
 
 /**
+ * A work item together with the address at which it actually sits in the plan.
+ *
+ * `item` is typed `PlanWorkItem`, not `PlanItem`: breaks are filtered out below, so a consumer
+ * would otherwise have to narrow away a case that cannot occur.
+ */
+export interface AddressedItem {
+  item: PlanWorkItem;
+  bandIndex: number;
+  itemIndex: number;
+}
+
+/**
+ * `workItems`, but each item keeps the address `toggleArcStep` needs.
+ *
+ * `toggleArcStep(plan, bandIndex, itemIndex, stepIndex)` resolves a step as
+ * `plan.blocks[bandIndex].items[itemIndex].arc[stepIndex]`, and answers a miss with a SILENT
+ * no-op — `{plan, toast: null}`, no error, no toast, no visual change. So a wrong address does
+ * not crash and does not warn; it produces a checkbox that is tapped and does nothing, forever.
+ *
+ * Two independent things make a naively-derived index wrong, which is why the address has to
+ * travel with the item rather than being recomputed at the call site:
+ *
+ * 1. The list a consumer renders can be reordered by the user (`priOrder`), so a row's position
+ *    on screen is not its position in the plan.
+ * 2. `adapt.ts` PREPENDS appointments into `blocks[0].items`, so an item's index in the wire
+ *    payload is not its index in `plan.blocks[0].items` either.
+ *
+ * ⚠ `itemIndex` is the index WITHIN its band — never a running counter across the whole plan.
+ * On any plan with more than one band a running counter addresses the wrong item, or none.
+ */
+export function addressedWorkItems(plan: Plan): AddressedItem[] {
+  const out: AddressedItem[] = [];
+  plan.blocks.forEach((b, bandIndex) => {
+    b.items.forEach((item, itemIndex) => {
+      if (item.kind !== 'break') out.push({ item, bandIndex, itemIndex });
+    });
+  });
+  return out;
+}
+
+/**
  * v4 `nearestProject(n)` (1104):
  *   let p=n.parent; while(p){ if(['PROJECT','SUBPROJECT','WORKSTREAM'].includes(p.level))return p; p=p.parent; } return null;
  *

@@ -46,8 +46,15 @@ export {
   TYPE_LABEL_FOR_LEVEL,
 } from './fields.ts';
 
-export { workItems, nearestProject, isDone, planItemDone, toggleArcStep } from './plan.ts';
-export type { PlanResult, PlanWorkItem } from './plan.ts';
+export {
+  workItems,
+  addressedWorkItems,
+  nearestProject,
+  isDone,
+  planItemDone,
+  toggleArcStep,
+} from './plan.ts';
+export type { PlanResult, PlanWorkItem, AddressedItem } from './plan.ts';
 
 export { formFromPeriod, formFromDraft, saveFocus } from './periods.ts';
 export type { PeriodResult, FocusForm } from './periods.ts';
