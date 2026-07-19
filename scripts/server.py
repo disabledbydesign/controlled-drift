@@ -405,10 +405,11 @@ def _source_allowed(host):
 class GuardedServer(ThreadingHTTPServer):
     """Refuses connections from outside `_ALLOWED_SOURCES` at the socket, before HTTP parsing.
 
-    Rejected callers get a closed connection, not a 403: a 403 would confirm to a stranger on the
-    hotel network that something is here to find. June is never the stranger in that scenario — if
-    she ever IS refused, the log line below is what explains it, so this stays debuggable without
-    announcing itself.
+    Rejected callers get a closed connection, not a 403 — they learn less, though not nothing.
+    `verify_request` runs AFTER the TCP accept, so a port scan still sees 5050 open; what a
+    stranger cannot get is any HTTP response, and so any indication of what is running or that it
+    holds anything worth taking. June is never the stranger in that scenario — if she ever IS
+    refused, the log line below is what explains it, so this stays debuggable.
     """
 
     def verify_request(self, request, client_address):

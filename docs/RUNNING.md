@@ -68,7 +68,7 @@ This replaced an earlier arrangement where the bind address *was* the access con
 
 Allowed sources are `127.0.0.0/8` and `::1` (this laptop) and `100.64.0.0/10` and `fd7a:115c:a1e0::/48` (Tailscale). See `_ALLOWED_SOURCES` in `scripts/server.py`; the tests are `tests/test_source_filter.py`.
 
-A refused request is logged in plain language to `~/.controlled-drift/server.log`, naming the address and reminding you the phone needs Tailscale open. Rejected callers get a dropped connection rather than a "403 Forbidden", so a stranger scanning the network learns nothing about what is running here.
+A refused request is logged in plain language to `~/.controlled-drift/server.log`, naming the address and reminding you the phone needs Tailscale open. Rejected callers get a dropped connection rather than a "403 Forbidden". Note the limit of that: the check runs after the TCP connection is accepted, so a port scanner still sees 5050 open. What a stranger cannot get is any response — so nothing about what is running or that it is worth attacking.
 
 **What this is not:** authentication. There is still no password. Anything already on the mesh can read everything, and anything able to forge a source address in those ranges is not stopped by this. What it does stop is the hazard that actually occurred — on 2026-07-18 the laptop sat on a hotel network with room for about 8,000 devices, serving your task data to all of them with no password. A password becomes worth building if you ever want the wifi to be a real fallback; on the mesh alone it adds little.
 
