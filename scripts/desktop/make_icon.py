@@ -125,10 +125,26 @@ class _Rng:
         return self.s / 0x7FFFFFFF
 
 
+# The macOS icon grid: the art sits inside the 1024 canvas with a transparent margin and is
+# masked to the rounded "squircle", so the Dock shows it rounded like every other icon instead
+# of a hard square. Apple's own icons use ~824px art; third-party icons tend to fill a touch
+# more, so 896 (GRID_PAD 64) sits at the same visual size as neighbours like Steam/Notes.
+GRID_PAD = 64
+
+
+def _fit_macos_grid(raw):
+    art = S - 2 * GRID_PAD
+    face = raw.convert("RGBA").resize((art, art), Image.LANCZOS)
+    face.putalpha(_squircle_mask(art, round(art * 0.2237)))  # transparent, rounded corners
+    canvas = Image.new("RGBA", (S, S), (0, 0, 0, 0))
+    canvas.alpha_composite(face, (GRID_PAD, GRID_PAD))
+    return canvas
+
+
 def main():
     if os.path.exists(SRC_OVERRIDE):
-        master = Image.open(SRC_OVERRIDE).convert("RGBA").resize((S, S), Image.LANCZOS)
-        print(f"[icon] using your override: {SRC_OVERRIDE}")
+        master = _fit_macos_grid(Image.open(SRC_OVERRIDE))
+        print(f"[icon] using your override, fitted to the macOS rounded grid: {SRC_OVERRIDE}")
     else:
         master = _draw_master()
         print("[icon] generated the default deep-space icon")
