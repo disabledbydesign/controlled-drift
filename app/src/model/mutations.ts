@@ -25,6 +25,7 @@
 import type { NodeVals } from '../fixtures/index.ts';
 import type { Graph, ModelNode, MutationResult } from './types.ts';
 import { appendChild, index, isSelfOrDescendant, node, removeNode, updateNode } from './graph.ts';
+import { isDone } from './plan.ts';
 
 /** A mutation that did nothing: same graph, no toast, no UI patch. */
 function noop(graph: Graph): MutationResult {
@@ -318,10 +319,20 @@ export function setType(graph: Graph, id: string, target: string): MutationResul
  * Non-TASK levels get `done` flipped and NO status write. v4 takes a node, not
  * an id; taking an id here keeps the mutation API uniform.
  */
-export function toggleDone(graph: Graph, id: string): MutationResult {
+/**
+ * @param currentDone What the SCREEN currently shows. Pass it for any row that came from the
+ *   plan — a RECURRING's done-for-today lives in `completion_log`, reaches the client only on
+ *   the plan payload, and is invisible to the graph. Omitted, the node answers.
+ */
+export function toggleDone(graph: Graph, id: string, currentDone?: boolean): MutationResult {
   const n = nodeInGraph(graph, id);
   if (!n) return noop(graph);
-  const nv = !n.vals.done;
+  // ⚠ Was `!n.vals.done`, which read a DIFFERENT rule than the one the screen renders by.
+  // `isDone` also accepts `status === 'Done'`, so June's "Go to the grocery store" — `done:false`
+  // with `status:'Done'` — rendered as checked while this computed `!false` and asked the server
+  // to complete it a second time. The box was checked and could not be unchecked.
+  // Read and write must share one predicate; `isDone` is it.
+  const nv = !(typeof currentDone === 'boolean' ? currentDone : isDone(n));
 
   const res = updateNode(graph, id, (cur) => {
     const patch: NodeVals = { done: nv };

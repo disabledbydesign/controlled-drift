@@ -173,6 +173,19 @@ export interface PlanTaskItem {
   why: string;
   description?: string;
   heldBack?: string[];
+  /**
+   * Done FOR TODAY, as the plan sees it.
+   *
+   * ⚠ Declared 2026-07-18. `adapt.ts` was already writing this field through an `as PlanItem`
+   * cast, so it arrived at runtime while being invisible to the type — and every consumer read
+   * done-state off the graph instead. For a RECURRING that is simply wrong: its completion is
+   * per-day, lives in `completion_log`, and never touches the object. Three chores June had
+   * finished rendered as outstanding because of it.
+   *
+   * Read it through `planItemDone(item, node)`, never directly — absent must fall back to the
+   * graph, and an explicit `false` must win over it.
+   */
+  done?: boolean;
 }
 
 export interface PlanBreakItem {

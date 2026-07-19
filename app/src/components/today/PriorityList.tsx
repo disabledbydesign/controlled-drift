@@ -1,7 +1,7 @@
 import {
-  isDone,
   nearestProject,
   node,
+  planItemDone,
   toggleDone,
   workItems,
 } from "../../model/index.ts";
@@ -38,6 +38,10 @@ export interface PriorityListProps {
 export function PriorityList({ ctx }: PriorityListProps) {
   const C = ctx.T.c;
   const items = workItems(ctx.plan);
+  // The plan item is the authority for done-ness on a plan row (a recurring's done-for-today
+  // never reaches the graph). This component previously dropped the items and re-derived every
+  // row from the graph alone, which is why finished chores rendered as outstanding.
+  const itemById = new Map(items.map((it) => [it.id, it]));
   const present = new Set(items.map((it) => it.id));
 
   const stored = ctx.ui.priOrder;
@@ -73,7 +77,7 @@ export function PriorityList({ ctx }: PriorityListProps) {
       {order.map((id, i) => {
         const n = node(ctx.idx, id);
         if (!n) return null;
-        const done = isDone(n);
+        const done = planItemDone(itemById.get(id), n);
         const proj = nearestProject(ctx.idx, id);
         return (
           <div
@@ -98,7 +102,7 @@ export function PriorityList({ ctx }: PriorityListProps) {
               {i + 1 + "."}
             </span>
             <button
-              onClick={() => ctx.apply(toggleDone(ctx.graph, id))}
+              onClick={() => ctx.apply(toggleDone(ctx.graph, id, done))}
               aria-label="mark done"
               aria-pressed={done}
               style={{

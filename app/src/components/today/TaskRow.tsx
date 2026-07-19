@@ -1,5 +1,5 @@
 import type { PlanTaskItem } from '../../fixtures/index.ts';
-import { isDone, nearestProject, node, toggleDone } from '../../model/index.ts';
+import { nearestProject, node, planItemDone, toggleDone } from '../../model/index.ts';
 import { EditChip, RoundCheck } from '../atoms/index.ts';
 import type { TodayCtx } from './types.ts';
 import { toggleKey } from './util.ts';
@@ -37,7 +37,9 @@ export function TaskRow({ ctx, item, entryKey, showProj }: TaskRowProps) {
   const n = node(ctx.idx, item.id);
   if (!n) return null;
 
-  const done = isDone(n);
+  // ⚠ NOT `isDone(n)`. A recurring's done-for-today reaches the client only on the plan
+  // payload — the graph node has nothing. See `planItemDone`.
+  const done = planItemDone(item, n);
   const proj = nearestProject(ctx.idx, item.id);
   const held = item.heldBack || [];
   const heldOpen = !!ctx.ui.heldOpen[entryKey];
@@ -45,7 +47,7 @@ export function TaskRow({ ctx, item, entryKey, showProj }: TaskRowProps) {
   return (
     <div style={{ marginBottom: '9px' }}>
       <div style={{ display: 'flex', alignItems: 'baseline', gap: '7px' }}>
-        <RoundCheck T={ctx.T} done={done} onClick={() => ctx.apply(toggleDone(ctx.graph, item.id))} />
+        <RoundCheck T={ctx.T} done={done} onClick={() => ctx.apply(toggleDone(ctx.graph, item.id, done))} />
         <span
           style={{
             width: '56px',
@@ -59,7 +61,7 @@ export function TaskRow({ ctx, item, entryKey, showProj }: TaskRowProps) {
           {item.time}
         </span>
         <span
-          onClick={() => ctx.apply(toggleDone(ctx.graph, item.id))}
+          onClick={() => ctx.apply(toggleDone(ctx.graph, item.id, done))}
           style={{
             flex: 1,
             minWidth: 0,

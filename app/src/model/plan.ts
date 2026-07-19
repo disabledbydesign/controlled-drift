@@ -69,6 +69,27 @@ export function isDone(n: ModelNode | undefined): boolean {
 }
 
 /**
+ * Done-state for a row that is IN today's plan. **Prefer this over `isDone` for plan rows.**
+ *
+ * A RECURRING's completion is per-DAY, so it cannot live on the object — it is written to
+ * `completion_log` and comes back on the plan payload as `done`. The graph node carries
+ * nothing. Reading the graph alone showed June three chores she had already finished today
+ * ("Do the dishes", "Clean the kitchen", "Do laundry") as still outstanding, on a day framed
+ * around very little capacity. The plan knew; nothing read it.
+ *
+ * `item.done` is authoritative WHEN PRESENT, including when it is explicitly `false` — an
+ * item she reopened today must not be resurrected by an object whose `status` still says Done.
+ * Absent, the graph answers, which is right for a plain Task.
+ */
+export function planItemDone(item: object | undefined, n: ModelNode | undefined): boolean {
+  // A BLOCK item carries no `done` — its "did a chunk today" state is separate (see WorkBlock),
+  // so it falls through to the graph rather than being forced into this field.
+  const d = item && 'done' in item ? (item as { done?: unknown }).done : undefined;
+  if (typeof d === 'boolean') return d;
+  return isDone(n);
+}
+
+/**
  * v4 `arcStep`'s `toggle` (1099), extracted as a pure function.
  *
  * v4:
