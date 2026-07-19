@@ -1,0 +1,100 @@
+#!/usr/bin/env python3
+"""BUILD_DOC §3 clause 5, enforced instead of remembered.
+
+    "If the change altered what reads or writes an Anytype field, that field's entry in
+     scripts/field_semantics.py is updated in the SAME commit."
+
+This is the clause that keeps getting missed, and it is missed QUIETLY: nothing fails, the tests
+stay green, a code review passes, and the semantics file drifts out of date. It was missed again
+on 2026-07-19 (commit 99f577f added a whole property) and only surfaced because someone thought to
+audit against BUILD_DOC by hand.
+
+BUILD_DOC §9 exists "because dispositions do not survive a session" — so this is a hook and not a
+note. It asks one question at the one moment the answer is cheap.
+
+Blocks rather than warns: a warning printed into a scrolling agent transcript is a note again.
+To proceed anyway (a rename, a comment, a genuinely semantics-free touch):
+
+    CD_SKIP_SEMANTICS_CHECK=1 git commit ...
+"""
+import os
+import re
+import subprocess
+import sys
+
+if os.environ.get("CD_SKIP_SEMANTICS_CHECK"):
+    sys.exit(0)
+
+SEMANTICS = "scripts/field_semantics.py"
+
+# Lines that mean "this touches how an Anytype property is written or read". Deliberately a small,
+# high-signal set — a broad net that cries wolf would be turned off within a week.
+SIGNALS = (
+    re.compile(r"\bensure_property\("),          # declaring a property
+    re.compile(r"\blink_properties_to_type\("),  # attaching one to a type
+    re.compile(r"\bproperties\s*="),             # writing property values
+    re.compile(r"\bPROPERTY_FOR\b"),             # the valKey -> display-name tables
+    re.compile(r"\bEXTRA_PROPERTY_FOR\b"),
+)
+
+
+def staged_files():
+    out = subprocess.run(["git", "diff", "--cached", "--name-only", "--diff-filter=ACMR"],
+                         capture_output=True, text=True, check=True).stdout
+    return [f for f in out.splitlines() if f.strip()]
+
+
+def added_lines(path):
+    """Only ADDED lines — a file can be touched without changing how a property is handled."""
+    out = subprocess.run(["git", "diff", "--cached", "-U0", "--", path],
+                         capture_output=True, text=True, check=True).stdout
+    return [l[1:] for l in out.splitlines() if l.startswith("+") and not l.startswith("+++")]
+
+
+def main():
+    files = staged_files()
+    if SEMANTICS in files:
+        return 0  # the clause is satisfied — that is the whole check
+
+    hits = []
+    for f in files:
+        if not f.endswith(".py") or not f.startswith("scripts/"):
+            continue
+        for line in added_lines(f):
+            if line.lstrip().startswith("#"):
+                continue                      # a comment mentioning a property is not a write
+            for pat in SIGNALS:
+                if pat.search(line):
+                    hits.append((f, line.strip()[:88]))
+                    break
+
+    if not hits:
+        return 0
+
+    print()
+    print("  BUILD_DOC §3 clause 5 — a field's semantics travel in the same commit as its code.")
+    print()
+    print("  This commit changes how an Anytype property is written or read, but does not touch")
+    print(f"  {SEMANTICS}:")
+    print()
+    seen = set()
+    for f, line in hits[:8]:
+        if (f, line) in seen:
+            continue
+        seen.add((f, line))
+        print(f"    {f}")
+        print(f"      {line}")
+    if len(hits) > 8:
+        print(f"    … and {len(hits) - 8} more")
+    print()
+    print("  If a field's meaning, or who writes/reads it, changed — update its entry (FIELDS for")
+    print("  what it MEANS, DOES for who touches it) and stage that file too.")
+    print()
+    print("  If nothing semantic changed here, say so explicitly and re-run:")
+    print("      CD_SKIP_SEMANTICS_CHECK=1 git commit ...")
+    print()
+    return 1
+
+
+if __name__ == "__main__":
+    sys.exit(main())
