@@ -174,8 +174,14 @@ describe('intent is the user’s own words', () => {
 
   it('the author flow hands her draft to the structure step with no transform', async () => {
     // Was: `formFromDraft(messy).intent === messy`. The client no longer builds the form at
-    // all, so the equivalent guarantee is that her words reach the model unedited — no
-    // trimming, no cutting at the first comma.
+    // all, so the equivalent guarantee here is that her SENTENCE reaches the model whole — its
+    // capitalisation, punctuation and inner spacing untouched, and no cutting at the first
+    // comma, which is what `formFromDraft` did to derive a name.
+    //
+    // The surrounding whitespace IS stripped, and this asserts `.trim()` for that reason: it is
+    // the draft box's outer padding, not content. The §14/§17 guarantee that her INTENT is
+    // carried verbatim, whitespace and all, is not this test's — it sits on the translation that
+    // still transports it, `model/__tests__/focusFields.test.ts`.
     const messy = '  jobs first,  caregiving from sat.  ';
     const { ctx, authorFocus } = focusCtxWith({
       focusView: 'author',

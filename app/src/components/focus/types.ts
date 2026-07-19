@@ -47,7 +47,13 @@ export interface FocusCtx {
   ui: FocusUi;
   /** v4's `up(patch)`, narrowed to the fields the focus editor owns. */
   up: (patch: Partial<FocusUi>) => void;
-  /** Period mutations — v4's in-place write + `bump()`. See `model/periods.ts`. */
+  /**
+   * Period mutations — v4's in-place write + `bump()`. See `model/periods.ts`.
+   * ⚠ DEAD PLUMBING. Nothing produces a `PeriodResult` any more — the focus-period write goes
+   * to the server through `saveFocusPeriod`. Wiring a period change to this seam would
+   * reintroduce the local-only write that lost every field on reload; the type will not stop
+   * you. Kept only because removing the plumbing was judged out of scope.
+   */
   applyPeriods: (result: PeriodResult) => void;
   /**
    * Hand her spoken draft to the structure step (`POST /api/focus/author`) and get back the

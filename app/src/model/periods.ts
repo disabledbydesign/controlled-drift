@@ -24,6 +24,14 @@ export interface PeriodResult {
  * Every field of `Period` except `id` and `when`, which the form never carries: v4's
  * `openEdit` (814-816) copies exactly these fifteen keys out of the period, and the author
  * flow's "Structure this →" (v4:893) builds the same fifteen from scratch.
+ *
+ * ⚠ `reactivate` is the one field here that is NOT a property of the period. It is an
+ * INSTRUCTION carried alongside it: the as-needed tasks she said to pick back up this period
+ * ("keep the dishes going"). The server acts on it at write time — `_reactivate_named_tasks`
+ * (`server.py:238`) resolves the names and turns those recurring tasks back on — and stores
+ * nothing, which is why `period_to_fields` never gives it back and `formFromPeriod` starts it
+ * empty. It belongs on the form because the reflect-back shows it to her as "Reopening" and she
+ * approves it there; a form that could not hold it made the whole feature unreachable.
  */
 export interface FocusForm {
   name: string;
@@ -40,6 +48,8 @@ export interface FocusForm {
   workdayStart: string;
   workdayEnd: string;
   paused: string[];
+  /** As-needed tasks to turn back on for this period. See the note above — not a stored field. */
+  reactivate: string[];
 }
 
 /** v4:816 `openEdit` — the period → form copy, with every list `.slice()`d. */
@@ -59,6 +69,10 @@ export function formFromPeriod(p: Period): FocusForm {
     workdayStart: p.workdayStart || '',
     workdayEnd: p.workdayEnd || '',
     paused: (p.paused || []).slice(),
+    // Always empty here: reactivation is an instruction the structure step produces, never
+    // something read back off a stored period. Opening an existing period to change its workday
+    // hours must not silently re-fire a reactivation she already gave once.
+    reactivate: [],
   };
 }
 
@@ -118,6 +132,10 @@ export function fieldsFromForm(form: FocusForm): Fields {
     workday_start: form.workdayStart || '',
     workday_end: form.workdayEnd || '',
     paused_projects: form.paused.slice(),
+    // The key `server.py`'s `_reactivate_named_tasks` reads on BOTH write routes. Sent even when
+    // empty, so the wire dict always shows what was asked for rather than leaving the server to
+    // infer intent from an absent key.
+    reactivate_tasks: (form.reactivate || []).slice(),
   };
 }
 
@@ -139,6 +157,7 @@ export function formFromFields(fields: Fields): FocusForm {
     workdayStart: str(f.workday_start),
     workdayEnd: str(f.workday_end),
     paused: list(f.paused_projects),
+    reactivate: list(f.reactivate_tasks),
   };
 }
 

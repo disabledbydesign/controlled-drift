@@ -33,6 +33,7 @@ const FORM: FocusForm = {
   workdayStart: '09:00',
   workdayEnd: '17:00',
   paused: ['Reading group'],
+  reactivate: ['Dishes'],
 };
 
 describe('fieldsFromForm — every field she edits reaches the wire', () => {
@@ -52,15 +53,24 @@ describe('fieldsFromForm — every field she edits reaches the wire', () => {
       workday_start: '09:00',
       workday_end: '17:00',
       paused_projects: ['Reading group'],
+      reactivate_tasks: ['Dishes'],
     });
   });
 
   /**
    * The regression that matters most: a field present in the form but absent from the wire dict
    * is data loss that looks exactly like a successful save. Named positively — every one of the
-   * fourteen editable fields must appear.
+   * fifteen editable fields must appear.
+   *
+   * ⚠ WAS FOURTEEN, AND THAT LOCKED A REAL GAP IN. `reactivate_tasks` was in neither direction of
+   * the translation, so the whole as-needed reactivation feature — built, reviewed and
+   * live-verified in a prior session — was unreachable from this editor: she says "keep the
+   * dishes going", the structure step returns it, the form drops it, the write omits it, the
+   * server reactivates nothing, and she is told the period saved. A success message over a
+   * partly-discarded write. The count in this test is a guard, so it moves when the field list
+   * moves — it must never be the reason a dropped field stays dropped.
    */
-  it('emits all fourteen editable fields, so none is silently dropped', () => {
+  it('emits all fifteen editable fields, so none is silently dropped', () => {
     const keys = Object.keys(fieldsFromForm(FORM)).sort();
     expect(keys).toEqual(
       [
@@ -75,11 +85,50 @@ describe('fieldsFromForm — every field she edits reaches the wire', () => {
         'name',
         'output_format',
         'paused_projects',
+        'reactivate_tasks',
         'start_date',
         'workday_end',
         'workday_start',
       ].sort(),
     );
+  });
+
+  /**
+   * The named failure the drop caused, asserted directly rather than only through the key list:
+   * the tasks she asked to pick back up must reach the wire under the key `server.py`'s
+   * `_reactivate_named_tasks` reads (`fields.get("reactivate_tasks")`).
+   */
+  it('carries the tasks she asked to pick back up through to the wire', () => {
+    expect(fieldsFromForm({ ...FORM, reactivate: ['Dishes', 'Clean the fridge'] }).reactivate_tasks)
+      .toEqual(['Dishes', 'Clean the fridge']);
+  });
+
+  it('sends an empty list when she named no task to pick back up, never omitting the key', () => {
+    const out = fieldsFromForm({ ...FORM, reactivate: [] });
+    expect(out.reactivate_tasks).toEqual([]);
+    expect(Object.prototype.hasOwnProperty.call(out, 'reactivate_tasks')).toBe(true);
+  });
+
+  it('copies the reactivate list rather than aliasing the form array', () => {
+    expect(fieldsFromForm(FORM).reactivate_tasks).not.toBe(FORM.reactivate);
+  });
+
+  /**
+   * FINDING 5 — the §14/§17 guarantee, restored on the side that can still break it.
+   *
+   * The retired test asserted `formFromDraft(messy).intent === messy`. The client no longer
+   * BUILDS the intent (the server's structure step does), but the client still SENDS it, and
+   * this translation is the last place a trim, a case-fold or a truncation could be introduced
+   * between the box she typed in and the write. Her words go out byte for byte.
+   */
+  it('sends her intent byte for byte, with no trimming or rewording', () => {
+    const messy = '  Jobs FIRST.  caregiving sat.\n\nno deep focus.   ';
+    expect(fieldsFromForm({ ...FORM, intent: messy }).intent).toBe(messy);
+  });
+
+  it('reads her intent back byte for byte, with no trimming or rewording', () => {
+    const messy = '  Jobs FIRST.  caregiving sat.\n\nno deep focus.   ';
+    expect(formFromFields({ intent: messy }).intent).toBe(messy);
   });
 
   it('splits the days-on string into the list the wire carries', () => {
@@ -118,6 +167,17 @@ describe('formFromFields — the structure step’s answer becomes the form she 
     expect(out.end).toBe('');
     expect(out.front).toEqual([]);
     expect(out.daysOn).toBe('');
+    expect(out.reactivate).toEqual([]);
+  });
+
+  /**
+   * The read half of the same drop. The structure step emits `reactivate_tasks`
+   * (`focus_period_generate.py`) and the reflect-back renders it as the "Reopening" line she
+   * checks — so the form she confirms has to be holding it, or Save writes a period without the
+   * thing she just read back and approved.
+   */
+  it('keeps the tasks the structure step said to pick back up', () => {
+    expect(formFromFields({ reactivate_tasks: ['Dishes'] }).reactivate).toEqual(['Dishes']);
   });
 
   /**

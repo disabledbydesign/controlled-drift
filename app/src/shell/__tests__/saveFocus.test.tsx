@@ -55,6 +55,8 @@ const FORM: FocusForm = {
   workdayStart: '09:00',
   workdayEnd: '17:00',
   paused: ['Reading group'],
+  // She asked for this as-needed task to come back on this period — the write must carry it.
+  reactivate: ['Dishes'],
 };
 
 /** A period as `GET /api/periods` really sends it. */
@@ -125,8 +127,11 @@ describe('saving a NEW focus period writes it to the server', () => {
         workday_start: '09:00',
         workday_end: '17:00',
         paused_projects: ['Reading group'],
+        reactivate_tasks: ['Dishes'],
       },
-      raw_text: 'jobs first this week, caregiving Saturday',
+      // She never typed anything on THIS action — the form came from the fixture, not from the
+      // author box — so there is no raw text to attribute to her. See the raw-text group below.
+      raw_text: '',
     });
   });
 
@@ -244,6 +249,233 @@ describe('a refused write names the field and does not claim a save', () => {
 
     expect(result.current.toast?.msg).toContain('start date');
     expect(result.current.toast?.msg).toContain('end date');
+  });
+});
+
+/**
+ * FINDING 3 — what lands in `signal_log.jsonl` as June's own typed words.
+ *
+ * `raw_text` is not metadata. On both routes it is passed to
+ * `signal_log.log_signal(raw_text, source="config_authoring" | "config_correction")`, and that
+ * file is documented and read as HER OWN TYPED WORDS. A commit landing the same day
+ * (`1522ad5`) removed a machine-written record from that same log for exactly this reason.
+ *
+ * The defect: `saveFocusPeriod` sent `form.intent` as `raw_text`. Open the per-field editor on an
+ * existing period, change only the workday end time, save — and a correction signal is written
+ * whose text is the period's PRE-EXISTING intent sentence, which she did not say, at that moment,
+ * about that change. The words are attributed to her; she never typed them on this action.
+ */
+describe('only words she actually typed are recorded as her words', () => {
+  it('sends no raw text when she edited fields directly and typed nothing', async () => {
+    hydrate([SAVED_PERIOD]);
+    send.mockResolvedValue({ ok: true, data: { ok: true, id: 'fp-saved', name: 'Jobs week' } });
+    const { result } = await mount();
+
+    await act(async () => {
+      await result.current.saveFocusPeriod('edit', 'fp-saved', { ...FORM, workdayEnd: '19:00' });
+    });
+
+    const call = send.mock.calls.find((c) => c[1] === '/api/focus/update');
+    expect((call![2] as { raw_text: string }).raw_text).toBe('');
+  });
+
+  /**
+   * The other half, and why this is not solved by sending '' everywhere: on the AUTHOR path she
+   * really did type a sentence, into the "say it in your own words" box. That sentence is hers
+   * and belongs in the log — dropping it would lose a real record.
+   */
+  it('sends the sentence she typed into the author box when committing that period', async () => {
+    hydrate();
+    send.mockImplementation(async (_m: string, path: string) => {
+      if (path === '/api/focus/author') return { ok: true, data: { state: 'running', started: true } };
+      return { ok: true, data: { ok: true, id: 'fp-saved', name: 'Jobs week' } };
+    });
+    get.mockImplementation(async (path: string) => {
+      if (path === '/api/tree') return { ok: true, data: { nodes: [], strategies: [], orphans: {} } };
+      if (path === '/api/schema') return { ok: true, data: { relations: {}, types: {} } };
+      if (path === '/api/plan') return { ok: true, data: { empty: true } };
+      if (path === '/api/periods') return { ok: true, data: { periods: [] } };
+      if (path === '/api/focus/status') return { ok: true, data: { state: 'done', result_ready: true } };
+      if (path === '/api/focus/result') {
+        return { ok: true, data: { raw_text: 'jobs first, dishes back on', fields: { name: 'Jobs week' } } };
+      }
+      return { ok: false, error: 'not part of this test' };
+    });
+    const { result } = await mount();
+
+    await act(async () => {
+      await result.current.authorFocus('jobs first, dishes back on');
+    });
+    await act(async () => {
+      await result.current.saveFocusPeriod('author', null, FORM);
+    });
+
+    const call = send.mock.calls.find((c) => c[1] === '/api/focus/commit');
+    expect((call![2] as { raw_text: string }).raw_text).toBe('jobs first, dishes back on');
+  });
+
+  /**
+   * Her intent sentence must never be the thing attributed to her by default. This is the
+   * regression itself, asserted on the value: the period's intent text does NOT become a
+   * correction signal just because she touched an unrelated field.
+   */
+  it('does not attribute the period’s existing intent to her as something she just said', async () => {
+    hydrate([SAVED_PERIOD]);
+    send.mockResolvedValue({ ok: true, data: { ok: true, id: 'fp-saved', name: 'Jobs week' } });
+    const { result } = await mount();
+
+    await act(async () => {
+      await result.current.saveFocusPeriod('edit', 'fp-saved', FORM);
+    });
+
+    const call = send.mock.calls.find((c) => c[1] === '/api/focus/update');
+    expect((call![2] as { raw_text: string }).raw_text).not.toBe(FORM.intent);
+  });
+});
+
+/**
+ * FINDING 2 at the shell — a period that saved while a task she asked for did not come back.
+ *
+ * The server goes out of its way not to drop this (`_reactivate_named_tasks`, `server.py:238`);
+ * the surface must not drop it either. Both truths have to be in the one sentence she reads: the
+ * period DID save, and the named task did NOT come back on.
+ */
+describe('a save that partly did not happen says both things', () => {
+  it('names the task that did not come back, and still says the period saved', async () => {
+    hydrate();
+    send.mockResolvedValue({
+      ok: true,
+      data: { ok: true, id: 'fp-saved', name: 'Jobs week', reactivate_unresolved: ['Dishes'] },
+    });
+    const { result } = await mount();
+
+    await act(async () => {
+      await result.current.saveFocusPeriod('author', null, FORM);
+    });
+
+    expect(result.current.toast?.msg).toContain('Dishes');
+    expect(result.current.toast?.msg).toContain('saved');
+  });
+
+  /**
+   * It travels the FAILURE channel, not the success one: `fail` is what reaches `errorLog`, and
+   * a task that silently stayed off is exactly the kind of thing that has to leave a trace. It
+   * is also the register June needs — a quiet success signal would let her walk away believing
+   * the whole instruction landed.
+   */
+  it('reports the partial failure loudly enough to reach the error log', async () => {
+    hydrate();
+    send.mockResolvedValue({
+      ok: true,
+      data: { ok: true, id: 'fp-saved', name: 'Jobs week', reactivate_unresolved: ['Dishes'] },
+    });
+    const { result } = await mount();
+
+    await act(async () => {
+      await result.current.saveFocusPeriod('author', null, FORM);
+    });
+
+    expect(result.current.toast?.kind).toBe('failure');
+  });
+
+  /**
+   * ⚠ It still LANDED. The period is written and proved; returning false would close nothing and
+   * leave her editor open over a period that is already saved, inviting a duplicate write.
+   */
+  it('still reports the period as landed, because the period itself was written', async () => {
+    hydrate();
+    send.mockResolvedValue({
+      ok: true,
+      data: { ok: true, id: 'fp-saved', name: 'Jobs week', reactivate_unresolved: ['Dishes'] },
+    });
+    const { result } = await mount();
+
+    let landed: boolean | undefined;
+    await act(async () => {
+      landed = await result.current.saveFocusPeriod('author', null, FORM);
+    });
+
+    expect(landed).toBe(true);
+  });
+
+  it('says a task did not come back when the reactivation itself failed', async () => {
+    hydrate();
+    send.mockResolvedValue({
+      ok: true,
+      data: {
+        ok: true,
+        id: 'fp-saved',
+        name: 'Jobs week',
+        reactivate_failed: [{ id: 'task-9', error: 'connection refused' }],
+      },
+    });
+    const { result } = await mount();
+
+    await act(async () => {
+      await result.current.saveFocusPeriod('author', null, FORM);
+    });
+
+    expect(result.current.toast?.kind).toBe('failure');
+    expect(result.current.toast?.msg).toContain('connection refused');
+  });
+
+  /** A clean save must stay a plain quiet success — the caveat wording appears only when earned. */
+  it('keeps a clean save a quiet success with no caveat attached', async () => {
+    hydrate();
+    send.mockResolvedValue({ ok: true, data: { ok: true, id: 'fp-saved', name: 'Jobs week' } });
+    const { result } = await mount();
+
+    await act(async () => {
+      await result.current.saveFocusPeriod('author', null, FORM);
+    });
+
+    expect(result.current.toast?.kind).toBe('success');
+    expect(result.current.toast?.msg).toBe('Focus period saved');
+  });
+});
+
+/** MINOR 6 — a step that cannot be carried out must say so, not quietly do something else. */
+describe('an edit with no period id refuses rather than creating a second period', () => {
+  it('reports a failure and issues no write at all', async () => {
+    hydrate([SAVED_PERIOD]);
+    send.mockResolvedValue({ ok: true, data: { ok: true, id: 'fp-new', name: 'Jobs week' } });
+    const { result } = await mount();
+
+    let landed: boolean | undefined;
+    await act(async () => {
+      landed = await result.current.saveFocusPeriod('edit', null, FORM);
+    });
+
+    expect(landed).toBe(false);
+    expect(result.current.toast?.kind).toBe('failure');
+    expect(send.mock.calls.map((c) => c[1])).toEqual([]);
+  });
+});
+
+/** MINOR 9 — the sentence she reads at the moment a save is refused must be grammatical. */
+describe('the missing-field sentence reads as a person telling her what is left', () => {
+  it('puts an article in front of the field it names', async () => {
+    hydrate();
+    send.mockResolvedValue({ ok: true, data: { blocked: ['end date'] } });
+    const { result } = await mount();
+
+    await act(async () => {
+      await result.current.saveFocusPeriod('author', null, { ...FORM, end: '' });
+    });
+
+    expect(result.current.toast?.msg).toContain('needs an end date');
+  });
+
+  it('reads grammatically when it names both fields', async () => {
+    hydrate();
+    send.mockResolvedValue({ ok: true, data: { blocked: ['start date', 'end date'] } });
+    const { result } = await mount();
+
+    await act(async () => {
+      await result.current.saveFocusPeriod('author', null, { ...FORM, start: '', end: '' });
+    });
+
+    expect(result.current.toast?.msg).toContain('needs a start date and an end date');
   });
 });
 

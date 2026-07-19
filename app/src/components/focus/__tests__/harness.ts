@@ -52,6 +52,8 @@ export const BASE_AUTHORED_FORM = {
   workdayStart: '',
   workdayEnd: '',
   paused: [] as string[],
+  /** Empty by default so a test that does not care about reactivation reads unchanged. */
+  reactivate: [] as string[],
 };
 
 export function focusCtxWith(ui: Partial<FocusUi> = {}, periods: Period[] = freshPeriods()) {

@@ -37,6 +37,8 @@ describe('commitFocus — the 200 that is not a success', () => {
       kind: 'saved',
       id: 'fp123',
       name: 'Jobs week',
+      unresolved: [],
+      notReactivated: [],
     });
   });
 
@@ -96,6 +98,100 @@ describe('commitFocus — the 200 that is not a success', () => {
   });
 });
 
+/**
+ * FINDING 2 — the write that saved AND partly did not.
+ *
+ * Both write routes reactivate the as-needed tasks she named ("keep the dishes going") AFTER the
+ * period itself is written and read back. A task whose name cannot be resolved, or that fails to
+ * turn back on, does not roll the period back — so the server answers `{"ok":true, …}` and adds
+ * `reactivate_unresolved` / `reactivate_failed` beside it, with a comment saying these are
+ * "surfaced alongside the success, never silently dropped".
+ *
+ * The client must not undo that. Dropping them means she is told her period saved while a task
+ * she asked for stays off, with nothing anywhere saying so — the same success-over-a-partial-write
+ * defect this seam exists to prevent, arriving from the other direction.
+ */
+describe('commitFocus — a period that saved while part of it did not', () => {
+  it('carries the names the server could not resolve alongside the save', async () => {
+    vi.stubGlobal(
+      'fetch',
+      respond(200, {
+        ok: true,
+        id: 'fp1',
+        name: 'Jobs week',
+        reactivate_unresolved: ['Dishes'],
+      }),
+    );
+    expect(await commitFocus(FIELDS, 'keep the dishes going')).toEqual({
+      kind: 'saved',
+      id: 'fp1',
+      name: 'Jobs week',
+      unresolved: ['Dishes'],
+      notReactivated: [],
+    });
+  });
+
+  /**
+   * The failed entries keep their `error` rather than being reduced to ids: the id is a
+   * gsdo object id, which means nothing to June, while the error is what has to reach the log
+   * for anyone to find out why a task she asked for did not come back.
+   */
+  it('carries the tasks that failed to turn back on, with the reason, alongside the save', async () => {
+    vi.stubGlobal(
+      'fetch',
+      respond(200, {
+        ok: true,
+        id: 'fp1',
+        name: 'Jobs week',
+        reactivate_failed: [{ id: 'task-9', error: 'connection refused' }],
+      }),
+    );
+    expect(await commitFocus(FIELDS, 'x')).toEqual({
+      kind: 'saved',
+      id: 'fp1',
+      name: 'Jobs week',
+      unresolved: [],
+      notReactivated: [{ id: 'task-9', error: 'connection refused' }],
+    });
+  });
+
+  /**
+   * `_reactivate_named_tasks` returns `[{"id": null, "error": …}]` when RESOLUTION itself threw —
+   * a real partial failure with no id to name. It must still register as one, or the whole
+   * resolution step failing would read as a clean save.
+   */
+  it('still reports a partial failure when the failed entry has no id on it', async () => {
+    vi.stubGlobal(
+      'fetch',
+      respond(200, {
+        ok: true,
+        id: 'fp1',
+        name: 'Jobs week',
+        reactivate_failed: [{ id: null, error: 'space unreachable' }],
+      }),
+    );
+    expect(await commitFocus(FIELDS, 'x')).toEqual({
+      kind: 'saved',
+      id: 'fp1',
+      name: 'Jobs week',
+      unresolved: [],
+      notReactivated: [{ id: null, error: 'space unreachable' }],
+    });
+  });
+
+  /** A clean save must stay legible as clean — both lists empty, so a caller can just check them. */
+  it('reports a clean save with both partial-failure lists empty', async () => {
+    vi.stubGlobal('fetch', respond(200, { ok: true, id: 'fp1', name: 'Jobs week' }));
+    expect(await commitFocus(FIELDS, 'x')).toEqual({
+      kind: 'saved',
+      id: 'fp1',
+      name: 'Jobs week',
+      unresolved: [],
+      notReactivated: [],
+    });
+  });
+});
+
 describe('updateFocus — the same refusal convention on the edit route', () => {
   it('reports a written update as SAVED', async () => {
     vi.stubGlobal('fetch', respond(200, { ok: true, id: 'fp9', name: 'Care week' }));
@@ -103,6 +199,23 @@ describe('updateFocus — the same refusal convention on the edit route', () => 
       kind: 'saved',
       id: 'fp9',
       name: 'Care week',
+      unresolved: [],
+      notReactivated: [],
+    });
+  });
+
+  /** The edit route reactivates too, so it reports a partial failure the same way. */
+  it('carries an unresolved name alongside a saved update', async () => {
+    vi.stubGlobal(
+      'fetch',
+      respond(200, { ok: true, id: 'fp9', name: 'Care week', reactivate_unresolved: ['Fridge'] }),
+    );
+    expect(await updateFocus('fp9', FIELDS, 'x')).toEqual({
+      kind: 'saved',
+      id: 'fp9',
+      name: 'Care week',
+      unresolved: ['Fridge'],
+      notReactivated: [],
     });
   });
 

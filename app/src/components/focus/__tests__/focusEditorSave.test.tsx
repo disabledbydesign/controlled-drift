@@ -39,6 +39,7 @@ const FORM: FocusForm = {
   workdayStart: '',
   workdayEnd: '',
   paused: [],
+  reactivate: [],
 };
 
 const UI: FocusUi = {

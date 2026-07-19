@@ -26,6 +26,41 @@ def test_author_correction_uses_correction_source(tmp_path, monkeypatch):
     assert signal_log.read_signals()[0]["source"] == "config_correction"
 
 
+def test_update_with_no_words_of_hers_writes_no_signal(tmp_path, monkeypatch):
+    """signal_log.jsonl holds JUNE'S OWN TYPED WORDS. The per-field editor changes one field with
+    no sentence typed at all, so the update arrives with an empty raw_text — and an empty record
+    stamped 'config_correction' is a claim she said something when she said nothing. The object
+    update itself still happens; only the fabricated signal is withheld. Same rule as commit
+    1522ad5, which moved machine-recorded deferrals out of this log."""
+    monkeypatch.setenv("CD_DATA_DIR", str(tmp_path))
+    seen = {}
+    monkeypatch.setattr(gsdo_objects, "update",
+                        lambda oid, **k: seen.update({"id": oid, "kw": k}))
+    fpa.update_focus_period("fp-1", "   ", "Week of Jun 30", {"Workday end": "19:00"})
+    assert seen["id"] == "fp-1"          # the field change itself still landed
+    assert signal_log.read_signals() == []
+
+
+def test_update_with_her_words_still_logs_them(tmp_path, monkeypatch):
+    """The guard is narrow: a real sentence of hers still reaches the log, verbatim."""
+    monkeypatch.setenv("CD_DATA_DIR", str(tmp_path))
+    monkeypatch.setattr(gsdo_objects, "update", lambda oid, **k: None)
+    fpa.update_focus_period("fp-1", "actually paused cuffs this week", "Week of Jun 30", {})
+    rows = signal_log.read_signals()
+    assert len(rows) == 1
+    assert rows[0]["raw"] == "actually paused cuffs this week"
+    assert rows[0]["source"] == "config_correction"
+
+
+def test_create_with_no_words_of_hers_writes_no_signal(tmp_path, monkeypatch):
+    """Same rule on the create route, so the two write paths cannot drift apart."""
+    monkeypatch.setenv("CD_DATA_DIR", str(tmp_path))
+    monkeypatch.setattr(gsdo_objects, "create", lambda *a, **k: "fp_new_id")
+    oid = fpa.author_focus_period("", "Week of Jun 30", {"Intent": "x"})
+    assert oid == "fp_new_id"
+    assert signal_log.read_signals() == []
+
+
 def test_authorship_stamps_llm_but_intent_stays_june(tmp_path, monkeypatch):
     """A Focus Period legitimately carries both authorships at once: the model structures the
     period, but `Intent` is June's own words and is never reworded (backend spec §17). Stamping

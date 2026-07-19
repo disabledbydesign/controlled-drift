@@ -70,13 +70,29 @@ def resolve_project_names_to_ids(names, objects=None):
     return ids
 
 
+def _log_her_words(raw_text, source, object_id, name):
+    """Record raw_text in signal_log ONLY when there are words of hers in it.
+
+    `signal_log.jsonl` is documented and read as June's OWN TYPED WORDS. Both write routes accept
+    an empty `raw_text` (the per-field editor changes one field with no sentence typed at all),
+    and logging that produces a record stamped `config_correction` with nothing in it — a claim
+    that she said something on this action when she said nothing. Same rule as commit 1522ad5,
+    which moved machine-recorded deferrals out of this log for the same reason.
+
+    Withholding the signal is not a silent failure: nothing was asked for and nothing is claimed.
+    The object write itself has already happened and is unaffected."""
+    if not (raw_text or "").strip():
+        return
+    signal_log.log_signal(raw_text, source=source,
+                          reference={"kind": "focus_period", "id": object_id, "name": name})
+
+
 def author_focus_period(raw_text, name, properties, source="config_authoring"):
     """Create a Focus Period and log June's raw words as signal. Returns the new object id.
     source='config_correction' when editing an existing period's framing."""
     oid = gsdo_objects.create("Focus Period", name, properties=properties)
     _stamp_period_authorship(oid, name, properties)
-    signal_log.log_signal(raw_text, source=source,
-                          reference={"kind": "focus_period", "id": oid, "name": name})
+    _log_her_words(raw_text, source, oid, name)
     return oid
 
 
@@ -88,6 +104,5 @@ def update_focus_period(object_id, raw_text, name, properties, source="config_co
     # An edit pass re-authors these fields, so it re-stamps them. The fold is last-write-wins, so
     # the newer stamp is what a later correction resolves against.
     _stamp_period_authorship(object_id, name, properties, surface=source)
-    signal_log.log_signal(raw_text, source=source,
-                          reference={"kind": "focus_period", "id": object_id, "name": name})
+    _log_her_words(raw_text, source, object_id, name)
     return object_id
