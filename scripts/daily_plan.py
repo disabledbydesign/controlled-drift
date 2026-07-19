@@ -985,6 +985,18 @@ def blocks_from_scheduled(scheduled, framing_by_label=None):
                 # interstitial only when it's a Python-inserted break (meals/chores are not).
                 "interstitial": bool(it.get("interstitial")) if composed else bool(it.get("_break")),
             }
+            # The row's own stored length, carried through to the surface. This whitelist used to
+            # drop it: duration_min was read to compute the clock times and then discarded when the
+            # row was written, so a task with a real gsdo_duration_min reached the Today tab with no
+            # duration at all and was offered "set duration" for a value June had already given
+            # (live 2026-07-19: "Do the dishes" = 20, /api/tree said 20, /api/plan said nothing).
+            # Gated on a real id so only an Anytype-backed length is surfaced: a meal or a
+            # Python-inserted break carries a cold-start DEFAULT length, and showing that as though
+            # it were a duration she set is the same fabrication, one layer over.
+            # `is not None` (never truthiness) so a stored 0 survives, and an unstored duration
+            # stays genuinely absent — the UI needs to be able to say it is unset.
+            if it.get("id") and it.get("duration_min") is not None:
+                row["duration_min"] = it["duration_min"]
             if composed:
                 if it.get("id"):
                     row["id"] = it["id"]

@@ -1009,6 +1009,13 @@ def _resolve_ids(plan, ref_map, tasks, all_tasks=None):
     # project (first linked project, if any). The overwrite below reads from these.
     name_by_id = {t["id"]: t["name"] for t in identity}
     proj_by_id = {t["id"]: (t.get("linked_projects") or [None])[0] for t in identity}
+    # The task's own stored duration is an identity field like its name and project: it follows the
+    # id, not the model's text (the plan prompt never asks for a duration, so the model has none to
+    # give). Re-attached HERE rather than in _retime_clock_plan because that pass early-returns for
+    # the priority shape — which is why a priority day's task and recurring rows reached the surface
+    # with no duration while block rows (whose duration comes from chunk_min in
+    # _group_block_project_items) looked fine, and the defect read as working under review.
+    duration_by_id = {t["id"]: t.get("duration_min") for t in identity}
     # Per-thread held-back data (count + names of this thread's not-today items), keyed by the
     # shown task's id. Python owns this map — the LLM only echoes a ref token, never the count —
     # so the honest 'N more' reaches the cached plan JSON without the model rebuilding the pile.
@@ -1061,6 +1068,12 @@ def _resolve_ids(plan, ref_map, tasks, all_tasks=None):
             desc = context_by_id.get(tid)
             if desc:
                 item["description"] = desc
+            # `is not None`, never truthiness: a stored 0 is a real answer, and a task with nothing
+            # stored must stay genuinely absent so the surface can offer an honest unset state.
+            # Never substitute a default here — a confident wrong number is worse than a blank.
+            stored_duration = duration_by_id.get(tid)
+            if stored_duration is not None:
+                item["duration_min"] = stored_duration
             # Carry this thread's held-back count + names so the row can label '· N more' and
             # reveal the held items on expand. Only when >0 — a thread with nothing held stays clean.
             held = held_by_id.get(tid, 0)
