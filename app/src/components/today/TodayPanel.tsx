@@ -41,7 +41,19 @@ export function TodayPanel({ ctx }: TodayPanelProps) {
   const C = ctx.T.c;
   const hw = ctx.T.mode === 'hardware';
   const P = ctx.plan;
-  const shape = ctx.ui.todayShape || 'schedule';
+  // The SERVER decides the shape from her focus period (focus_period.resolve_output_shape).
+  // The app used to ignore that and default to the mockup's 'schedule', which is how a
+  // priority plan ended up rendered through one unlabelled container band.
+  // A clock plan CAN render either way — `workItems` flattens bands into a ranked list — so
+  // the toggle is real there and only there. A priority plan has no clock times to show, and
+  // inventing them is the fabrication this whole surface is being cleaned of.
+  const canToggle = P.shape === 'schedule';
+  const shape = canToggle ? ctx.ui.todayShape || 'schedule' : 'priority';
+  // The server's own one-line reason. Rendered VERBATIM and never composed here: the client
+  // cannot know which path produced the shape (explicit "Priority list" setting vs. an
+  // availability window), so any locally written sentence would sometimes assert a cause that
+  // is not the cause. Empty header → no line at all.
+  const reason = !canToggle && P.header ? P.header : '';
 
   const seg = (id: 'schedule' | 'priority', label: string) => {
     const on = shape === id;
@@ -162,25 +174,33 @@ export function TodayPanel({ ctx }: TodayPanelProps) {
       </div>
 
       <div style={{ display: 'flex', alignItems: 'center', gap: '7px', padding: '6px 14px 2px' }}>
-        <span
-          style={{
-            fontSize: '10px',
-            color: C.dimmer,
-            textTransform: 'uppercase',
-            letterSpacing: '.08em',
-            marginRight: 'auto',
-          }}
-        >
-          View
-        </span>
-        {seg('schedule', 'Schedule')}
-        <span style={{ color: C.dimmer, fontSize: '10px' }}>·</span>
-        {seg('priority', 'Priority')}
+        {canToggle ? (
+          <>
+            {/* The label heads the control. With no control under it, it would head a
+                sentence instead — so it goes when the segments go. */}
+            <span
+              style={{
+                fontSize: '10px',
+                color: C.dimmer,
+                textTransform: 'uppercase',
+                letterSpacing: '.08em',
+                marginRight: 'auto',
+              }}
+            >
+              View
+            </span>
+            {seg('schedule', 'Schedule')}
+            <span style={{ color: C.dimmer, fontSize: '10px' }}>·</span>
+            {seg('priority', 'Priority')}
+          </>
+        ) : reason ? (
+          <div style={{ fontSize: '11px', color: C.dimmer, lineHeight: 1.45 }}>{reason}</div>
+        ) : null}
       </div>
 
       {shape === 'priority' ? (
         <div style={{ borderBottom: '1px solid ' + C.border, padding: '4px 0' }}>
-          <PriorityList ctx={ctx} />
+          <PriorityList ctx={ctx} reasonShown={!!reason} />
         </div>
       ) : (
         <div style={{ borderBottom: '1px solid ' + C.border }}>

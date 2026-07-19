@@ -12,6 +12,13 @@ import { toggleKey } from "./util.ts";
 
 export interface PriorityListProps {
   ctx: TodayCtx;
+  /**
+   * True when the caller is already showing the plan's own `header` line above this list.
+   * The list then drops its own "No clock times" lead so the same fact is stated once
+   * instead of stacking under the woven frame and the header. Defaults to false so a
+   * standalone caller still gets the lead.
+   */
+  reasonShown?: boolean;
 }
 
 /**
@@ -55,7 +62,7 @@ export interface PriorityListProps {
  * and `nearestProject` resolves to "IOP and recovery", so the plain-row path would render
  * "IOP and recovery · Work on IOP and recovery". The phrasing names the thread on its own.
  */
-export function PriorityList({ ctx }: PriorityListProps) {
+export function PriorityList({ ctx, reasonShown = false }: PriorityListProps) {
   const C = ctx.T.c;
   // Each item arrives with the band/item address `toggleArcStep` and the `blocksOpen` /
   // `chunked` keys need. A row's position on screen is NOT its position in the plan — the
@@ -163,16 +170,18 @@ export function PriorityList({ ctx }: PriorityListProps) {
 
   return (
     <div>
-      <div
-        style={{
-          fontSize: "11px",
-          color: C.dimmer,
-          padding: "6px 14px 8px",
-          lineHeight: 1.45,
-        }}
-      >
-        No clock times — a ranked to-do list to pull from.
-      </div>
+      {reasonShown ? null : (
+        <div
+          style={{
+            fontSize: "11px",
+            color: C.dimmer,
+            padding: "6px 14px 8px",
+            lineHeight: 1.45,
+          }}
+        >
+          No clock times — a ranked to-do list to pull from.
+        </div>
+      )}
       {order.map((id, i) => {
         const addr = addressById.get(id);
         const item = addr?.item;
