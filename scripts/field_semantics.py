@@ -166,11 +166,42 @@ FIELDS = {
                   "docs/BUILD_DOC.md §8 Strategy decision (live usage across her 12 Strategies)",
     },
 
+    "Intentionally none": {
+        "types": ("Task", "Recurring", "Project"),
+        "means": "PLUMBING, not a field June fills in. Which INHERITABLE fields this object has "
+                 "deliberately set to empty \u2014 spec \u00a74's third state, \"custom, and the "
+                 "custom value is none\". Its options are the display names of the inheritable "
+                 "fields themselves (Access conditions / Block chunk min / Affective).",
+        "not_this": "An access condition, a status, or anything June selects directly. She never "
+                    "sees or manages it \u2014 unticking every option in a field IS how it is set.",
+        "instead": {"a real access barrier": "Access conditions",
+                    "a barrier with no matching tag": "Access notes"},
+        "usage": [
+            "Spec \u00a74 needs three states per inheritable field: unset (inherit from the "
+            "nearest ancestor that sets it), set here, and set here to an explicit empty. "
+            "Key-presence carries that \u2014 but only for TEXT. Verified live 2026-07-19: an "
+            "empty write to a multi_select DELETES the property, and a number has no empty at "
+            "all, so for `access` and `blockMin` \"deliberately none\" and \"never touched\" "
+            "were the same bytes and the override silently reverted to inheriting on reload.",
+            "It is a SEPARATE property rather than a \"none of these\" tag inside the field, "
+            "because daily_plan.py reads access tags and PRINTS them and plan_generate.py "
+            "FILTERS tasks by them \u2014 a marker in that list would render as a fake access "
+            "condition and act as a phantom constraint on selection.",
+            "The AI never proposes it and capture never writes it.",
+        ],
+        "source": "review_reorganize_backend_spec.md \u00a74 (tri-state); scripts/intentionally_none.py",
+        "observed": "Added 2026-07-19 after June hit the failure it fixes: pressing Custom on a "
+                    "field with nothing to inherit wrote an empty value, which deleted the "
+                    "property, so the save failed its own read-back and she got an error for "
+                    "pressing a button. She confirmed overriding to empty is a real need \u2014 a "
+                    "task under dev work whose inherited conditions genuinely do not apply.",
+    },
     "Access conditions": {
         "types": ("Task", "Recurring", "Project"),
         "means": "Fixed multi-select for the access barriers that are QUERYABLE and load-bearing.",
         "not_this": "Any barrier without a live tag — those go in `Access notes` as open text.",
-        "instead": {"a barrier with no matching tag": "Access notes"},
+        "instead": {"a barrier with no matching tag": "Access notes",
+                    "deliberately NO barriers, overriding what would be inherited": "Intentionally none"},
         "usage": [
             "Two tags earn their place because they drive real behavior: Can-be-done-lying-down "
             "(low-capacity filtering) and Involves-leaving-house (errand-batching). "
@@ -1228,6 +1259,19 @@ DOES = {
                    "context, and the app renders it. ⚠ Do NOT write your own filing rationale here: "
                    "an agent's reasoning about WHY it filed something belongs in the write log, not "
                    "in a field June reads. That misroute was real and was closed in commit e39dd5b.",
+    },
+    "Intentionally none": {
+        "status": "live",
+        "written_by": "api_write.set_vals (marks when an inheritable field is written empty, "
+                      "unmarks when it is written a real value) and api_write.clear_field "
+                      "(drops it, so Inherit really does go back to inheriting). Written only "
+                      "when it CHANGES, so an ordinary edit logs no correction. Nothing else "
+                      "writes it \u2014 not capture, not the LLM.",
+        "read_by": "api_tree._vals ONLY, which folds it back in as a present-but-empty key so "
+                   "the spec \u00a74 resolver stops walking at this object instead of "
+                   "inheriting. Deliberately invisible to everything that consumes access tags "
+                   "(daily_plan.py, plan_generate.py) \u2014 that invisibility is the whole "
+                   "reason it is a separate property.",
     },
     "Access conditions": {
         "status": "live",
