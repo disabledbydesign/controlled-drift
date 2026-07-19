@@ -19,6 +19,68 @@ import { pathTo } from './graph.ts';
 /** A non-break plan item — the two grains that carry a real node id. */
 export type PlanWorkItem = PlanBlockItem | PlanTaskItem;
 
+/**
+ * The plan's age, in plain relative words — so a plan left over from yesterday (a failed
+ * morning generation) never reads as today's.
+ *
+ * ⚠ RESTORED, not invented. This is a transcription of `renderPlanAge()` in
+ * `docs/overlay_daily.html` (~2409) — the surface June used for months and tuned to herself.
+ * The branch structure, the part-of-day thresholds, the calendar-day arithmetic and the exact
+ * sentences are hers. What changed in the port: it returns a string instead of writing to a DOM
+ * node, and `now` is a parameter so the behaviour is testable without faking the clock.
+ *
+ * WHY IT CAME BACK. `adapt.ts` blanked this field with the note "Spec §14 removed the plan-age
+ * line" — so she saw a date she read as today's, with no cue the plan was stale. The spec line
+ * is not authority over the function: the whole system exists so her commitments live outside
+ * her head, and a plan that presents yesterday as today is the system lying about exactly that.
+ *
+ * ⚠ Called at RENDER time, not at adapt time, and that is load-bearing. If the age were baked
+ * in when the payload was fetched, a surface left open across midnight would keep insisting the
+ * plan was built "this morning". `Plan.generated` therefore carries the raw ISO timestamp, and
+ * this function is what turns it into words.
+ *
+ * Returns '' when there is nothing true to say — no timestamp, or one that will not parse.
+ * The caller renders nothing at all rather than a placeholder; that is the same defect class
+ * this function exists to remove.
+ *
+ * Dim by design at the call site: an honest fact, not an alert.
+ */
+export function planAgeText(iso: string | undefined | null, now: Date = new Date()): string {
+  const built = iso ? new Date(iso) : null;
+  if (!built || Number.isNaN(built.getTime())) return '';
+
+  // Calendar days apart, NOT elapsed hours. What she needs to know is "is this today's plan" —
+  // a plan built at 11pm is yesterday's at 1am even though it is two hours old.
+  const startOfDay = (d: Date) => new Date(d.getFullYear(), d.getMonth(), d.getDate());
+  const dayDiff = Math.round(
+    (startOfDay(now).getTime() - startOfDay(built).getTime()) / 86400000,
+  );
+
+  // The part of day is read off the BUILD hour, never the current one.
+  const h = built.getHours();
+  const partOfDay = h < 12 ? 'morning' : h < 17 ? 'afternoon' : 'evening';
+  const time = built.toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' });
+
+  let text: string;
+  let stale: boolean;
+  if (dayDiff <= 0) {
+    text = `built this ${partOfDay} at ${time}`;
+    stale = false;
+  } else if (dayDiff === 1) {
+    // The morning-generation-failed case — the reason the line exists at all.
+    text = `built yesterday ${partOfDay} at ${time}`;
+    stale = true;
+  } else {
+    // Older still — an unambiguous date, not a weekday name that collides with this week's.
+    const dateStr = built.toLocaleDateString([], { month: 'short', day: 'numeric' });
+    text = `built ${dateStr} at ${time}`;
+    stale = true;
+  }
+  // Names the control that fixes it, by its own on-screen label ('↻ Fresh plan').
+  if (stale) text += ' — tap Fresh plan for today’s';
+  return text;
+}
+
 /** What a plan mutation returns. Mirrors `MutationResult`, minus the graph. */
 export interface PlanResult {
   plan: Plan;

@@ -212,6 +212,15 @@ export interface PlanBlock {
 
 export interface Plan {
   date: string;
+  /**
+   * WHEN this plan was generated, as the server's raw ISO timestamp (`/api/plan.generated_at`)
+   * — NOT a display string. `model/plan.ts` `planAgeText` turns it into words at render time,
+   * so the age stays true on a surface left open past midnight.
+   *
+   * ⚠ It held a pre-composed sentence ("Built this morning at 9:02.") until 2026-07-19, and
+   * `planFromLive` blanked it entirely. Empty means the server sent no timestamp, and the
+   * renderer then says nothing about the age rather than guessing at one.
+   */
   generated: string;
   /**
    * ⚠ Narrowed from `string` 2026-07-18. As a bare string, `shape === 'schedule'` typechecked

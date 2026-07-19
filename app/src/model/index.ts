@@ -48,6 +48,7 @@ export {
 
 export {
   workItems,
+  planAgeText,
   addressedWorkItems,
   nearestProject,
   isDone,

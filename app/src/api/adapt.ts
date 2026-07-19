@@ -207,9 +207,24 @@ export function planFromLive(live: LivePlan): Plan {
     // Display-formatted server-side in the fixture (contract §6 Q8, unresolved). Formatted here
     // from the real generation timestamp rather than left blank.
     date: live.generated_at ? fmtDay(live.generated_at) : '',
-    // Spec §14 removed the plan-age line and nothing renders this. Kept empty rather than
-    // fabricating "Built this morning at 9:02."
-    generated: '',
+    /*
+     * The server's real generation timestamp, carried through RAW and unformatted.
+     *
+     * ⚠ This was `''`, on the reasoning that "spec §14 removed the plan-age line and nothing
+     * renders this." Blanking it removed the ONLY signal that separates today's plan from
+     * yesterday's: with the age line gone she saw `date` — which she reads as today's — on a
+     * plan that may have been built before a failed morning generation. The spec line does not
+     * outrank the function; the display is back (`model/plan.ts` `planAgeText`, restored from
+     * the old overlay), and this is what feeds it.
+     *
+     * NOT formatted here, deliberately. The words depend on when they are READ, not on when
+     * the payload arrived — a surface left open across midnight must stop saying "this
+     * morning". `planAgeText` composes them at render time.
+     *
+     * Absent stays `''` — the renderer then shows no age line at all. An invented build time
+     * would be the same defect one field over.
+     */
+    generated: live.generated_at ?? '',
     shape,
     // How many appointments were folded into `blocks[0]` above. `/api/task/move` indexes its
     // `position` against the server's own list, which keeps appointments separate — so this is
@@ -229,6 +244,51 @@ function fmtDay(iso: string): string {
   const d = new Date(iso);
   if (Number.isNaN(d.getTime())) return '';
   return d.toLocaleDateString(undefined, { weekday: 'short', month: 'short', day: 'numeric' });
+}
+
+// ── plan-action presets ──────────────────────────────────────────────────────
+
+/** One plan-action button, as stored in her own `~/.controlled-drift/actions.json`. */
+export interface Preset {
+  /** ⚠ CONTRACT. `POST /api/negotiate {preset_id}` dispatches on this and 400s on an unknown one. */
+  id: string;
+  /** ⚠ DISPLAY. Hers to change; nothing may depend on its text. */
+  label: string;
+}
+
+/** The `GET /api/actions` payload — the VARIABLE button schema (`plan_store.py`). */
+export interface ActionsResponse {
+  version?: number;
+  presets?: { id?: string; label?: string }[];
+}
+
+/**
+ * Her plan-action buttons, read from her file instead of hardcoded in the app.
+ *
+ * WHY THIS EXISTS. The four buttons on Today carried hardcoded labels, and they had already
+ * drifted from what she stores: her `quick-wins` preset reads "Quick wins first" while the
+ * button said "Quick wins only". Asked which was right, the question was withdrawn — it is the
+ * wrong question. Correcting the string would leave the same drift free to happen again on the
+ * next edit to her file. Reading the label from the file is what removes the class.
+ *
+ * ⚠ LABELS ARE DISPLAY, IDS ARE CONTRACT — do not conflate them. The id is passed to
+ * `/api/negotiate` untouched and an unknown one answers 400 (`server.py:1017`); the label is
+ * hers and may change any time. Nothing here normalises, title-cases or otherwise "tidies" a
+ * label: the whole point is that what she typed is what she sees.
+ *
+ * The `add` entry is excluded. It is a UI-only marker with a null payload, and June removed
+ * "Add something" from this row on 2026-07-18 (navigation among plan actions; the Add tab is
+ * one tap away). Honouring her file must not quietly undo her decision.
+ *
+ * Entries missing an id or a label are DROPPED, not repaired — an id-less preset could never
+ * dispatch and a label-less one renders a blank button. Supplying a stand-in for either is the
+ * same defect this function exists to remove.
+ */
+export function presetsFromLive(live: ActionsResponse): Preset[] {
+  return (live.presets ?? [])
+    .filter((p) => p && typeof p.id === 'string' && p.id !== '' && p.id !== 'add')
+    .filter((p) => typeof p.label === 'string' && p.label !== '')
+    .map((p) => ({ id: p.id as string, label: p.label as string }));
 }
 
 // ── periods ──────────────────────────────────────────────────────────────────

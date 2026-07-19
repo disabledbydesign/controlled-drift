@@ -8,7 +8,7 @@
  */
 
 import { describe, expect, it } from 'vitest';
-import { graphFromTree, planFromLive } from '../adapt.ts';
+import { graphFromTree, planFromLive, presetsFromLive } from '../adapt.ts';
 import type { LivePlan, TreeResponse } from '../adapt.ts';
 
 describe('graphFromTree', () => {
@@ -179,5 +179,102 @@ describe('planFromLive', () => {
 
   it('defaults an absent shape to schedule — the UI branches on it unconditionally', () => {
     expect(planFromLive({}).shape).toBe('schedule');
+  });
+});
+
+/*
+ * THE PLAN'S BUILD TIME. `planFromLive` used to blank this, citing a spec line that removed the
+ * plan-age display — so the surface lost the only signal distinguishing today's plan from
+ * yesterday's. The adapter now carries the server's real timestamp through UNFORMATTED; the
+ * words are composed at render time by `planAgeText`, so a surface left open across midnight
+ * cannot keep calling yesterday's plan "this morning's".
+ *
+ * Verified against the live server 2026-07-19: GET /api/plan answers
+ * `generated_at: '2026-07-19T10:14:56.941606'` — a naive local ISO, no zone suffix.
+ */
+describe('planFromLive — the build time she needs to judge the plan by', () => {
+  it('carries the server’s generation timestamp through verbatim', () => {
+    const plan = planFromLive({ generated_at: '2026-07-19T10:14:56.941606', items: [] });
+    expect(plan.generated).toBe('2026-07-19T10:14:56.941606');
+  });
+
+  it('leaves the build time empty when the server sends none, never a stand-in', () => {
+    expect(planFromLive({ items: [] }).generated).toBe('');
+  });
+});
+
+/*
+ * HER PRESET BUTTONS COME FROM HER FILE.
+ *
+ * The four plan-action buttons had their labels hardcoded in the app, and the labels had
+ * already drifted from `~/.controlled-drift/actions.json`: her stored preset reads "Quick wins
+ * first", the button said "Quick wins only". The fix is NOT to correct the string — it is that
+ * the button reads its label from her file, so the drift cannot recur.
+ *
+ * ⚠ LABELS ARE DISPLAY, IDS ARE CONTRACT. `POST /api/negotiate {preset_id}` answers 400 on an
+ * unknown id (`server.py:1017`), so the id must survive untouched while the label is free to
+ * change. These tests hold those two apart on purpose.
+ *
+ * Live shape verified 2026-07-19 via `curl -s localhost:5050/api/actions`.
+ */
+describe('presetsFromLive — the action row reads her own file', () => {
+  const live = {
+    version: 1,
+    presets: [
+      { id: 'low-energy', label: 'Low energy today', operation: 'generate' },
+      { id: 'quick-wins', label: 'Quick wins first', operation: 'reorder' },
+      { id: 'stuck', label: "I'm stuck", operation: 'reorder' },
+      { id: 'life-admin', label: 'Life admin & household', operation: 'reorder' },
+      { id: 'add', label: '+ Add', operation: 'reorder', payload: null },
+    ],
+  };
+
+  it('takes each label from the file verbatim, including the one that had drifted', () => {
+    expect(presetsFromLive(live).map((p) => p.label)).toEqual([
+      'Low energy today',
+      'Quick wins first', // NOT the hardcoded 'Quick wins only'
+      "I'm stuck",
+      'Life admin & household',
+    ]);
+  });
+
+  it('keeps every id exactly as stored, because the server dispatches on it', () => {
+    expect(presetsFromLive(live).map((p) => p.id)).toEqual([
+      'low-energy',
+      'quick-wins',
+      'stuck',
+      'life-admin',
+    ]);
+  });
+
+  /*
+   * June removed "Add something" from the plan-action row on 2026-07-18 — it was navigation
+   * sitting among plan actions, and the Add tab is one tap away. The `add` entry in her file
+   * is a UI-only marker with a null payload, so honouring her file must not undo her decision.
+   */
+  it('leaves the UI-only "add" entry out of the plan-action row', () => {
+    expect(presetsFromLive(live).map((p) => p.id)).not.toContain('add');
+  });
+
+  it('shows no buttons rather than invented ones when the file has no presets', () => {
+    expect(presetsFromLive({ version: 1, presets: [] })).toEqual([]);
+    expect(presetsFromLive({})).toEqual([]);
+  });
+
+  /*
+   * A preset with no id could never be dispatched, and one with no label would render a blank
+   * button. Both are dropped rather than shown with a stand-in — a made-up label here is the
+   * very defect this change removes.
+   */
+  it('drops entries that could not work, rather than filling in a stand-in', () => {
+    const broken = {
+      presets: [
+        { id: 'ok', label: 'Fine' },
+        { id: '', label: 'No id' },
+        { id: 'no-label' },
+        { label: 'No id at all' },
+      ],
+    };
+    expect(presetsFromLive(broken)).toEqual([{ id: 'ok', label: 'Fine' }]);
   });
 });

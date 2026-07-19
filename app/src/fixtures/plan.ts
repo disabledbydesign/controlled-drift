@@ -12,7 +12,17 @@ import type { Plan } from './types.ts';
 
 export const seedPlan: Plan = {
   date: 'Wed Jul 16',
-  generated: 'Built this morning at 9:02.',
+  /*
+   * EMPTY ON PURPOSE. v4's fixture carried the sentence "Built this morning at 9:02."; the
+   * field now holds a real ISO timestamp, and this seed plan has no real generation behind it.
+   *
+   * ⚠ Load-bearing, not tidiness: `useAppState` clones this seed as the app's INITIAL plan,
+   * before the real `/api/plan` fetch lands. Any timestamp here would be shown to June as a
+   * fact about her plan for the moment the app is opening — either a false "built this
+   * morning" or a false staleness notice. Empty renders no age line at all, and the real
+   * timestamp replaces it as soon as the payload arrives.
+   */
+  generated: '',
   shape: 'schedule',
   // v4's fixture predates the server's `header` line and has no equivalent of it. Empty rather
   // than invented — a made-up reason in the fixture is exactly what the real one replaces.

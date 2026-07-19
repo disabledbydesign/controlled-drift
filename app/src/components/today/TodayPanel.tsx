@@ -1,4 +1,5 @@
 import { alpha } from '@tokens';
+import { planAgeText } from '../../model/index.ts';
 import { bevel } from '../atoms/index.ts';
 import { Band } from './Band.tsx';
 import { FocusSlot } from './FocusSlot.tsx';
@@ -19,9 +20,13 @@ export interface TodayPanelProps {
  * · **Woven frame always expanded** — rendered unconditionally. ⚠ Already true in v4: the
  *   state bag declares `wovenOpen:false` (v4:79) but `todayPanel` never reads it. Verified by
  *   grep — `wovenOpen` has exactly one occurrence in the whole mockup, its declaration.
- * · **No plan-age line.** ⚠ Also already true in v4: `plan.generated` ("Built this morning at
- *   9:02.") is in the fixture and read by nothing. Verified by grep — zero occurrences of
- *   `.generated` outside the fixture. It stays in the payload for staleness logic.
+ * · **The plan-age line is BACK** (2026-07-19), reversing the earlier "no plan-age line" delta.
+ *   That delta was read off spec §14 and off v4 (where `plan.generated` sits in the fixture and
+ *   is read by nothing) — but the reasoning ran from doc text, not from function. In function,
+ *   the line is the only thing separating today's plan from yesterday's: when the morning
+ *   generation fails, the leftover plan renders under a date she reads as today's. Restored
+ *   from `docs/overlay_daily.html` `renderPlanAge()` (~2409) — the surface she used for months
+ *   — as `model/plan.ts` `planAgeText`, composed at render so it stays true past midnight.
  * · **"Life admin & household" preset** is present in the action row — v4 already had it.
  *
  * ── the shape switch ────────────────────────────────────────────────────────
@@ -35,16 +40,21 @@ export interface TodayPanelProps {
  * nothing else. They now call the endpoints that already implemented them —
  * `/api/refresh` for a fresh plan, `/api/negotiate {preset_id}` for the presets.
  *
- * ⚠ THE PRESET IDS ARE QUOTED, NEVER COMPOSED. They come from `plan_store._DEFAULT_ACTIONS`
- * (`low-energy`, `quick-wins`, `stuck`, plus a UI-only `add`) merged with her own
- * `~/.controlled-drift/actions.json` — which was read live and holds exactly the first three.
- * An id the server does not hold answers 400 (`server.py:927`).
+ * ⚠ THE PRESETS ARE READ FROM HER FILE, NOT WRITTEN HERE (2026-07-19). `ctx.presets` is her
+ * `~/.controlled-drift/actions.json` served through `GET /api/actions`; both label and id come
+ * from it. Until this change the labels were hardcoded, and they had already drifted from what
+ * she stores — hers reads "Quick wins first", the button read "Quick wins only". Editing the
+ * string would have left the drift free to reappear; reading her file removes the class.
  *
- * "Life admin & household" WAS the exception — a label with no backend, flashing a claim that
- * nothing stood behind. It is now the `life-admin` preset, wired like the other three. The id is
- * quoted, not guessed: it is in `plan_store._DEFAULT_ACTIONS` and in her live
- * `~/.controlled-drift/actions.json`, and a live `POST /api/negotiate {"preset_id":"life-admin"}`
- * answered 202 and produced a reordered plan.
+ * ⚠ LABEL IS DISPLAY, ID IS CONTRACT, and the two must never be derived from each other. The
+ * id goes to `/api/negotiate` untouched and an unknown one answers 400 (`server.py:1017`).
+ *
+ * "Life admin & household" WAS an exception — a label with no backend, flashing a claim that
+ * nothing stood behind. It is a real `life-admin` preset in her file, and a live
+ * `POST /api/negotiate {"preset_id":"life-admin"}` answered 202 with a reordered plan.
+ *
+ * The `add` preset in her file is excluded by the adapter, not here — it is a UI-only marker,
+ * and June removed "Add something" from this row on 2026-07-18.
  *
  * "Add something" is GONE from this row (June's direction, 2026-07-18). It was navigation sitting
  * among plan actions, and the Add tab is one tap away in the tab bar. Removing it needs no spacing
@@ -84,6 +94,8 @@ export function TodayPanel({ ctx }: TodayPanelProps) {
   // inventing them is the fabrication this whole surface is being cleaned of.
   const canToggle = P.shape === 'schedule';
   const shape = canToggle ? ctx.ui.todayShape || 'schedule' : 'priority';
+  // Recomputed every render, deliberately — see the plan-age block below.
+  const age = planAgeText(P.generated);
   // The server's own one-line reason. Rendered VERBATIM and never composed here: the client
   // cannot know which path produced the shape (explicit "Priority list" setting vs. an
   // availability window), so any locally written sentence would sometimes assert a cause that
@@ -118,7 +130,18 @@ export function TodayPanel({ ctx }: TodayPanelProps) {
    * a second tap cannot stack a request the server would refuse anyway (`_gen_lock`,
    * `server.py:272`). "Move this later" is not a generation and stays live throughout.
    */
-  const act = (label: string, primary: boolean, onClick: () => void, gated = false) => {
+  /*
+   * `key` defaults to the label, which is right for the app's own fixed buttons. Her presets
+   * pass their id instead: the label is hers to rename, and re-keying a button on a rename
+   * would remount it mid-generation.
+   */
+  const act = (
+    label: string,
+    primary: boolean,
+    onClick: () => void,
+    gated = false,
+    key?: string,
+  ) => {
     const running = gated && ctx.generating === label;
     const held = gated && ctx.generating !== null && !running;
     const stl: React.CSSProperties = hw
@@ -180,7 +203,7 @@ export function TodayPanel({ ctx }: TodayPanelProps) {
     );
     return (
       <button
-        key={label}
+        key={key ?? label}
         onClick={onClick}
         disabled={running || held}
         style={{
@@ -266,6 +289,26 @@ export function TodayPanel({ ctx }: TodayPanelProps) {
         ) : null}
       </div>
 
+      {/*
+        THE PLAN-AGE LINE — when this plan was built, and when it is not today's, that she can
+        get today's. Restored 2026-07-19 from `docs/overlay_daily.html` (`.plan-age`, ~1138).
+
+        It exists for one case: the morning generation fails, so yesterday's plan is what is on
+        screen. Without this line it reads as today's — the date above it is the plan's own and
+        she has nothing to tell her otherwise.
+
+        Composed HERE, at render, not in `adapt.ts`: the words depend on when they are read.
+
+        Dim and small, never an alert — the old surface's CSS comment is explicit that this is
+        "an honest fact, not an alert", so it must not shout. It renders nothing at all when
+        there is no timestamp; an empty row is honest, a guessed time is not.
+      */}
+      {age ? (
+        <div style={{ padding: '9px 14px 0', fontSize: '12px', color: C.dim, lineHeight: 1.4 }}>
+          {age}
+        </div>
+      ) : null}
+
       {shape === 'priority' ? (
         <div style={{ borderBottom: '1px solid ' + C.border, padding: '4px 0' }}>
           <PriorityList ctx={ctx} reasonShown={!!reason} />
@@ -307,30 +350,34 @@ export function TodayPanel({ ctx }: TodayPanelProps) {
         }}
       >
         {act('↻ Fresh plan', true, () => ctx.regenerate({ kind: 'refresh' }, '↻ Fresh plan'), true)}
-        {act(
-          'Low energy today',
-          false,
-          () => ctx.regenerate({ kind: 'preset', presetId: 'low-energy' }, 'Low energy today'),
-          true,
-        )}
-        {act(
-          'Quick wins only',
-          false,
-          () => ctx.regenerate({ kind: 'preset', presetId: 'quick-wins' }, 'Quick wins only'),
-          true,
-        )}
-        {act(
-          'Life admin & household',
-          false,
-          () =>
-            ctx.regenerate({ kind: 'preset', presetId: 'life-admin' }, 'Life admin & household'),
-          true,
-        )}
-        {act(
-          'I’m stuck',
-          false,
-          () => ctx.regenerate({ kind: 'preset', presetId: 'stuck' }, 'I’m stuck'),
-          true,
+        {/*
+          HER PRESETS, FROM HER FILE. These four buttons carried hardcoded labels until
+          2026-07-19, and they had already drifted from what she stores — hers reads "Quick wins
+          first", the button read "Quick wins only". Correcting the string would have left the
+          drift free to reappear; reading `ctx.presets` (her `actions.json`, via
+          `GET /api/actions`) is what removes it.
+
+          ⚠ `p.label` is display and `p.id` is the wire contract — the id goes to
+          `/api/negotiate` untouched. Nothing here derives one from the other, reorders them, or
+          tidies a label: what she typed is what she sees.
+
+          ⚠ Keyed by id, not by index, so renaming a preset does not re-key an adjacent button.
+
+          The order is her file's. "↻ Fresh plan" stays hard-first and "Move this later" stays
+          last — both are app actions that need no file, exactly as the old overlay had it
+          ("Fresh plan (refresh) is always first; the rest come from actions.json").
+
+          An empty list renders no preset buttons at all. The row is `flex-wrap` with a uniform
+          `gap`, so the remaining two close up on their own.
+        */}
+        {ctx.presets.map((p) =>
+          act(
+            p.label,
+            false,
+            () => ctx.regenerate({ kind: 'preset', presetId: p.id }, p.label),
+            true,
+            p.id,
+          ),
         )}
         {act('Move this later', false, () => ctx.flash('Pick an item to move'))}
       </div>

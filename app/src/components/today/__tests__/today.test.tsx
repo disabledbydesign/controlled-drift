@@ -303,11 +303,39 @@ describe('spec §14 — what must NOT be rendered', () => {
     }
   });
 
-  it('renders no plan-age line, though the fixture carries `generated`', () => {
-    const { ctx } = ctxWith();
+  /*
+   * THE PLAN-AGE LINE. Restored 2026-07-19. The test that stood here asserted the OPPOSITE —
+   * that no age line reached the DOM — and it passed, because the code did what the code said.
+   * What it never asked was whether what she sees is true. It was not: with the line gone she
+   * saw a date she read as today's on a plan that could have been built yesterday.
+   *
+   * These assert the truth condition — given a plan built at a stated time, what must be on
+   * screen — and are POSITIVE: they name the words she must see.
+   */
+  it('states when the plan was built, when the plan says when it was built', () => {
+    const built = new Date();
+    built.setHours(9, 2, 0, 0);
+    const { ctx } = ctxWith({}, { ...freshPlan(), generated: built.toISOString() });
     render(<TodayPanel ctx={ctx} />);
-    expect(seedPlan.generated).toBeTruthy();
-    expect(screen.queryByText(/Built this morning/)).toBeNull();
+    expect(screen.getByText(/^built this morning at /)).toBeTruthy();
+  });
+
+  it('tells her a leftover plan is not today’s, and how to get today’s', () => {
+    const built = new Date();
+    built.setDate(built.getDate() - 1);
+    built.setHours(19, 42, 0, 0);
+    const { ctx } = ctxWith({}, { ...freshPlan(), generated: built.toISOString() });
+    render(<TodayPanel ctx={ctx} />);
+    const line = screen.getByText(/^built yesterday evening at /);
+    expect(line.textContent).toContain('tap Fresh plan for today’s');
+    // The control that sentence names must actually be on screen.
+    expect(screen.getByText('↻ Fresh plan')).toBeTruthy();
+  });
+
+  it('says nothing about the age when the plan carries no build time', () => {
+    const { ctx } = ctxWith({}, { ...freshPlan(), generated: '' });
+    render(<TodayPanel ctx={ctx} />);
+    expect(screen.queryByText(/^built /)).toBeNull();
   });
 
   it('renders the woven frame expanded, with no disclosure control', () => {
