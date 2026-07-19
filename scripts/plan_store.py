@@ -53,6 +53,20 @@ _DEFAULT_ACTIONS = {
             ),
         },
         {
+            # June's own instruction, 2026-07-18: "prioritize household chores and life admin
+            # tasks". The button existed in the mockup with NO preset behind it, so it flashed a
+            # message and changed nothing. `reorder` rather than `generate` — this reshapes
+            # today's plan, it does not ask for a new one.
+            "id": "life-admin",
+            "label": "Life admin & household",
+            "operation": "reorder",
+            "payload": (
+                "Reorder to lead with household chores and life admin — cleaning, errands, "
+                "paperwork, the administrative things that pile up. Explain why this order "
+                "works for today."
+            ),
+        },
+        {
             "id": "quick-wins",
             "label": "Quick wins first",
             "operation": "reorder",
@@ -601,6 +615,20 @@ def load_actions():
             if "capacity_flag" in defaults_by_id[pid]:
                 preset["capacity_flag"] = defaults_by_id[pid]["capacity_flag"]
             changed = True
+    # Add presets that exist in the defaults but not on disk. Without this a NEW button can
+    # never reach an existing install — the loop above only backfills FIELDS on ids already
+    # present, so `life-admin` was in the defaults and absent from June's live file, and the
+    # button went on flashing a message with nothing behind it.
+    # ⚠ Tradeoff, stated: this means a preset cannot be removed by deleting it from the file,
+    # because it would be restored on the next load. There is no delete UI today, so nothing
+    # can express that intent yet; when one exists this needs a tombstone rather than a silent
+    # re-add.
+    on_disk = {p.get("id") for p in data.get("presets", [])}
+    for pid, default in defaults_by_id.items():
+        if pid not in on_disk:
+            data.setdefault("presets", []).append(dict(default))
+            changed = True
+
     if changed:
         with open(_actions_path(), "w") as f:
             json.dump(data, f, indent=2)

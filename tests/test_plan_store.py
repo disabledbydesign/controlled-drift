@@ -69,6 +69,39 @@ def test_actions_persist_edits(tmp_path, monkeypatch):
     assert plan_store.find_preset("horizontal")["label"] == "Lying down only"
 
 
+def test_a_new_default_preset_reaches_an_existing_install(tmp_path, monkeypatch):
+    """A preset added to the defaults must reach a file that was seeded before it existed.
+
+    Found live 2026-07-18: `life-admin` was in `_DEFAULT_ACTIONS` and absent from June's own
+    actions.json, because the migration loop only backfilled FIELDS on ids already present. The
+    button was therefore in the UI with nothing behind it — it flashed a message and changed
+    nothing. Without this, no new button can ever reach anyone who has run the app before.
+    """
+    _redirect(tmp_path, monkeypatch)
+    plan_store.load_actions()  # seed the current defaults
+
+    # Simulate a file written before a preset existed: drop one and write it back.
+    data = json.loads((tmp_path / "actions.json").read_text())
+    data["presets"] = [p for p in data["presets"] if p["id"] != "life-admin"]
+    (tmp_path / "actions.json").write_text(json.dumps(data))
+    assert plan_store.find_preset("life-admin") is None or True  # pre-state, not the assertion
+
+    acts = plan_store.load_actions()
+    assert "life-admin" in [p["id"] for p in acts["presets"]]
+    # And it must be PERSISTED, not just returned in memory — the next process must see it.
+    on_disk = json.loads((tmp_path / "actions.json").read_text())
+    assert "life-admin" in [p["id"] for p in on_disk["presets"]]
+
+
+def test_the_life_admin_preset_reorders_rather_than_regenerates(tmp_path, monkeypatch):
+    """June's instruction was to prioritise chores and life admin within today's plan, not to
+    ask for a different day. `reorder` reshapes what is on screen; `generate` would replace it."""
+    _redirect(tmp_path, monkeypatch)
+    preset = plan_store.find_preset("life-admin")
+    assert preset["operation"] == "reorder"
+    assert preset["payload"].strip()
+
+
 def test_find_preset_missing_returns_none(tmp_path, monkeypatch):
     _redirect(tmp_path, monkeypatch)
     assert plan_store.find_preset("does-not-exist") is None
