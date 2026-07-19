@@ -22,10 +22,11 @@ import { describe, it, expect, vi, afterEach } from 'vitest';
 import { render, screen, fireEvent, cleanup, waitFor } from '@testing-library/react';
 import { themes } from '@tokens';
 import { seed, seedStrategies } from '../../fixtures/index.ts';
-import { CAPTURE_PROJECT_ID, capture, index, node } from '../../model/index.ts';
-import type { Graph, MutationResult } from '../../model/index.ts';
-import { AddScreen } from '../AddScreen.tsx';
+import { index } from '../../model/index.ts';
+import type { Graph } from '../../model/index.ts';
+import { AddScreen, latestWeed, rowsFrom } from '../AddScreen.tsx';
 import type { AddCtx, AddUi } from '../AddScreen.tsx';
+import type { CreatedItem, WeedEntry } from '../../api/capture.ts';
 import { SettingsScreen } from '../SettingsScreen.tsx';
 import type { SettingsCtx, SettingsUi } from '../SettingsScreen.tsx';
 
@@ -38,7 +39,7 @@ function freshGraph(): Graph {
   };
 }
 
-const BASE_ADD_UI: AddUi = { addText: '', logText: '', logTag: 'The day', receipt: [] };
+const BASE_ADD_UI: AddUi = { addText: '', logText: '', logTag: 'The day' };
 
 function addCtx(over: Omit<Partial<AddCtx>, 'ui'> & { ui?: Partial<AddUi> } = {}): AddCtx {
   const graph = over.graph ?? freshGraph();
@@ -52,125 +53,192 @@ function addCtx(over: Omit<Partial<AddCtx>, 'ui'> & { ui?: Partial<AddUi> } = {}
     openDetail: over.openDetail ?? vi.fn(),
     flash: over.flash ?? vi.fn(),
     logDay: over.logDay ?? vi.fn().mockResolvedValue(true),
+    captureEntries: over.captureEntries ?? [],
+    captureSummary: over.captureSummary ?? null,
+    loadCapture: over.loadCapture ?? vi.fn().mockResolvedValue(undefined),
+    runCapture: over.runCapture ?? vi.fn().mockResolvedValue(true),
+    undoCapture: over.undoCapture ?? vi.fn().mockResolvedValue(undefined),
+    setCapturedWhen: over.setCapturedWhen ?? vi.fn().mockResolvedValue(undefined),
+    setCapturedEngagement: over.setCapturedEngagement ?? vi.fn().mockResolvedValue(undefined),
+    regenerate: over.regenerate ?? vi.fn().mockResolvedValue(undefined),
+    busy: over.busy ?? null,
   };
 }
 
-// ── the model mutation ───────────────────────────────────────────────────────
+/** One weed turn as the session log records it. */
+function weed(created: Partial<CreatedItem>[], over: Partial<WeedEntry> = {}): WeedEntry {
+  return {
+    ts: '2026-07-18T10:00:00',
+    intent: 'weed',
+    created: created.map((c, i) => ({
+      id: c.id ?? `obj${i}`,
+      type: c.type ?? 'Task',
+      name: c.name ?? `thing ${i}`,
+      ...c,
+    })) as CreatedItem[],
+    ...over,
+  };
+}
 
-describe('capture() mutation', () => {
-  it('files a Ready TASK under the capture project and reports where it went', () => {
-    const g = freshGraph();
-    const res = capture(g, '  call the surgeon  ', CAPTURE_PROJECT_ID, () => 'capfix');
+// ── the receipt, derived from the session log ────────────────────────────────
 
-    expect(res.graph).not.toBe(g); // a new reference is the re-render signal
-    expect(res.toast).toBe('Sorted into Build Controlled Drift');
-    expect(res.ui).toEqual({ addText: '' });
-
-    const created = node(index(res.graph), 'capfix');
-    expect(created).toBeDefined();
-    expect(created?.title).toBe('call the surgeon'); // trimmed, per v4
-    expect(created?.level).toBe('TASK');
-    expect(created?.type).toBe('Task');
-    expect(created?.vals).toEqual({ status: 'Ready' });
-    expect(created?._new).toBe(true);
-
-    // it is a CHILD of the destination project, not a root
-    const parent = node(index(res.graph), CAPTURE_PROJECT_ID);
-    expect(parent?.children.some((c) => c.id === 'capfix')).toBe(true);
-
-    // the original graph is untouched — structural sharing, not in-place mutation
-    expect(node(index(g), 'capfix')).toBeUndefined();
+describe('rowsFrom — the receipt the server describes', () => {
+  it('flattens every weed turn into rows, newest first', () => {
+    const rows = rowsFrom([
+      weed([{ id: 'a', name: 'first' }]),
+      weed([{ id: 'b', name: 'second' }, { id: 'c', name: 'third' }]),
+    ]);
+    expect(rows.map((r) => r.item.id)).toEqual(['c', 'b', 'a']);
   });
 
-  it('no-ops on blank input, returning the SAME graph reference (v4 `if(!t)return`)', () => {
-    const g = freshGraph();
-    for (const blank of ['', '   ', '\n\t ']) {
-      const res = capture(g, blank);
-      expect(res.graph).toBe(g);
-      expect(res.node).toBeNull();
-      expect(res.toast).toBeNull();
-    }
+  it('marks an undone row instead of dropping it — she can still see what she undid', () => {
+    const rows = rowsFrom([
+      weed([{ id: 'a', name: 'kept' }, { id: 'b', name: 'undone one' }]),
+      { intent: 'undo', target_id: 'b' } as WeedEntry,
+    ]);
+    expect(rows.find((r) => r.item.id === 'b')?.undone).toBe(true);
+    expect(rows.find((r) => r.item.id === 'a')?.undone).toBe(false);
+    expect(rows).toHaveLength(2); // NOT removed
   });
 
-  it('no-ops rather than throwing when the destination project is missing', () => {
-    const g = freshGraph();
-    const res = capture(g, 'something', 'no-such-project');
-    expect(res.graph).toBe(g);
-    expect(res.node).toBeNull();
+  it('latestWeed ignores undo entries and returns the most recent capture turn', () => {
+    const entries = [
+      weed([{ id: 'a' }], { ts: 'first' }),
+      weed([{ id: 'b' }], { ts: 'second' }),
+      { intent: 'undo', target_id: 'b' } as WeedEntry,
+    ];
+    expect(latestWeed(entries)?.ts).toBe('second');
+    expect(latestWeed([])).toBeNull();
   });
 });
-
-// ── the Add tab ──────────────────────────────────────────────────────────────
 
 describe('AddScreen — capture', () => {
-  it('typing writes the bag and tapping + Add applies the mutation and prepends a receipt', () => {
+  it('+ Add runs the REAL weeder, not a local mutation', async () => {
+    const runCapture = vi.fn().mockResolvedValue(true);
     const up = vi.fn();
-    const apply = vi.fn();
-    const { rerender } = render(<AddScreen ctx={addCtx({ up, apply })} />);
+    render(<AddScreen ctx={addCtx({ ui: { addText: 'call the surgeon' }, runCapture, up })} />);
 
-    fireEvent.change(screen.getByPlaceholderText(/call the surgeon/), {
-      target: { value: 'book the dentist' },
-    });
-    expect(up).toHaveBeenCalledWith({ addText: 'book the dentist' });
+    fireEvent.click(screen.getByRole('button', { name: '+ Add' }));
 
-    // re-render with the text in the bag, as the real `up` would
-    const ctx = addCtx({ up, apply, ui: { addText: 'book the dentist' } });
-    rerender(<AddScreen ctx={ctx} />);
-    fireEvent.click(screen.getByText('+ Add'));
-
-    const res = apply.mock.calls[0]?.[0] as MutationResult;
-    expect(res.toast).toBe('Sorted into Build Controlled Drift');
-    expect(res.node?.title).toBe('book the dentist');
-
-    // the receipt is composed from what LANDED, and prepended (v4:1140)
-    const receiptPatch = up.mock.calls.at(-1)?.[0] as Partial<AddUi>;
-    expect(receiptPatch.receipt).toEqual([
-      { id: res.node?.id, text: 'book the dentist', project: 'Build Controlled Drift' },
-    ]);
+    expect(runCapture).toHaveBeenCalledWith('call the surgeon');
+    // Cleared only after the capture is PROVEN, never optimistically.
+    await waitFor(() => expect(up).toHaveBeenCalledWith({ addText: '' }));
   });
 
-  it('+ Add does nothing at all when the box is empty', () => {
+  it('a capture that did NOT save leaves her words on screen', async () => {
+    const runCapture = vi.fn().mockResolvedValue(false);
     const up = vi.fn();
-    const apply = vi.fn();
-    render(<AddScreen ctx={addCtx({ up, apply })} />);
-    fireEvent.click(screen.getByText('+ Add'));
-    expect(apply).not.toHaveBeenCalled();
-    expect(up).not.toHaveBeenCalled();
+    render(<AddScreen ctx={addCtx({ ui: { addText: 'keep me' }, runCapture, up })} />);
+
+    fireEvent.click(screen.getByRole('button', { name: '+ Add' }));
+
+    await waitFor(() => expect(runCapture).toHaveBeenCalled());
+    expect(up).not.toHaveBeenCalledWith({ addText: '' });
   });
 
-  it('shows the empty-state line until something is captured, then the receipt row', () => {
+  it('reads the receipt from the server when the tab opens', () => {
+    const loadCapture = vi.fn().mockResolvedValue(undefined);
+    render(<AddScreen ctx={addCtx({ loadCapture })} />);
+    expect(loadCapture).toHaveBeenCalled();
+  });
+
+  it('renders what the weeder filed, with where it went', () => {
+    const entries = [weed([{ id: 't1', name: 'call the surgeon', project: 'Medical' }])];
+    render(<AddScreen ctx={addCtx({ captureEntries: entries })} />);
+    expect(screen.getByText('call the surgeon')).toBeTruthy();
+    expect(screen.getByText('Medical')).toBeTruthy();
+  });
+
+  it('shows result_summary — the ONLY place a skip or failure is ever mentioned', () => {
+    render(<AddScreen ctx={addCtx({ captureSummary: 'added 3, skipped 1' })} />);
+    expect(screen.getByText('added 3, skipped 1')).toBeTruthy();
+  });
+
+  it('the when-chip sends a TOKEN, never the rendered label', () => {
+    const setCapturedWhen = vi.fn().mockResolvedValue(undefined);
+    const entries = [weed([{ id: 't1', name: 'x', when_label: 'Today', is_today: true }])];
+    render(<AddScreen ctx={addCtx({ captureEntries: entries, setCapturedWhen })} />);
+
+    fireEvent.click(screen.getByRole('button', { name: 'Today' }));
+    // Today -> tomorrow in the cycle, and it is the TOKEN that goes over the wire.
+    expect(setCapturedWhen).toHaveBeenCalledWith('t1', 'tomorrow');
+  });
+
+  it('the engagement chip cycles a captured Project through the three states', () => {
+    const setCapturedEngagement = vi.fn().mockResolvedValue(undefined);
+    const entries = [weed([{ id: 'p1', type: 'Project', name: 'New project', engagement: 'Open' }])];
+    render(<AddScreen ctx={addCtx({ captureEntries: entries, setCapturedEngagement })} />);
+
+    fireEvent.click(screen.getByRole('button', { name: 'Open' }));
+    expect(setCapturedEngagement).toHaveBeenCalledWith('p1', 'Open', 'Steady');
+  });
+
+  it('undo archives through the server, and an undone row loses its controls', () => {
+    const undoCapture = vi.fn().mockResolvedValue(undefined);
+    const entries = [weed([{ id: 't1', name: 'oops' }])];
+    const { rerender } = render(<AddScreen ctx={addCtx({ captureEntries: entries, undoCapture })} />);
+
+    fireEvent.click(screen.getByRole('button', { name: 'undo' }));
+    expect(undoCapture).toHaveBeenCalledWith('t1');
+
+    rerender(
+      <AddScreen
+        ctx={addCtx({
+          captureEntries: [...entries, { intent: 'undo', target_id: 't1' } as WeedEntry],
+          undoCapture,
+        })}
+      />,
+    );
+    expect(screen.getByText('oops')).toBeTruthy(); // still visible
+    expect(screen.queryByRole('button', { name: 'undo' })).toBeNull();
+  });
+
+  it('the receipt edit button opens the created object', () => {
+    const openDetail = vi.fn();
+    const entries = [weed([{ id: 't1', name: 'thing' }])];
+    render(<AddScreen ctx={addCtx({ captureEntries: entries, openDetail })} />);
+    fireEvent.click(screen.getByRole('button', { name: 'edit' }));
+    expect(openDetail).toHaveBeenCalledWith('t1');
+  });
+
+  it('shows the empty-state line until something is captured', () => {
     render(<AddScreen ctx={addCtx()} />);
     expect(screen.getByText(/Nothing yet today/)).toBeTruthy();
-    cleanup();
-
-    render(
-      <AddScreen
-        ctx={addCtx({
-          ui: { receipt: [{ id: 'cap1', text: 'book the dentist', project: 'Build Controlled Drift' }] },
-        })}
-      />,
-    );
-    expect(screen.queryByText(/Nothing yet today/)).toBeNull();
-    expect(screen.getByText('book the dentist')).toBeTruthy();
-    expect(screen.getByText('Build Controlled Drift')).toBeTruthy();
-  });
-
-  it("the receipt's edit button opens the created task", () => {
-    const openDetail = vi.fn();
-    render(
-      <AddScreen
-        ctx={addCtx({
-          openDetail,
-          ui: { receipt: [{ id: 'cap1', text: 'book the dentist', project: 'P' }] },
-        })}
-      />,
-    );
-    fireEvent.click(screen.getByText('edit'));
-    expect(openDetail).toHaveBeenCalledWith('cap1');
   });
 });
 
-// ── the Log side ─────────────────────────────────────────────────────────────
+describe('AddScreen — the verify gate before anything rebuilds her day', () => {
+  it('asks before rebuilding when something landed for today', () => {
+    const entries = [weed([{ id: 't1', name: 'x', is_today: true, when_label: 'Today' }])];
+    render(<AddScreen ctx={addCtx({ captureEntries: entries })} />);
+    expect(screen.getByRole('button', { name: 'Regenerate today' })).toBeTruthy();
+  });
+
+  it('does NOT ask when nothing is for today — no box at all', () => {
+    const entries = [weed([{ id: 't1', name: 'x', is_today: false, when_label: 'Parked' }])];
+    render(<AddScreen ctx={addCtx({ captureEntries: entries })} />);
+    expect(screen.queryByRole('button', { name: 'Regenerate today' })).toBeNull();
+  });
+
+  it('"Not now" changes nothing — it must not rebuild the plan', () => {
+    const regenerate = vi.fn().mockResolvedValue(undefined);
+    const entries = [weed([{ id: 't1', name: 'x', is_today: true, when_label: 'Today' }])];
+    render(<AddScreen ctx={addCtx({ captureEntries: entries, regenerate })} />);
+
+    fireEvent.click(screen.getByRole('button', { name: 'Not now' }));
+    expect(regenerate).not.toHaveBeenCalled();
+    expect(screen.queryByRole('button', { name: 'Regenerate today' })).toBeNull();
+  });
+
+  it('Regenerate today rebuilds only when she says so', () => {
+    const regenerate = vi.fn().mockResolvedValue(undefined);
+    const entries = [weed([{ id: 't1', name: 'x', is_today: true, when_label: 'Today' }])];
+    render(<AddScreen ctx={addCtx({ captureEntries: entries, regenerate })} />);
+
+    fireEvent.click(screen.getByRole('button', { name: 'Regenerate today' }));
+    expect(regenerate).toHaveBeenCalledWith({ kind: 'refresh' }, 'Regenerate today');
+  });
+});
 
 describe('AddScreen — log', () => {
   it('offers both day/issue tags and selecting one writes the bag', () => {

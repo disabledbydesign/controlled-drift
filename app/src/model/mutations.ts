@@ -475,76 +475,18 @@ export function addChild(
   };
 }
 
-/** v4 capture(): `const id='cap'+Math.random().toString(36).slice(2,6);` */
-export function defaultCaptureId(): string {
-  return 'cap' + Math.random().toString(36).slice(2, 6);
-}
-
 /**
- * v4 `capture()` (1136):
- *   capture(){ const t=(this.st.addText||'').trim(); if(!t)return; const p=this.node('vyzxdu');
- *     const id='cap'+Math.random().toString(36).slice(2,6);
- *     const n={id,level:'TASK',type:'Task',title:t,vals:{status:'Ready'},children:[],parent:p,_new:true};
- *     p.children.push(n); this.byId[id]=n;
- *     this.receipt=[{id,text:t,project:p.title},...this.receipt];
- *     this.up({addText:''}); this.flash('Sorted into '+p.title); this.bump(); }
+ * ── THE v4 CAPTURE MOCK WAS REMOVED 2026-07-18 ──────────────────────────────
+ * `capture()`, `defaultCaptureId()` and `CAPTURE_PROJECT_ID` lived here. They were a faithful
+ * port of the design mockup's local stand-in: file the whole typed string as ONE plain Task
+ * under a hardcoded project id, weed nothing, split nothing, read no dates.
  *
- * ⚠ FLAGGED, PORTED AS-IS: the destination project id `'vyzxdu'` ("Build Controlled Drift")
- * is HARDCODED in v4. The Add tab's own copy says "It sorts what you write into the right
- * places" — in the mockup nothing sorts, every captured line lands in the same project. The
- * real sorter is the backend's capture path (out of scope for Track A, which makes no network
- * calls), so the constant is transcribed rather than invented around. `projectId` is a
- * parameter so the seam has somewhere to attach without a rewrite.
- *
- * ⚠ ALSO FLAGGED: v4 does not parse the text at all. `capture()` splits nothing, extracts no
- * dates, reads no tags — the whole trimmed string becomes one task title, and `vals` gets
- * exactly `{status:'Ready'}`. The placeholder ("call the surgeon's office, AND I keep meaning
- * to meditate daily…") shows two items in one line, so the mockup's copy promises a split the
- * mockup does not perform. Not fixed here.
- *
- * Deviation from v4, and the only one: an unknown/missing destination project no-ops instead
- * of throwing on `p.children` of `undefined`. Same call made for `toggleMulti` above.
+ * They are gone because the tab now calls the REAL weeder (`api/capture.ts` →
+ * `POST /api/capture`), which is what June had in the old surface and asked for back. Keeping a
+ * function named `capture` that quietly does something else is worse than having no function:
+ * the hardcoded id was the v4 mockup's, and merely a SUFFIX of the real Anytype id, so on live
+ * data it matched nothing and the Add button silently did nothing at all.
  */
-export const CAPTURE_PROJECT_ID = 'vyzxdu';
-
-export function capture(
-  graph: Graph,
-  text: string,
-  projectId: string = CAPTURE_PROJECT_ID,
-  newId: () => string = defaultCaptureId,
-): MutationResult {
-  const t = text.trim();
-  if (!t) return noop(graph);
-
-  const p = nodeInGraph(graph, projectId);
-  if (!p) return noop(graph);
-
-  const id = newId();
-  const n: ModelNode = {
-    id,
-    level: 'TASK',
-    type: 'Task',
-    title: t,
-    vals: { status: 'Ready' },
-    children: [],
-    _new: true,
-  };
-
-  const inserted = appendChild(graph, p.id, n);
-  return {
-    graph: inserted.graph,
-    toast: 'Sorted into ' + p.title,
-    // v4's `up({addText:''})`. The receipt is NOT here: v4 keeps it on the instance
-    // (`this.receipt`), and the caller composes it from `node` + the destination title.
-    ui: { addText: '' },
-    node: n,
-    // Creates a plain Task under the destination project. NOTE this is v4's local `capture()`,
-    // which does no weeding — the real sorter is `POST /api/capture`, an async LLM path that
-    // creates objects of its own. Wiring THAT is a separate decision (it writes several objects
-    // per call and has its own polling contract, §2.6), so this persists what v4 actually does.
-    write: { op: 'create', tempId: id, level: 'TASK', title: t, parentId: p.id },
-  };
-}
 
 // ── internal ────────────────────────────────────────────────────────────────
 

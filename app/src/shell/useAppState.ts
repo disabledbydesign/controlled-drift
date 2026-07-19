@@ -9,6 +9,15 @@ import {
 } from '../fixtures/index.ts';
 import type { Period, Plan, Schema } from '../fixtures/index.ts';
 import { applySchema, index, updateNode } from '../model/index.ts';
+import {
+  getCaptureSession,
+  getStatus,
+  rescheduleCaptured,
+  setCapturedEngagement,
+  startCapture,
+  undoCaptured,
+} from '../api/capture.ts';
+import type { WeedEntry, WhenToken } from '../api/capture.ts';
 import { apiGet, apiSend } from '../api/client.ts';
 import { graphFromTree, periodsFromLive, planFromLive, schemaFromResponse } from '../api/adapt.ts';
 import type { LivePlan, PeriodsResponse, TreeResponse } from '../api/adapt.ts';
@@ -434,6 +443,30 @@ export interface AppState {
    * WHICH control is working. See `generating`.
    */
   regenerate: (req: GenerationRequest, label: string) => Promise<void>;
+
+  // ── the Add tab's real capture flow ────────────────────────────────────────
+  /**
+   * What capture has filed, as the SERVER records it (`GET /api/session?stream=capture`).
+   * Each `weed` entry holds the objects one turn created; `undo` entries mark ids as undone.
+   * Server-truth rather than a locally-built list: only the weeder knows how many objects a
+   * sentence became, and this survives a reload.
+   */
+  captureEntries: readonly WeedEntry[];
+  /**
+   * The last turn's `result_summary` — the ONLY channel by which a skipped or failed item
+   * reaches her, since `failed[]`/`skipped[]` are not in the receipt.
+   */
+  captureSummary: string | null;
+  /** Re-read the receipt from the server (on tab open, and after any change to it). */
+  loadCapture: () => Promise<void>;
+  /** Weed one piece of text end to end. True only once a completed run has been read back. */
+  runCapture: (text: string) => Promise<boolean>;
+  /** Archive one just-captured object; the row then dims from server truth, not a local splice. */
+  undoCapture: (id: string) => Promise<void>;
+  /** Re-anchor when a captured task is for. Sends a TOKEN; the server resolves the date. */
+  setCapturedWhen: (id: string, when: WhenToken) => Promise<void>;
+  /** Correct the engagement the weeder proposed for a captured Project. */
+  setCapturedEngagement: (id: string, from: string, to: string) => Promise<void>;
   /**
    * The label of the control whose generation is in flight, or null when nothing is running.
    *
@@ -1124,6 +1157,174 @@ export function useAppState(source: DataSource = 'live'): AppState {
     [live, fail, succeed],
   );
 
+
+  /**
+   * ── THE ADD TAB'S REAL WRITE PATH ─────────────────────────────────────────
+   * The receipt of what capture has actually filed, read from the server rather than built as
+   * she types. `capture()` in `model/mutations.ts` is the v4 MOCK — it fabricates one local Task
+   * under a hardcoded project and weeds nothing. This is the real one.
+   *
+   * Server-truth rather than local: the weeder decides how many objects a sentence becomes and
+   * what they are, so only the server knows what landed. It also means a reload no longer loses
+   * the receipt, and that an undo can dim a row from what the server says rather than from a
+   * local splice that could disagree with storage.
+   */
+  const [captureEntries, setCaptureEntries] = useState<readonly WeedEntry[]>([]);
+  /**
+   * The last turn's `result_summary` ("added 3, skipped 1"). Held because `failed[]` and
+   * `skipped[]` are NOT in the receipt — this string is the only channel by which a skipped or
+   * failed item ever reaches her. Dropping it would rebuild the silent-failure path.
+   */
+  const [captureSummary, setCaptureSummary] = useState<string | null>(null);
+
+  const loadCapture = useCallback(async () => {
+    if (!live) return;
+    const res = await getCaptureSession();
+    if (!res.ok) {
+      fail(`Could not read what was added. ${res.error}`);
+      return;
+    }
+    setCaptureEntries(res.data.entries ?? []);
+  }, [live, fail]);
+
+  /**
+   * Run one weed, end to end: start it, wait for the shared generation to finish, then read what
+   * landed. Resolves true only when the receipt has been refreshed from a completed run, so the
+   * caller clears her text on a proven capture and never on a dropped one.
+   *
+   * Shares `generatingRef` with `regenerate` on purpose: the SERVER holds one generation lock for
+   * both, so letting the client start a capture while a plan is generating would just earn a
+   * `started:false` and a confusing wait.
+   */
+  const runCapture = useCallback(
+    async (text: string): Promise<boolean> => {
+      const body = text.trim();
+      if (!body) return false;
+      if (!live) {
+        fail('Not connected to the server — that was NOT added. Nothing was saved.');
+        return false;
+      }
+      if (generatingRef.current) {
+        fail(`Something else is still running, so that was NOT added. Nothing was saved.`);
+        return false;
+      }
+      generatingRef.current = 'capture';
+      setGenerating('Sorting what you wrote');
+      try {
+        const start = await startCapture(body);
+        // Busy is an ORDINARY outcome, not breakage (contract §:414 — "must not surface it as a
+        // failure"), so it is said plainly and without the register of something going wrong.
+        if (start.kind === 'busy') {
+          fail('Something else was already running, so that was NOT added. Your text is still here.');
+          return false;
+        }
+        if (start.kind === 'failed') {
+          fail(`That was NOT added, so nothing was saved. ${start.error}`);
+          return false;
+        }
+
+        const deadline = Date.now() + POLL_TIMEOUT_MS;
+        let lastReadError = '';
+        for (;;) {
+          await sleep(POLL_MS);
+          const st = await getStatus();
+          if (st.ok && st.data.state === 'error') {
+            fail(`Sorting what you wrote failed, so nothing was saved. ${st.data.error ?? ''}`.trim());
+            return false;
+          }
+          if (st.ok && st.data.state !== 'running') break;
+          if (!st.ok) lastReadError = st.error;
+          if (Date.now() >= deadline) {
+            // Deliberately NOT "it failed": the run may still be going. What is true is that we
+            // stopped waiting, and that anything it filed will be in the list once it finishes.
+            fail(
+              lastReadError
+                ? `Still sorting, and the server stopped answering. Check the list in a moment. ${lastReadError}`
+                : 'Still sorting after five minutes. Check the list in a moment.',
+            );
+            return false;
+          }
+        }
+
+        const res = await getCaptureSession();
+        if (!res.ok) {
+          // The weed itself finished — saying "not added" here would be a false claim about her
+          // data. What failed is the READ.
+          fail(`That was added, but the list could not be read. ${res.error}`);
+          return true;
+        }
+        const entries = res.data.entries ?? [];
+        setCaptureEntries(entries);
+        const lastWeed = [...entries].reverse().find((e) => e.intent === 'weed');
+        setCaptureSummary(lastWeed?.result_summary ?? null);
+        succeed(lastWeed?.result_summary || 'Added', null);
+        return true;
+      } finally {
+        generatingRef.current = null;
+        setGenerating(null);
+      }
+    },
+    [live, fail, succeed],
+  );
+
+  /** Archive one just-captured object, then re-read so the row dims from server truth. */
+  const undoCapture = useCallback(
+    async (id: string) => {
+      if (!live) {
+        fail('Not connected to the server — nothing was undone.');
+        return;
+      }
+      const res = await undoCaptured(id);
+      if (!res.ok) {
+        fail(`Could not undo that — it is still there. ${res.error}`);
+        return;
+      }
+      await loadCapture();
+      succeed('Undone', null);
+    },
+    [live, fail, succeed, loadCapture],
+  );
+
+  /**
+   * The when-chip. Sends a TOKEN and lets the server re-anchor it to a date; a rendered label
+   * would put date arithmetic in the browser. Non-optimistic, like the old surface: on failure
+   * the chip is left showing what is actually stored.
+   */
+  const setCapturedWhen = useCallback(
+    async (id: string, when: WhenToken) => {
+      if (!live) {
+        fail('Not connected to the server — that was NOT changed.');
+        return;
+      }
+      const res = await rescheduleCaptured(id, when);
+      if (!res.ok) {
+        fail(`Could not change when that is for — it is NOT saved. ${res.error}`);
+        return;
+      }
+      await loadCapture();
+      succeed(res.data.when_label ? `Set to ${res.data.when_label}` : 'Saved', null);
+    },
+    [live, fail, succeed, loadCapture],
+  );
+
+  /** The engagement chip on a captured Project — correcting what the weeder proposed. */
+  const setCapturedEngagementFor = useCallback(
+    async (id: string, from: string, to: string) => {
+      if (!live) {
+        fail('Not connected to the server — that was NOT changed.');
+        return;
+      }
+      const res = await setCapturedEngagement(id, from, to);
+      if (!res.ok) {
+        fail(`Could not change how that project is engaged — it is NOT saved. ${res.error}`);
+        return;
+      }
+      await loadCapture();
+      succeed(`Set to ${res.data.engagement ?? to}`, null);
+    },
+    [live, fail, succeed, loadCapture],
+  );
+
   return {
     graph,
     idx,
@@ -1142,5 +1343,12 @@ export function useAppState(source: DataSource = 'live'): AppState {
     regenerate,
     generating,
     dismissToast,
+    captureEntries,
+    captureSummary,
+    loadCapture,
+    runCapture,
+    undoCapture,
+    setCapturedWhen,
+    setCapturedEngagement: setCapturedEngagementFor,
   };
 }

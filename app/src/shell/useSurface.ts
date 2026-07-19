@@ -202,6 +202,16 @@ export function useSurface({ T, name, setTheme, wide, source }: SurfaceOptions):
     openDetail: (id: string) => st.up({ detail: id, returnFrom: 'add' }),
     flash: (msg: string) => st.apply({ graph: st.graph, toast: msg, ui: null, node: null }),
     logDay: st.logDay,
+    // The real weeder, replacing the v4 mock the tab shipped with.
+    captureEntries: st.captureEntries,
+    captureSummary: st.captureSummary,
+    loadCapture: st.loadCapture,
+    runCapture: st.runCapture,
+    undoCapture: st.undoCapture,
+    setCapturedWhen: st.setCapturedWhen,
+    setCapturedEngagement: st.setCapturedEngagement,
+    regenerate: st.regenerate,
+    busy: st.generating,
   };
 
   /**
