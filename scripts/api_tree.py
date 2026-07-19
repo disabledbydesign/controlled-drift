@@ -23,10 +23,21 @@ Three things here are load-bearing and easy to get wrong:
 
 2. **Tri-state is expressed by key presence** (backend spec §4, contract §2.2). A key absent from
    `vals` means "inherit from the nearest ancestor that sets it"; a key present, even as `''`,
-   means an explicit own value. So this NEVER emits a placeholder for an unset field. Anytype
-   cooperates: it omits properties that were never written (verified live — 129 of 166 Tasks carry
-   `Context` at all), so a property that comes back as `""` was written and then cleared, and is
-   correctly reported as explicit-empty.
+   means an explicit own value. So this NEVER emits a placeholder for an unset field.
+
+   ⚠ CORRECTED 2026-07-19. This note used to end "Anytype cooperates: it omits properties that
+   were never written ... so a property that comes back as `""` was written and then cleared, and
+   is correctly reported as explicit-empty." That was verified against a TEXT property (`Context`,
+   129 of 166 Tasks) and is TRUE ONLY FOR TEXT. Re-verified live per format:
+
+       text          `''` reads back PRESENT      -> tri-state works as described
+       multi_select  `[]` DELETES the property    -> explicit-empty was indistinguishable
+       number        no empty at all (0 is real)  -> same
+
+   So Anytype does NOT cooperate in general, and for `access` the third state silently reverted
+   to inheriting on reload. `intentionally_none` now carries that distinction in its own property
+   and `_vals` folds it back in, which is why the rule above still holds for every reader
+   downstream — but it holds because it is reconstructed here, not because storage grants it.
 
 3. **`level` is not `type`** (backend spec §5). Subproject, Workstream and Project are all the
    Anytype type `Project`. Workstream is `is_workstream`, inherited down the parent chain — the

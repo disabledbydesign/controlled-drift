@@ -52,6 +52,19 @@ The acceptance/token page is preserved at `#/check`.
 5. **Do NOT port v4's dead paths.** Removed on this basis: `renderApp`/`header`/`tab`, `typeSection` (defined once, never called), `menuStrip` (all 18 `menuFor:` assignments are `null`). An unwired component is the built-but-dead shape `BUILD_DOC` §3 exists to prevent.
 6. **Provenance and history go in the WRITE LOG, never on objects.** Applies to authorship stamps and to the gate's filing rationale.
 7. **The inherit control is TWO states** — inherited, or set here. An empty value on a set field is a normal, valid shape (*"if leaving the house isn't checked, it doesn't involve leaving the house"*), and needs no explanation. v4 renders exactly two branches.
+
+   ⚠ **SUPERSEDED 2026-07-19 (June), presentation only.** She asked for the editor to be shown in
+   BOTH states — greyed and non-operable while inheriting, but *populated with the inherited
+   selections* so she can see what she is getting before deciding to diverge: *"it would be easier
+   to just make the UI display the editor either way, but greyed out if inheriting (but in a way
+   that still renders it visible what those selections its inheriting are)."* The dashed box no
+   longer replaces the editor; it wraps it. Her stated statuses are now *inherit from parent /
+   nothing selected / 1+ selected*.
+
+   The DATA model in this entry is unchanged and still load-bearing: key absent = inherit, key
+   present = set here, and Inherit REMOVES the key. What DID change is that "set here and empty"
+   is now actually storable for a multi_select — it was not, and silently reverted on reload.
+   See `scripts/intentionally_none.py`.
 8. **Never write your own reasoning into her fields.** Filing rationale is process output; it belongs in a log.
 
 ---
