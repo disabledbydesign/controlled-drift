@@ -192,3 +192,36 @@ describe('AnnotateOverlay', () => {
     }
   });
 });
+
+/**
+ * Regression: the stroke canvas must be positioned to the PICTURE, not to the scrolling window.
+ *
+ * These two were one element until 2026-07-19. A snapshot of a phone screen renders ~1155px tall
+ * inside a ~385px window, so a canvas at `inset: 0` of the window was a third of the picture's
+ * height, and a mark drawn halfway down what June could see landed a third of the way off in the
+ * saved file. Every test here passed anyway — jsdom has no layout engine, so the two boxes only
+ * diverge once something actually gives them a size.
+ *
+ * jsdom still cannot measure them, so this pins the STRUCTURE that made them diverge: the canvas's
+ * own offset parent must not be the element that scrolls.
+ */
+it('positions the stroke canvas to the picture, not to the scrolling window', () => {
+  setup();
+  const canvas = document.querySelector('[role="dialog"] canvas') as HTMLCanvasElement;
+  const img = document.querySelector('img[alt="What you were looking at"]') as HTMLImageElement;
+
+  // the canvas and the picture share one positioned wrapper
+  const wrapper = canvas.parentElement!;
+  expect(img.parentElement).toBe(wrapper);
+  expect(wrapper.style.position).toBe('relative');
+
+  // ...and that wrapper is NOT the box that clips/scrolls. If a later edit collapses the two,
+  // this fails here rather than silently misplacing her marks in the saved image.
+  expect(wrapper.style.maxHeight).toBe('');
+  expect(wrapper.style.overflow).toBe('');
+
+  const scroller = wrapper.parentElement!;
+  expect(scroller.style.maxHeight).toBe('45vh');
+  // scroll, never hide: anything below the fold of a tall page must stay reachable to draw on.
+  expect(scroller.style.overflow).toBe('auto');
+});

@@ -213,27 +213,48 @@ export function AnnotateOverlay({ T, shot, target, onCancel, onSend }: AnnotateO
       </div>
 
       {shot ? (
-        <div style={{ position: 'relative', maxHeight: '45vh', overflow: 'hidden', borderRadius: T.r.card, border: `1px solid ${T.c.border}` }}>
-          <img
-            ref={imgRef}
-            src={shot}
-            alt="What you were looking at"
-            onLoad={(e) => {
-              const c = canvasRef.current;
-              if (!c) return;
-              c.width = e.currentTarget.naturalWidth || e.currentTarget.width;
-              c.height = e.currentTarget.naturalHeight || e.currentTarget.height;
-            }}
-            style={{ display: 'block', width: '100%', height: 'auto' }}
-          />
-          <canvas
-            ref={canvasRef}
-            onPointerDown={onPointerDown}
-            onPointerMove={onPointerMove}
-            onPointerUp={onPointerUp}
-            onPointerCancel={onPointerUp}
-            style={{ position: 'absolute', inset: 0, width: '100%', height: '100%', touchAction: 'none', cursor: 'crosshair' }}
-          />
+        /*
+          TWO NESTED BOXES, AND THE NESTING IS THE WHOLE POINT — do not flatten it.
+
+          The outer box is the viewport onto the picture: capped in height, and it SCROLLS. The
+          inner box is exactly the size of the picture, and the stroke canvas is positioned to
+          THAT.
+
+          It was one box before, with the canvas at `inset: 0`, and that produced a real bug found
+          only by driving the live app (2026-07-19): a snapshot of a phone screen renders 1155px
+          tall inside a 385px window, so the canvas — sized to the WINDOW — was a third of the
+          picture's height. A mark drawn halfway down what June could see was stored a third of
+          the way off. She would have circled one thing and the saved file would have shown the
+          circle around another. Every unit test passed; the shapes only diverge once a real
+          layout engine gives them a size.
+
+          The scroll also fixes the other half: the old `overflow: hidden` meant anything below
+          the fold of a tall page could not be seen OR drawn on, even though the capture had it.
+        */
+        <div style={{ maxHeight: '45vh', overflow: 'auto', borderRadius: T.r.card, border: `1px solid ${T.c.border}`, WebkitOverflowScrolling: 'touch' }}>
+          <div style={{ position: 'relative', lineHeight: 0 }}>
+            <img
+              ref={imgRef}
+              src={shot}
+              alt="What you were looking at"
+              onLoad={(e) => {
+                const c = canvasRef.current;
+                if (!c) return;
+                c.width = e.currentTarget.naturalWidth || e.currentTarget.width;
+                c.height = e.currentTarget.naturalHeight || e.currentTarget.height;
+              }}
+              style={{ display: 'block', width: '100%', height: 'auto' }}
+            />
+            {/* height:100% of the IMAGE-sized wrapper, never of the scrolling window above it. */}
+            <canvas
+              ref={canvasRef}
+              onPointerDown={onPointerDown}
+              onPointerMove={onPointerMove}
+              onPointerUp={onPointerUp}
+              onPointerCancel={onPointerUp}
+              style={{ position: 'absolute', top: 0, left: 0, width: '100%', height: '100%', touchAction: 'none', cursor: 'crosshair' }}
+            />
+          </div>
         </div>
       ) : (
         <p style={{ color: T.c.dim, margin: 0 }}>
