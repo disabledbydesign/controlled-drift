@@ -49,6 +49,7 @@ import type {
   WriteIntent,
 } from '../model/index.ts';
 import { fieldsFromForm, formFromFields } from '../model/index.ts';
+import type { PressTarget } from '../friction/capture.ts';
 import type { ChipEditTarget } from '../components/rows/index.ts';
 import type { FocusView } from '../components/focus/index.ts';
 import { logFailure } from './errorLog.ts';
@@ -298,6 +299,49 @@ export interface UiState {
 export type LogTag = 'The day' | 'Friction';
 
 /**
+ * One freehand mark drawn on a snapshot, as geometry rather than only as pixels.
+ *
+ * `points` are in image coordinates; `box` is `[x, y, w, h]`. The image is meaningless without
+ * the size it was drawn against, which is why `LogExtras.size` travels with any `marks`.
+ * `closed` records whether the stroke ended near where it began — the cheap difference between
+ * "circled this" and "pointed at this", without asking her to declare which she meant.
+ */
+export interface Mark {
+  points: Array<[number, number]>;
+  box: [number, number, number, number];
+  closed: boolean;
+}
+
+/**
+ * Which way in she used to open the capture.
+ *
+ * Recorded so an entry point that turns out to go unused can be FOUND and retired instead of
+ * quietly accumulating. It is a record of a mechanism, never of her, and it is never used to
+ * prompt or nudge her — retirement is surfaced to June and is her call.
+ */
+export type CaptureVia = 'longpress' | 'shortcut' | 'rightclick' | 'button';
+
+/**
+ * The optional context a snapshot capture attaches to a log entry.
+ *
+ * ⚠ Every field is optional AND every absent field is omitted from the request body entirely —
+ * see `logDay`. The Add tab's Log button has always called `logDay(text, tags)` with two
+ * arguments, and that call must keep sending a byte-identical body; there are 45 existing
+ * entries written by it. Spreading this object into the payload, or sending `shot: undefined`,
+ * would change the shape of the unchanged path.
+ */
+export interface LogExtras {
+  /** A PNG data URL of what she was looking at, or null when the render failed. */
+  shot?: string | null;
+  view?: { tab: string; detailId: string | null } | null;
+  target?: PressTarget | null;
+  via?: CaptureVia | null;
+  marks?: Mark[] | null;
+  /** Image dimensions the marks were drawn against. Mark coords are meaningless without it. */
+  size?: { w: number; h: number } | null;
+}
+
+/**
  * What the Today action row can ask the server to generate.
  *
  * Two endpoints, because the server has two: `/api/refresh` starts a plain fresh generation,
@@ -529,8 +573,13 @@ export interface AppState {
   /**
    * Append a log entry to the friction log via `POST /api/logday`. Resolves `true` only when the
    * server confirmed the write — callers must not clear her text on `false`.
+   *
+   * `extras` carries an optional snapshot of what she was looking at, which view she was on,
+   * which element she pressed, which way in she used, and anything she drew — see
+   * `app/src/friction/`. All of it is optional: the Add tab's Log button still calls this with
+   * two arguments and sends a byte-identical body.
    */
-  logDay: (text: string, tags: string[]) => Promise<boolean>;
+  logDay: (text: string, tags: string[], extras?: LogExtras) => Promise<boolean>;
   /**
    * Hand her words to the structure step and get back the form she checks.
    *
@@ -1481,17 +1530,32 @@ export function useAppState(source: DataSource = 'live'): AppState {
    * Returns whether it landed, so the caller only clears the box on a real write.
    */
   const logDay = useCallback(
-    async (text: string, tags: string[]): Promise<boolean> => {
+    async (text: string, tags: string[], extras?: LogExtras): Promise<boolean> => {
       const body = text.trim();
       if (!body) return false;
       if (!live) {
         fail('Not connected to the server — that was NOT logged. Nothing was saved.');
         return false;
       }
-      const res = await apiSend<{ ok?: boolean; tags?: string[] }>('POST', '/api/logday', {
-        text: body,
-        tags,
-      });
+      // ⚠ ONLY PRESENT KEYS ARE SENT, key by key, deliberately. An entry with no snapshot must
+      // produce exactly the body the Add tab's Log button has always sent — 45 entries were
+      // written by that path. Spreading `extras` in, or assigning `shot: extras?.shot`, would
+      // put `shot: undefined` (or nothing at all, but via a different code path) into the
+      // object and change the shape of the unchanged path. `marks` is sent only when something
+      // was actually drawn: an empty array is not a mark.
+      const payload: Record<string, unknown> = { text: body, tags };
+      if (extras?.shot) payload['shot'] = extras.shot;
+      if (extras?.view) payload['view'] = extras.view;
+      if (extras?.target) payload['target'] = extras.target;
+      if (extras?.via) payload['via'] = extras.via;
+      if (extras?.marks?.length) payload['marks'] = extras.marks;
+      if (extras?.size) payload['size'] = extras.size;
+
+      const res = await apiSend<{ ok?: boolean; tags?: string[]; shot?: string | null }>(
+        'POST',
+        '/api/logday',
+        payload,
+      );
       if (!res.ok) {
         fail(`That was NOT logged, so nothing was saved. ${res.error}`);
         return false;
