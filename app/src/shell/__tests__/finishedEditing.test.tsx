@@ -170,6 +170,11 @@ describe('the title says "Saved" only once the server has it', () => {
     // The rollback's own report is what she gets, and it is the ONLY thing she gets.
     expect(result.current.toast?.kind).toBe('failure');
     expect(result.current.toast?.msg).toContain('NOT saved');
+    // ⚠ `seq` counts every toast ever raised. Asserting only the FINAL toast is not enough: a
+    // "Saved" raised before the failure lands would be overwritten by it and leave this passing,
+    // which is exactly what happened under mutation. Two messages about one event, the second
+    // contradicting the first, is its own defect.
+    expect(result.current.toast?.seq).toBe(1);
   });
 
   it('claims nothing when she leaves a field she never edited', async () => {
@@ -207,26 +212,55 @@ describe('the title says "Saved" only once the server has it', () => {
     expect(result.current.toast).toBeNull();
   });
 
+  /**
+   * ⚠ READ THIS BEFORE TRUSTING THIS TEST. `setVal` (`model/mutations.ts:44`) already returns
+   * `toast: 'Saved'`, which `apply` raises OPTIMISTICALLY on every keystroke — so a note field
+   * already shows a confirmation before its write lands. That is the SAME defect class, at a
+   * third site, and it is NOT fixed here (see the report: a chip tap also goes through `setVal`
+   * and has no blur to hang a confirmation on, so removing that toast would leave chips with no
+   * feedback at all — an app-wide decision, not this task's).
+   *
+   * So asserting "the toast says Saved" would pass against the optimistic one and prove nothing.
+   * What is asserted instead is that blur raises its OWN confirmation once the server answers —
+   * `seq` counts toasts, so a second one means `finishedEditing` spoke for the confirmed write.
+   */
   it('confirms a NOTE field the same way — those write per keystroke, with no debounce', async () => {
     hydrate();
-    send.mockResolvedValue({
-      ok: true,
-      data: {
-        object: { id: ID, title: 'Cancel food stamps', level: 'task', vals: { description: 'call them' }, children: [] },
-      },
-    });
+    let settle: (v: unknown) => void = () => {};
+    send.mockReturnValue(
+      new Promise((resolve) => {
+        settle = resolve;
+      }),
+    );
     const { result } = await mount();
 
     act(() => {
       result.current.apply(setVal(result.current.graph, ID, 'description', 'call them'));
     });
-    await act(async () => {
-      await result.current.finishedEditing(ID);
-    });
-
     expect(send).toHaveBeenCalledWith('PATCH', `/api/object/${ID}`, {
       vals: { description: 'call them' },
     });
+    const optimistic = result.current.toast?.seq;
+
+    let blurred: Promise<void> = Promise.resolve();
+    await act(async () => {
+      blurred = result.current.finishedEditing(ID);
+    });
+    // Still in flight: blur has NOT spoken yet.
+    expect(result.current.toast?.seq).toBe(optimistic);
+
+    await act(async () => {
+      settle({
+        ok: true,
+        data: {
+          object: { id: ID, title: 'Cancel food stamps', level: 'task', vals: { description: 'call them' }, children: [] },
+        },
+      });
+      await blurred;
+    });
+
+    // A NEW confirmation, raised after the server answered.
+    expect(result.current.toast?.seq).toBe((optimistic ?? 0) + 1);
     expect(result.current.toast?.kind).toBe('success');
     expect(result.current.toast?.msg).toBe('Saved');
   });
