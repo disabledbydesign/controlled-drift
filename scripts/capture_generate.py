@@ -418,6 +418,7 @@ def _creation_props(type_name, item, link_id, scheduled=None, is_parked=False):
         affect=item.get("affect"),
         blocked_on=item.get("blocked_on"),
         access_conditions=item.get("access_conditions"),
+        relevant_docs=item.get("relevant_docs"),
     ))
     return props
 

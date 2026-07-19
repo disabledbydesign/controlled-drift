@@ -76,6 +76,7 @@ given (do not skip any; do not add entries you weren't given). Shape:
     "duration_min": "how many MINUTES, as a number, ONLY if the entry's text states/implies it; null otherwise — never guess",
     "affect": "a short verbatim quote of any feeling/capacity signal in the entry's own words, or null",
     "blocked_on": "verbatim what it's waiting on, if the entry says so, or null",
+    "relevant_docs": "any file path, folder, repo path, named document, or external system the entry's OWN text says has to be read or used for this item — copied as written, several separated by commas. null if the text names none; never guess a path.",
     "access_conditions": "zero or more of EXACTLY: \"Can-be-done-lying-down\", \"Involves-leaving-house\", \"Requires-talking-to-a-person\" — only if the text indicates one; else empty list",
     "engagement": "for a Project candidate only, from the entry's OWN words: 'start/focus on'/a deadline -> \"Steady\"; 'set aside/someday' -> \"Backburner\"; else null (born Open). Never Sprint/Hyperfixation.",
     "engagement_notes": "for a Project only: a deadline/cadence/intensity in the entry's words, else null."

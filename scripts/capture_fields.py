@@ -89,7 +89,7 @@ def _resolve_duration(stated, estimate):
 
 
 def build_optional_props(*, duration_min=None, duration_estimate_min=None, affect=None,
-                         blocked_on=None, access_conditions=None):
+                         blocked_on=None, access_conditions=None, relevant_docs=None):
     """Return {display_name: value} for ONLY the optional fields that validate.
 
     Duration carries provenance: June's stated duration (duration_min) is truth and always wins;
@@ -97,6 +97,13 @@ def build_optional_props(*, duration_min=None, duration_estimate_min=None, affec
     'Duration source' label ('stated'|'estimated') is written alongside it so the reader — and the
     future duration-bias loop — can tell them apart. A June-stated 90 and an estimated 90 must
     never be indistinguishable.
+
+    `relevant_docs` closes a field that was defined but never populated (2026-07-19). Its whole
+    purpose is to tell an agent what to read before working an item, and
+    field_semantics.DOES said "nothing writes it" while FIELDS claimed the weeding gate did —
+    intent recorded as behaviour. The gate already NOTICES a named source (its "needs [source]
+    first" rule); this is where what it noticed gets stored. Same bare-by-default rule as the
+    rest: only a source the item's own words named, never one inferred to fill the field.
     """
     props = {}
     dur, source = _resolve_duration(duration_min, duration_estimate_min)
@@ -112,6 +119,9 @@ def build_optional_props(*, duration_min=None, duration_estimate_min=None, affec
     acc = _access_prop(access_conditions)
     if acc is not None:
         props["Access conditions"] = acc
+    docs = _text_prop(relevant_docs)
+    if docs is not None:
+        props["Relevant docs"] = docs
     return props
 
 

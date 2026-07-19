@@ -272,6 +272,65 @@ def list_tasks(include_done: bool = False) -> dict:
         return {"error": str(e)}
 
 
+# The formats an Anytype property value can arrive in, and where the value sits in the payload.
+# A format not listed here yields None rather than a guess.
+_VALUE_KEYS = ("text", "number", "checkbox", "date", "url", "email", "phone")
+
+
+def _property_values(obj):
+    """{display name: value} for every property on an object. Display names, because that is what
+    field_semantics is keyed by and what the whole write layer already speaks."""
+    out = {}
+    for p in obj.get("properties", []) or []:
+        name = p.get("name")
+        if not name:
+            continue
+        fmt = p.get("format")
+        if fmt == "select":
+            out[name] = (p.get("select") or {}).get("name")
+        elif fmt == "multi_select":
+            out[name] = [t.get("name") for t in (p.get("multi_select") or [])]
+        elif fmt == "objects":
+            out[name] = p.get("objects") or []
+        elif fmt in _VALUE_KEYS:
+            out[name] = p.get(fmt)
+        else:
+            out[name] = None
+    return out
+
+
+@mcp.tool()
+def get_object(object_id: str) -> dict:
+    """Read one object's FULL fields before you work on it — including the two written for you.
+
+    `Relevant docs` names the files, folders, or external systems to open BEFORE starting this
+    item; open them first. `AI autonomous` says whether you can just do it with minimal oversight.
+    Neither is visible through list_tasks, which returns only id/name/status.
+
+    object_id: the id (from list_tasks, get_context, or a create_* result).
+
+    Returns {id, name, type, properties: {display name: value}, field_meanings: {...}} — the
+    meanings come from scripts/field_semantics.py, so they are the same definitions the write
+    tools and the daily plan use, with June's own revisions applied. Or {error} on failure.
+    """
+    try:
+        object_id = (object_id or "").strip()
+        if not object_id:
+            return {"error": "get_object: object_id is required"}
+        obj = _read_back(object_id)
+        props = _property_values(obj)
+        meanings = {}
+        for name in props:
+            line = field_semantics.one_line(name)
+            if line:
+                meanings[name] = line
+        return {"id": obj.get("id", object_id), "name": obj.get("name"),
+                "type": (obj.get("type") or {}).get("name"),
+                "properties": props, "field_meanings": meanings}
+    except Exception as e:
+        return {"error": str(e)}
+
+
 @mcp.tool()
 def get_context() -> dict:
     """Orientation for a cold agent: the Goals and Projects in the space, by name + id, so links
