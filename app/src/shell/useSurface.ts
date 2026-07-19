@@ -178,10 +178,11 @@ export function useSurface({ T, name, setTheme, wide, source }: SurfaceOptions):
     // The work-block check. `void` for the same reason as `regenerate`: every outcome reports
     // itself through `succeed`/`fail` inside `chunkBlock`, so the row has nothing to await.
     chunk: (id, done) => void st.chunkBlock(id, done),
-    // The action row's generation controls. `void` because the row's handlers are fire-and-
-    // forget: every outcome of the generation reports itself through `succeed`/`fail` inside
-    // `regenerate`, so there is nothing for a caller to await or to catch.
-    regenerate: (req, label) => void st.regenerate(req, label),
+    // The action row's generation controls. The ROW's handlers are still fire-and-forget —
+    // every outcome reports itself through `succeed`/`fail` inside `regenerate`. The promise is
+    // passed through undiluted for the ONE caller that needs the answer: the ask box, which holds
+    // text she wrote and may only clear it on a generation that actually happened.
+    regenerate: (req, label) => st.regenerate(req, label),
     generating: st.generating,
     openDetail: (id: string) => st.up({ detail: id, returnFrom: 'today' }),
     goTab: (t) => goTab(t),
@@ -210,7 +211,12 @@ export function useSurface({ T, name, setTheme, wide, source }: SurfaceOptions):
     undoCapture: st.undoCapture,
     setCapturedWhen: st.setCapturedWhen,
     setCapturedEngagement: st.setCapturedEngagement,
-    regenerate: st.regenerate,
+    // The Add tab's "Regenerate today" holds no text of hers, so it has nothing to decide from
+    // the answer — the result is dropped here rather than widening `AddCtx` for a value that tab
+    // does not read. The generation still reports itself through `succeed`/`fail`.
+    regenerate: async (req, label) => {
+      await st.regenerate(req, label);
+    },
     busy: st.generating,
   };
 

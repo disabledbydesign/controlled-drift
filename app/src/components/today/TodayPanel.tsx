@@ -40,11 +40,27 @@ export interface TodayPanelProps {
  * `~/.controlled-drift/actions.json` — which was read live and holds exactly the first three.
  * An id the server does not hold answers 400 (`server.py:927`).
  *
- * ⚠ "Life admin & household" IS STILL UNWIRED AND STILL CLAIMS SUCCESS. There is no preset id
- * for it anywhere — not in `_DEFAULT_ACTIONS`, not in her live `actions.json`, not in v4. The
- * button is a label with no backend, and picking an id or writing its instruction text would be
- * inventing the thing this thread is removing. It needs either a preset June authors or the
- * honest-refusal path (plan Task 6). Reported, deliberately not guessed.
+ * "Life admin & household" WAS the exception — a label with no backend, flashing a claim that
+ * nothing stood behind. It is now the `life-admin` preset, wired like the other three. The id is
+ * quoted, not guessed: it is in `plan_store._DEFAULT_ACTIONS` and in her live
+ * `~/.controlled-drift/actions.json`, and a live `POST /api/negotiate {"preset_id":"life-admin"}`
+ * answered 202 and produced a reordered plan.
+ *
+ * "Add something" is GONE from this row (June's direction, 2026-07-18). It was navigation sitting
+ * among plan actions, and the Add tab is one tap away in the tab bar. Removing it needs no spacing
+ * change: the row is `flex-wrap` with a uniform `gap`, so the remaining buttons close up on their
+ * own.
+ *
+ * ── the ask box ─────────────────────────────────────────────────────────────
+ * The 150px "tell me what you need" box used to `flash('Sent')` and then blank itself. NOTHING
+ * read `ui.ask` — the box invited a considered sentence, said it had gone, and deleted it. It now
+ * goes to `/api/negotiate` as `message`, the free-text half of the same endpoint the presets use
+ * (`server.py:973`), through the SAME `regenerate` seam and the same 202-and-poll wait.
+ *
+ * ⚠ HER TEXT IS CLEARED ON A CONFIRMED GENERATION AND ON NOTHING ELSE. `regenerate` resolves
+ * `true` only after a new plan has been generated and read back, and reports every failure itself
+ * (`useAppState`). So the box is emptied inside `if (sent)` — never beside the call, never before
+ * the await. `logDay` is the model this follows.
  *
  * ── what she sees while it runs ─────────────────────────────────────────────
  * Generation takes tens of seconds. The button that started it reads `Regenerating…` with a
@@ -100,7 +116,7 @@ export function TodayPanel({ ctx }: TodayPanelProps) {
   /**
    * `gated` marks a button that STARTS A GENERATION — so it can show that it is working, and so
    * a second tap cannot stack a request the server would refuse anyway (`_gen_lock`,
-   * `server.py:272`). "Add something" is navigation and stays live throughout.
+   * `server.py:272`). "Move this later" is not a generation and stays live throughout.
    */
   const act = (label: string, primary: boolean, onClick: () => void, gated = false) => {
     const running = gated && ctx.generating === label;
@@ -303,8 +319,12 @@ export function TodayPanel({ ctx }: TodayPanelProps) {
           () => ctx.regenerate({ kind: 'preset', presetId: 'quick-wins' }, 'Quick wins only'),
           true,
         )}
-        {act('Life admin & household', false, () =>
-          ctx.flash('Prioritizing life admin + household'),
+        {act(
+          'Life admin & household',
+          false,
+          () =>
+            ctx.regenerate({ kind: 'preset', presetId: 'life-admin' }, 'Life admin & household'),
+          true,
         )}
         {act(
           'I’m stuck',
@@ -312,7 +332,6 @@ export function TodayPanel({ ctx }: TodayPanelProps) {
           () => ctx.regenerate({ kind: 'preset', presetId: 'stuck' }, 'I’m stuck'),
           true,
         )}
-        {act('Add something', false, () => ctx.goTab('add'))}
         {act('Move this later', false, () => ctx.flash('Pick an item to move'))}
       </div>
 
@@ -356,10 +375,18 @@ export function TodayPanel({ ctx }: TodayPanelProps) {
           />
           <button
             onClick={() => {
-              if (ctx.ui.ask.trim()) {
-                ctx.flash('Sent');
-                ctx.up({ ask: '' });
-              }
+              const message = ctx.ui.ask.trim();
+              // Nothing written, nothing to send, and nothing claimed. The old handler was
+              // already silent here; what it was NOT silent about is the case below.
+              if (!message) return;
+              void (async () => {
+                const sent = await ctx.regenerate({ kind: 'message', message }, 'Your message');
+                // ⚠ THE WHOLE POINT OF THE AWAIT. Her words are deleted only once the server has
+                // made a new plan from them and that plan has been read back. On every other
+                // outcome the box still holds what she wrote, and `regenerate` has already put a
+                // readable failure on screen saying it did not send.
+                if (sent) ctx.up({ ask: '' });
+              })();
             }}
             style={{
               background: hw

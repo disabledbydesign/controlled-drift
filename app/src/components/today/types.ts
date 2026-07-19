@@ -73,11 +73,22 @@ export interface TodayCtx {
    * drift, the mount point in `useSurface` stops compiling, which is the intended alarm.
    *
    * `label` is the button's own text, so the row can show which control is working.
+   *
+   * The third variant carries the free text from the "tell me what you need" box —
+   * `/api/negotiate` takes either a stored preset or a message, on one endpoint and one wait.
+   *
+   * ⚠ Resolves `true` ONLY once a new plan has been generated AND read back. The ask box holds
+   * words she wrote and clears itself on that answer alone; every `false` has already told her it
+   * did not send. A `void` return here is what would make deleting her text on a dropped request
+   * possible, so the promise is the point.
    */
   regenerate: (
-    req: { kind: 'refresh'; capacity?: string } | { kind: 'preset'; presetId: string },
+    req:
+      | { kind: 'refresh'; capacity?: string }
+      | { kind: 'preset'; presetId: string }
+      | { kind: 'message'; message: string },
     label: string,
-  ) => void;
+  ) => Promise<boolean>;
   /** Label of the control whose generation is running, or null. See `TodayPanel`'s action row. */
   generating: string | null;
   /**

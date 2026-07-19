@@ -359,13 +359,16 @@ describe('navigation out of Today', () => {
     expect(openDetail).toHaveBeenCalledWith('l3pdzq');
   });
 
-  it('the Map pointer and "Add something" change tab', () => {
+  /**
+   * The Map pointer is now the ONLY thing on Today that changes tab. "Add something" was removed
+   * from the action row on June's direction (2026-07-18) — it was navigation among plan actions,
+   * and the tab bar already reaches the Add tab. See `actionRow.test.tsx` for the row's contents.
+   */
+  it('the Map pointer changes tab', () => {
     const { ctx, goTab } = ctxWith();
     render(<TodayPanel ctx={ctx} />);
     fireEvent.click(screen.getByText(/Open the Map to pick a thread/));
     expect(goTab).toHaveBeenCalledWith('map');
-    fireEvent.click(screen.getByText('Add something'));
-    expect(goTab).toHaveBeenCalledWith('add');
   });
 });
 
@@ -387,18 +390,10 @@ describe('the focus slot', () => {
   });
 });
 
-describe('the ask box', () => {
-  it('sends only non-blank text, and clears itself', () => {
-    const blank = ctxWith({ ask: '   ' });
-    render(<TodayPanel ctx={blank.ctx} />);
-    fireEvent.click(screen.getByText('✦ Send'));
-    expect(blank.flash).not.toHaveBeenCalled();
-    cleanup();
-
-    const filled = ctxWith({ ask: '30 min, horizontal' });
-    render(<TodayPanel ctx={filled.ctx} />);
-    fireEvent.click(screen.getByText('✦ Send'));
-    expect(filled.flash).toHaveBeenCalledWith('Sent');
-    expect(filled.up).toHaveBeenCalledWith({ ask: '' });
-  });
-});
+/**
+ * The ask box's behaviour moved to `askBox.test.tsx` when the box was wired to the server
+ * (2026-07-18). The test that lived here asserted the bug: `flash('Sent')` plus an unconditional
+ * `up({ask:''})`, i.e. it certified that her text was deleted whether or not anything had been
+ * sent — nothing read `ui.ask` at all. What replaces it is a send that carries her words to
+ * `/api/negotiate` and clears the box only on a confirmed generation.
+ */

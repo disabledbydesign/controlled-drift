@@ -40,6 +40,9 @@ describe('each generation button asks the server for what it says', () => {
     ['Low energy today', 'low-energy'],
     ['Quick wins only', 'quick-wins'],
     ['I’m stuck', 'stuck'],
+    // Wired 2026-07-18. This one used to `flash()` a claim with no backend behind it; the preset
+    // now exists and was confirmed live (202 + a reordered plan).
+    ['Life admin & household', 'life-admin'],
   ])('“%s” asks for the %s preset', (label, presetId) => {
     const { ctx, regenerate } = ctxWith();
     render(<TodayPanel ctx={ctx} />);
@@ -49,14 +52,30 @@ describe('each generation button asks the server for what it says', () => {
     expect(regenerate).toHaveBeenCalledWith({ kind: 'preset', presetId }, label);
   });
 
-  it('“Add something” still navigates to the Add tab and starts no generation', () => {
-    const { ctx, regenerate, goTab } = ctxWith();
-    render(<TodayPanel ctx={ctx} />);
+  /**
+   * "Add something" was removed from this row on June's direction (2026-07-18) — it is navigation
+   * among plan actions, and the tab bar already reaches the Add tab.
+   *
+   * The assertion is positive about the row's CONTENTS: these five are what the row offers. A bare
+   * `queryByText('Add something') === null` would also pass against a row that rendered nothing at
+   * all, which is the failure this test has to be able to see.
+   */
+  it('the action row offers exactly the six plan actions, and no Add button', () => {
+    const { ctx } = ctxWith();
+    const { container } = render(<TodayPanel ctx={ctx} />);
 
-    fireEvent.click(screen.getByText('Add something'));
-
-    expect(goTab).toHaveBeenCalledWith('add');
-    expect(regenerate).not.toHaveBeenCalled();
+    const row = screen.getByText('↻ Fresh plan').parentElement!;
+    const labels = [...row.querySelectorAll('button')].map((b) => b.textContent);
+    expect(labels).toEqual([
+      '↻ Fresh plan',
+      'Low energy today',
+      'Quick wins only',
+      'Life admin & household',
+      'I’m stuck',
+      'Move this later',
+    ]);
+    // And the label is nowhere else on the Today tab either.
+    expect(container.textContent).not.toContain('Add something');
   });
 });
 
@@ -95,14 +114,28 @@ describe('the row shows the work in progress', () => {
     expect(regenerate).not.toHaveBeenCalled();
   });
 
-  it('“Add something” stays live while a generation runs', () => {
-    const { ctx, goTab } = ctxWith({}, undefined, '↻ Fresh plan');
+  /**
+   * The hold is on the GENERATION controls only. "Move this later" starts no generation, so the
+   * server's one-at-a-time lock has nothing to do with it and it stays tappable.
+   */
+  it('“Move this later” stays live while a generation runs', () => {
+    const { ctx, flash } = ctxWith({}, undefined, '↻ Fresh plan');
     render(<TodayPanel ctx={ctx} />);
 
-    const add = screen.getByText('Add something');
-    expect(add.hasAttribute('disabled')).toBe(false);
-    fireEvent.click(add);
-    expect(goTab).toHaveBeenCalledWith('add');
+    const move = screen.getByText('Move this later');
+    expect(move.hasAttribute('disabled')).toBe(false);
+    fireEvent.click(move);
+    expect(flash).toHaveBeenCalledWith('Pick an item to move');
+  });
+
+  it('“Life admin & household” is held with the other generation controls', () => {
+    const { ctx, regenerate } = ctxWith({}, undefined, '↻ Fresh plan');
+    render(<TodayPanel ctx={ctx} />);
+
+    const preset = screen.getByText('Life admin & household');
+    expect(preset.hasAttribute('disabled')).toBe(true);
+    fireEvent.click(preset);
+    expect(regenerate).not.toHaveBeenCalled();
   });
 
   it('nothing is held when no generation is running', () => {

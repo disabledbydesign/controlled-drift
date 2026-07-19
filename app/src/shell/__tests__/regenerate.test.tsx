@@ -168,6 +168,84 @@ describe('the generation controls issue the request the server implements', () =
 
     expect(send).toHaveBeenCalledWith('POST', '/api/negotiate', { preset_id: presetId });
   });
+
+  /**
+   * THE ASK BOX'S REQUEST. `/api/negotiate` takes a `preset_id` OR a free-text `message`
+   * (`server.py:973`) — `message` is the server's own body key, not a name chosen here, and a
+   * body carrying neither is the 400 at `server.py:1000`.
+   *
+   * Her text goes out VERBATIM, which is the whole reason the box exists: it is the one channel
+   * where she says something the presets cannot.
+   */
+  it('sends POST /api/negotiate {message} carrying her words for the ask box', async () => {
+    hydrate();
+    send.mockResolvedValue({ ok: true, data: { state: 'running', started: true } });
+    const { result } = await mount();
+    answering({ '/api/status': { ok: true, data: { state: 'idle' } } });
+
+    await act(async () => {
+      void result.current.regenerate(
+        { kind: 'message', message: 'I only have 30 min and need to stay horizontal' },
+        'Your message',
+      );
+    });
+
+    expect(send).toHaveBeenCalledWith('POST', '/api/negotiate', {
+      message: 'I only have 30 min and need to stay horizontal',
+    });
+  });
+});
+
+/**
+ * WHAT THE ANSWER MEANS TO A CALLER HOLDING HER TEXT.
+ *
+ * The ask box clears itself on `true` and on nothing else, so this boolean is the difference
+ * between a sent message and a deleted one. `logDay` established the same contract.
+ */
+describe('regenerate reports whether the plan actually changed', () => {
+  it('resolves true once a new plan has been generated and read back', async () => {
+    hydrate();
+    send.mockResolvedValue({ ok: true, data: { state: 'running', started: true } });
+    const { result } = await mount();
+    answering({ '/api/status': statusSequence(1), '/api/plan': { ok: true, data: NEW_PLAN } });
+
+    let landed: boolean | undefined;
+    await act(async () => {
+      const p = result.current
+        .regenerate({ kind: 'message', message: '30 min, horizontal' }, 'Your message')
+        .then((v) => {
+          landed = v;
+        });
+      await vi.advanceTimersByTimeAsync(1_200 * 3);
+      await p;
+    });
+
+    expect(landed).toBe(true);
+    expect(result.current.plan.woven).toBe('A newly generated day.');
+  });
+
+  /**
+   * The failure path the ask box depends on: `false` AND a message she can read. A `false` with
+   * nothing on screen would be the silent no-op — her text kept, but no way to know why.
+   */
+  it('resolves false and says it did not send when the request cannot start', async () => {
+    hydrate();
+    send.mockResolvedValue({ ok: false, error: 'could not reach the server' });
+    const { result } = await mount();
+
+    let landed: boolean | undefined;
+    await act(async () => {
+      landed = await result.current.regenerate(
+        { kind: 'message', message: '30 min, horizontal' },
+        'Your message',
+      );
+    });
+
+    expect(landed).toBe(false);
+    expect(result.current.toast?.kind).toBe('failure');
+    expect(result.current.toast?.msg).toContain('could not reach the server');
+    expect(result.current.toast?.msg).toContain('has not changed');
+  });
 });
 
 describe('a 202 is not a finished write', () => {

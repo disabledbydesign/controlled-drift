@@ -50,7 +50,13 @@ export function ctxWith(
   const apply = vi.fn();
   const applyPlan = vi.fn();
   const flash = vi.fn();
-  const regenerate = vi.fn();
+  /**
+   * Defaults to a generation that SUCCEEDED, because that is what the real seam resolves on the
+   * ordinary path and because the value is load-bearing: the ask box clears her text on `true`
+   * and holds it on anything else. A test about the failure path says so itself with
+   * `regenerate.mockResolvedValue(false)`.
+   */
+  const regenerate = vi.fn(async () => true);
   const chunk = vi.fn();
   const openDetail = vi.fn();
   const goTab = vi.fn();
