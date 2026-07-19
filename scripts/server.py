@@ -1087,7 +1087,11 @@ class Handler(BaseHTTPRequestHandler):
             # The deferral is written to TWO logs, each with its own job:
             #   • session_store "deferral" stream — the 8h recency window build_context reads, so a
             #     SAME-DAY regenerate honors the deferral and then lets it expire (the stickiness).
-            #   • signal_log (source plan_deferral) — the permanent qualitative learning record.
+            #   • corrections_log (kind "not_today") — the permanent record that the SYSTEM took
+            #     this item off today's list. NOT signal_log: that log is June's own typed words
+            #     (June's correction, 2026-07-18) and a machine-recorded deferral is not her voice.
+            #     Was signal_log/plan_deferral until this change; scripts/migrate_plan_deferral_to_corrections.py
+            #     moves the entries that already landed there.
             # Neither touches the task. Removal is the primary effect; a log write that fails is
             # surfaced (warning + stderr), never silently swallowed and never undoes the removal.
             body = self._read_json_body()
@@ -1122,9 +1126,12 @@ class Handler(BaseHTTPRequestHandler):
                 print(f"[not-today] deferral-window log failed for {obj_id!r}: {e}", file=sys.stderr)
                 warnings.append("removed for now, but it may come back if the plan regenerates today")
             try:
-                signal_log.log_signal(log_name, source="plan_deferral", reference=obj_id)
+                corrections_log.log_correction(
+                    "not_today", {"name": log_name}, None,
+                    object_id=obj_id, object_type=("Project" if kind == "block" else "Task"),
+                    surface="daily_plan")
             except Exception as e:
-                print(f"[not-today] signal_log failed for {obj_id!r}: {e}", file=sys.stderr)
+                print(f"[not-today] corrections_log failed for {obj_id!r}: {e}", file=sys.stderr)
                 warnings.append("removed, but the learning note didn't save")
             if warnings:
                 resp["warning"] = "; ".join(warnings)

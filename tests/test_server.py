@@ -649,27 +649,36 @@ def _seed_task_and_block_plan():
 def test_not_today_task_removes_row_and_logs(live_server):
     base, _ = live_server
     _seed_task_and_block_plan()
-    import signal_log
+    import signal_log, corrections_log
     status, data = _post(base, "/api/task/not-today", {"id": "T1", "kind": "task"})
     assert status == 200 and data["ok"] is True
     ids = [i.get("id") for i in data["plan"]["blocks"][0]["items"]]
     assert "T1" not in ids and "B1" in ids                 # only the task row goes
     assert "T1" not in [i.get("id") for i in plan_store.load_plan()["blocks"][0]["items"]]
-    # logged to BOTH the 8h window and the permanent learning store
+    # logged to BOTH the 8h window (session cache) and the permanent record of what the
+    # SYSTEM did — corrections_log, never signal_log (that log is June's own typed words;
+    # June's correction 2026-07-18 says a machine-recorded deferral does not belong there).
     defs = session_store.recent_entries("deferral", hours=8, token_budget=10 ** 7)
     assert [(e["kind"], e["id"]) for e in defs] == [("task", "T1")]
-    assert [(s["source"], s["reference"]) for s in signal_log.read_signals()] == [("plan_deferral", "T1")]
+    recs = corrections_log.read_records()
+    assert [(r["kind"], r["object_id"], r["object_type"], r["before"], r["after"])
+            for r in recs] == [("not_today", "T1", "Task", {"name": "a flat task"}, None)]
+    assert signal_log.read_signals() == []                # her own-words log is untouched
 
 
 def test_not_today_block_removes_every_project_row(live_server):
     base, _ = live_server
     _seed_task_and_block_plan()
+    import corrections_log
     status, data = _post(base, "/api/task/not-today", {"id": "PROJ", "kind": "block"})
     assert status == 200 and data["ok"] is True
     ids = [i.get("id") for i in data["plan"]["blocks"][0]["items"]]
     assert ids == ["T1"]                                    # the whole block (B1) dropped
     defs = session_store.recent_entries("deferral", hours=8, token_budget=10 ** 7)
     assert [(e["kind"], e["id"]) for e in defs] == [("block", "PROJ")]
+    recs = corrections_log.read_records()
+    assert [(r["kind"], r["object_id"], r["object_type"]) for r in recs] == \
+        [("not_today", "PROJ", "Project")]
 
 
 def test_not_today_missing_id_is_400(live_server):

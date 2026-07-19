@@ -13,8 +13,10 @@ import cd_paths
 
 # Structural sources — cheap and worth recording, but they do NOT encode meaning
 # (a Log Day entry is not the same as "the plan was wrong"). The why stays in the raw text.
-SOURCES = ("log_day", "checkin_reply", "config_authoring", "config_correction", "plan_renegotiation",
-           "plan_deferral")   # "not today" — June took an item off today's list (see server /api/task/not-today)
+SOURCES = ("log_day", "checkin_reply", "config_authoring", "config_correction", "plan_renegotiation")
+# "plan_deferral" ("not today") used to live here but was a machine-recorded event, not June's own
+# words, so it was moved to corrections_log (kind "not_today") — June's correction, 2026-07-18.
+# scripts/migrate_plan_deferral_to_corrections.py moves the entries that already landed here.
 
 
 def _path(path=None):
