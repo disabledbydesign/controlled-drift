@@ -182,13 +182,21 @@ describe('the two states of an inheritable field — inherited, or set here', ()
 
     // The click must not have produced a write of any kind.
     expect(apply).not.toHaveBeenCalled();
-    // And the editor must now be live — not the greyed, non-operable inheriting copy.
+    // And the editor must now be LIVE. Asserting only that it is no longer greyed would be a
+    // negative assertion, which passes just as happily against a control wired to nothing — the
+    // pattern this plan's reviewers rejected twice. So the positive claim is made directly:
+    // picking an option now produces a real write, carrying the option she picked.
     // Scoped to THIS field's editor via one of its own option buttons: `block()` can return a
     // wrapper holding a neighbouring field, and a loose `querySelectorAll` would then find that
     // neighbour's greyed editor and pass/fail for the wrong reason.
     const after = block(container, 'Access conditions');
     const opt = within(after).getByRole('button', { name: 'Involves leaving house' });
     expect(opt.closest('[aria-disabled="true"]')).toBeNull();
+
+    fireEvent.click(opt);
+    const write = apply.mock.calls[0]?.[0] as MutationResult;
+    expect(write?.write).toMatchObject({ op: 'patchVals', id: 'r-kitchen' });
+    expect(write?.node?.vals.access).toBe('Involves-leaving-house');
   });
 
   it('Inherit deletes the key; Custom copies the inherited value down', () => {
