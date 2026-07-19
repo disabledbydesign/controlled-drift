@@ -39,12 +39,18 @@ export function freshPlan(): Plan {
 }
 
 /** A context whose `up` / `apply` / `applyPlan` are spies, so writes are observable. */
-export function ctxWith(ui: Partial<TodayUi> = {}, plan: Plan = freshPlan()) {
+export function ctxWith(
+  ui: Partial<TodayUi> = {},
+  plan: Plan = freshPlan(),
+  /** Which control has a generation in flight — the action row's in-progress state. */
+  generating: string | null = null,
+) {
   const graph = freshGraph();
   const up = vi.fn();
   const apply = vi.fn();
   const applyPlan = vi.fn();
   const flash = vi.fn();
+  const regenerate = vi.fn();
   const openDetail = vi.fn();
   const goTab = vi.fn();
   const ctx: TodayCtx = {
@@ -60,8 +66,10 @@ export function ctxWith(ui: Partial<TodayUi> = {}, plan: Plan = freshPlan()) {
     apply,
     applyPlan,
     flash,
+    regenerate,
+    generating,
     openDetail,
     goTab,
   };
-  return { ctx, up, apply, applyPlan, flash, openDetail, goTab };
+  return { ctx, up, apply, applyPlan, flash, regenerate, openDetail, goTab };
 }

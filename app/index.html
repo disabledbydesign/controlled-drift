@@ -36,6 +36,11 @@
          and the signal is redundant with the value already re-rendering in place. */
       @media (prefers-reduced-motion: reduce) {
         @keyframes rowsettle { 0% { filter: none; } 100% { filter: none; } }
+        /* The Today action row pulses `ringpulse` on the dot of the button that is regenerating
+           the plan — an INFINITE animation, running for the tens of seconds a generation takes.
+           Neutralised here for the same reason `rowsettle` is: the dot stays visible and the
+           button still reads "Regenerating…", so nothing is lost but the movement. */
+        @keyframes ringpulse { 0% { opacity: 1; transform: none; } 100% { opacity: 1; transform: none; } }
       }
     </style>
   </head>

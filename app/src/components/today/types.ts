@@ -51,6 +51,21 @@ export interface TodayCtx {
   /** v4's `flash(msg)` — a toast with no state change behind it. */
   flash: (msg: string) => void;
   /**
+   * Ask the server for a new plan — `/api/refresh` or one of the stored `/api/negotiate` presets.
+   *
+   * ⚠ Declared with its own shape here rather than importing the shell's `GenerationRequest`,
+   * following this file's one-way-dependency rule. The two are structurally identical; if they
+   * drift, the mount point in `useSurface` stops compiling, which is the intended alarm.
+   *
+   * `label` is the button's own text, so the row can show which control is working.
+   */
+  regenerate: (
+    req: { kind: 'refresh'; capacity?: string } | { kind: 'preset'; presetId: string },
+    label: string,
+  ) => void;
+  /** Label of the control whose generation is running, or null. See `TodayPanel`'s action row. */
+  generating: string | null;
+  /**
    * v4's `up({detail:id,_returnFrom:'today'})`, as one callback.
    *
    * Expressed as a callback rather than through `up` because `detail` and `returnFrom` are

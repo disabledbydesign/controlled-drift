@@ -175,6 +175,11 @@ export function useSurface({ T, name, setTheme, wide, source }: SurfaceOptions):
     apply: st.apply,
     applyPlan: st.applyPlan,
     flash: (msg: string) => st.apply({ graph: st.graph, toast: msg, ui: null, node: null }),
+    // The action row's generation controls. `void` because the row's handlers are fire-and-
+    // forget: every outcome of the generation reports itself through `succeed`/`fail` inside
+    // `regenerate`, so there is nothing for a caller to await or to catch.
+    regenerate: (req, label) => void st.regenerate(req, label),
+    generating: st.generating,
     openDetail: (id: string) => st.up({ detail: id, returnFrom: 'today' }),
     goTab: (t) => goTab(t),
   };

@@ -240,6 +240,37 @@ export interface UiState {
 /** v4's two literal log tags (v4:1130). Not schema-driven in v4 — hardcoded in the render. */
 export type LogTag = 'The day' | 'Friction';
 
+/**
+ * What the Today action row can ask the server to generate.
+ *
+ * Two endpoints, because the server has two: `/api/refresh` starts a plain fresh generation,
+ * `/api/negotiate` runs one of the stored presets (`plan_store._DEFAULT_ACTIONS['presets']`,
+ * merged with `~/.controlled-drift/actions.json`). BOTH answer 202 and generate in a background
+ * thread, so the two share one poll — see `regenerate`.
+ *
+ * `presetId` is never composed here. An id the server does not hold answers 400 (`server.py:927`),
+ * so the ids live in the schema and the buttons quote them.
+ */
+export type GenerationRequest =
+  | { kind: 'refresh'; capacity?: string }
+  | { kind: 'preset'; presetId: string };
+
+/** How long between two `/api/status` reads while a generation is in flight. */
+const POLL_MS = 1_200;
+/**
+ * How long to keep polling before saying so.
+ *
+ * Generation takes tens of seconds against her production backend (mistral is the decided
+ * default). Five minutes is well past that, and the point of the cap is that the surface stops
+ * waiting SILENTLY — it says the plan has not changed yet rather than waiting forever with a
+ * control that looks busy.
+ */
+const POLL_TIMEOUT_MS = 300_000;
+
+function sleep(ms: number): Promise<void> {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
 /** v4's three backend option ids (v4:1161-1163). */
 export type BackendId = 'claude' | 'local' | 'api';
 
@@ -370,6 +401,20 @@ export interface AppState {
    * server confirmed the write — callers must not clear her text on `false`.
    */
   logDay: (text: string, tags: string[]) => Promise<boolean>;
+  /**
+   * Ask the server for a new plan, and do not claim anything until it has one.
+   *
+   * `label` is the June-facing name of the control that started it, so the surface can show
+   * WHICH control is working. See `generating`.
+   */
+  regenerate: (req: GenerationRequest, label: string) => Promise<void>;
+  /**
+   * The label of the control whose generation is in flight, or null when nothing is running.
+   *
+   * ⚠ A generation takes tens of seconds against the production backend. This is what stops the
+   * action row looking idle — or finished — during that wait.
+   */
+  generating: string | null;
   dismissToast: () => void;
 }
 
@@ -870,6 +915,106 @@ export function useAppState(source: DataSource = 'live'): AppState {
     [live, fail, succeed],
   );
 
+  /**
+   * THE GENERATION SEAM — the action row's six buttons, wired to the two endpoints that already
+   * implement them.
+   *
+   * ⚠ THE THING THIS EXISTS TO GET RIGHT: **202 IS NOT A FINISHED WRITE.** Both `/api/refresh`
+   * (`server.py:910`) and `/api/negotiate` (`:921`) hand the work to a background thread and
+   * answer 202 `{state:'running', started}` immediately. Raising a success there would say the
+   * plan changed while generation had not begun to run — the same "told her it happened when it
+   * did not" bug class this whole thread is closing. So: start it, poll `/api/status` until the
+   * generation settles, re-read `/api/plan`, and only then say anything.
+   *
+   * The polling loop tolerates a FAILED status read rather than reporting failure on the first
+   * one. A dropped request mid-generation does not mean the generation failed, and saying it did
+   * would be its own false claim; the deadline is what ends the wait, and it ends it by saying
+   * the plan has not changed YET, which is true.
+   */
+  const generatingRef = useRef<string | null>(null);
+  const [generating, setGenerating] = useState<string | null>(null);
+
+  const regenerate = useCallback<AppState['regenerate']>(
+    async (req, label) => {
+      if (!live) {
+        fail('Not connected to the server — the plan was NOT changed.');
+        return;
+      }
+      if (generatingRef.current) {
+        fail(
+          `A new plan is already being made, so "${label}" did not start. The plan on screen has not changed.`,
+        );
+        return;
+      }
+      generatingRef.current = label;
+      setGenerating(label);
+      try {
+        const start =
+          req.kind === 'refresh'
+            ? await apiSend<{ state?: string; started?: boolean }>(
+                'POST',
+                '/api/refresh',
+                req.capacity ? { capacity: req.capacity } : {},
+              )
+            : await apiSend<{ state?: string; started?: boolean }>('POST', '/api/negotiate', {
+                preset_id: req.presetId,
+              });
+        if (!start.ok) {
+          fail(`Could not start a new plan, so the plan on screen has not changed. ${start.error}`);
+          return;
+        }
+        // `_start_generation` answers `started:false` when another generation holds the lock —
+        // still a 202. Nothing of hers was started, so she is told that and not left waiting on
+        // a result that belongs to someone else's request.
+        if (start.data.started === false) {
+          fail(
+            'A new plan was already being made, so this one did not start. The plan on screen has not changed.',
+          );
+          return;
+        }
+
+        const deadline = Date.now() + POLL_TIMEOUT_MS;
+        let lastReadError = '';
+        for (;;) {
+          await sleep(POLL_MS);
+          const st = await apiGet<{ state?: string; error?: string }>('/api/status');
+          if (st.ok && st.data.state === 'error') {
+            fail(
+              `Making a new plan failed, so the plan on screen has not changed. ${st.data.error ?? ''}`.trim(),
+            );
+            return;
+          }
+          if (st.ok && st.data.state !== 'running') break;
+          if (!st.ok) lastReadError = st.error;
+          if (Date.now() >= deadline) {
+            fail(
+              lastReadError
+                ? `Still making a new plan, and the server stopped answering. The plan on screen has not changed. ${lastReadError}`
+                : 'Still making a new plan after five minutes. The plan on screen has not changed.',
+            );
+            return;
+          }
+        }
+
+        const planRes = await apiGet<LivePlan>('/api/plan');
+        if (!planRes.ok) {
+          fail(`A new plan was made, but it could not be read. ${planRes.error}`);
+          return;
+        }
+        if (planRes.data.empty) {
+          fail('The new plan came back with nothing in it, so nothing is shown.');
+          return;
+        }
+        setPlan(planFromLive(planRes.data));
+        succeed('Your plan is updated', null);
+      } finally {
+        generatingRef.current = null;
+        setGenerating(null);
+      }
+    },
+    [live, fail, succeed],
+  );
+
   return {
     graph,
     idx,
@@ -884,6 +1029,8 @@ export function useAppState(source: DataSource = 'live'): AppState {
     applyPeriods,
     fail,
     logDay,
+    regenerate,
+    generating,
     dismissToast,
   };
 }

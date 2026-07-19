@@ -29,10 +29,29 @@ export interface TodayPanelProps {
  * the flat ranked list. Per spec §17 a focus period can force either shape; that override is
  * the Focus editor's (`components/focus`) and does not appear here.
  *
- * ── the action row ──────────────────────────────────────────────────────────
- * Every button except "Add something" is `flash()` only — no regeneration behind it, because
- * generation is a backend call and Track A makes none. The toasts are v4's own strings.
- * ⚠ So the presets are inert by design at this stage, not broken.
+ * ── the action row (WIRED 2026-07-18) ───────────────────────────────────────
+ * Four of these buttons said a plan had changed when nothing had happened: "Regenerating plan…",
+ * "Trimmed to one small win", "Showing quick wins", "Let's break it down" were `flash()` and
+ * nothing else. They now call the endpoints that already implemented them —
+ * `/api/refresh` for a fresh plan, `/api/negotiate {preset_id}` for the presets.
+ *
+ * ⚠ THE PRESET IDS ARE QUOTED, NEVER COMPOSED. They come from `plan_store._DEFAULT_ACTIONS`
+ * (`low-energy`, `quick-wins`, `stuck`, plus a UI-only `add`) merged with her own
+ * `~/.controlled-drift/actions.json` — which was read live and holds exactly the first three.
+ * An id the server does not hold answers 400 (`server.py:927`).
+ *
+ * ⚠ "Life admin & household" IS STILL UNWIRED AND STILL CLAIMS SUCCESS. There is no preset id
+ * for it anywhere — not in `_DEFAULT_ACTIONS`, not in her live `actions.json`, not in v4. The
+ * button is a label with no backend, and picking an id or writing its instruction text would be
+ * inventing the thing this thread is removing. It needs either a preset June authors or the
+ * honest-refusal path (plan Task 6). Reported, deliberately not guessed.
+ *
+ * ── what she sees while it runs ─────────────────────────────────────────────
+ * Generation takes tens of seconds. The button that started it reads `Regenerating…` with a
+ * pulsing dot; every other generation button is held at v4's not-tappable-right-now treatment
+ * until it settles. Neither `signals.ts` nor the colour gallery (4a/4c/5a/5c) has an
+ * in-progress state — this is DERIVED, from the dot the hardware action button already carries
+ * and the `ringpulse` keyframe already in `index.html`. See `act()`.
  *
  * v4's hex-alpha suffixes are transcribed as `alpha()` at the same values:
  * 2b=.169 · 0f=.059 · 80=.502 · 33=.2 · 22=.133 · 70=.439 · 2e=.18 · 66=.4 · 0d=.051.
@@ -78,7 +97,14 @@ export function TodayPanel({ ctx }: TodayPanelProps) {
     );
   };
 
-  const act = (label: string, primary: boolean, onClick: () => void) => {
+  /**
+   * `gated` marks a button that STARTS A GENERATION — so it can show that it is working, and so
+   * a second tap cannot stack a request the server would refuse anyway (`_gen_lock`,
+   * `server.py:272`). "Add something" is navigation and stays live throughout.
+   */
+  const act = (label: string, primary: boolean, onClick: () => void, gated = false) => {
+    const running = gated && ctx.generating === label;
+    const held = gated && ctx.generating !== null && !running;
     const stl: React.CSSProperties = hw
       ? {
           background: primary
@@ -115,21 +141,47 @@ export function TodayPanel({ ctx }: TodayPanelProps) {
           lineHeight: 1,
           boxShadow: primary ? `0 0 16px ${alpha(C.rose, 0.18)}` : 'none',
         };
+    // The dot is v4's own — the action row's primary hardware button already carries one (5px,
+    // round, accent-coloured, 6px glow), transcribed just below. While a generation runs it also
+    // appears on the celestial button and on the non-primary presets, in that button's OWN text
+    // colour, so no new colour value enters either theme.
+    const dotColor = primary ? C.rose : C.dim;
+    const dot = (pulsing: boolean) => (
+      <span
+        style={{
+          width: '5px',
+          height: '5px',
+          borderRadius: '50%',
+          background: pulsing ? dotColor : C.rose,
+          boxShadow: '0 0 6px ' + (pulsing ? dotColor : C.rose),
+          flex: '0 0 auto',
+          // `ringpulse` is defined in `app/index.html` and, before this, used by nothing —
+          // `.5 → 0` opacity with a 1.06 scale. `alternate` makes it a pulse rather than a
+          // single fade-out. See the header note on why this is derived and not transcribed.
+          ...(pulsing ? { animation: 'ringpulse 1.1s ease-in-out infinite alternate' } : null),
+        }}
+      />
+    );
     return (
-      <button key={label} onClick={onClick} style={stl}>
-        {primary && hw ? (
-          <span
-            style={{
-              width: '5px',
-              height: '5px',
-              borderRadius: '50%',
-              background: C.rose,
-              boxShadow: '0 0 6px ' + C.rose,
-              flex: '0 0 auto',
-            }}
-          />
-        ) : null}
-        {label}
+      <button
+        key={label}
+        onClick={onClick}
+        disabled={running || held}
+        style={{
+          ...stl,
+          // v4's own not-tappable-right-now treatment: `opacity:.5` from the blocked type button
+          // (v4:533), `cursor:'default'` from the disabled desktop back button (v4:723).
+          ...(held ? { opacity: 0.5, cursor: 'default' } : null),
+          ...(running ? { cursor: 'default' } : null),
+          // The celestial button is not a flex container in its resting state; the running dot
+          // needs it to be one, exactly as the hardware button already is.
+          ...(running && !hw
+            ? { display: 'inline-flex', alignItems: 'center', gap: '6px' }
+            : null),
+        }}
+      >
+        {running ? dot(true) : primary && hw ? dot(false) : null}
+        {running ? 'Regenerating…' : label}
       </button>
     );
   };
@@ -238,13 +290,28 @@ export function TodayPanel({ ctx }: TodayPanelProps) {
           gap: '6px',
         }}
       >
-        {act('↻ Fresh plan', true, () => ctx.flash('Regenerating plan…'))}
-        {act('Low energy today', false, () => ctx.flash('Trimmed to one small win'))}
-        {act('Quick wins only', false, () => ctx.flash('Showing quick wins'))}
+        {act('↻ Fresh plan', true, () => ctx.regenerate({ kind: 'refresh' }, '↻ Fresh plan'), true)}
+        {act(
+          'Low energy today',
+          false,
+          () => ctx.regenerate({ kind: 'preset', presetId: 'low-energy' }, 'Low energy today'),
+          true,
+        )}
+        {act(
+          'Quick wins only',
+          false,
+          () => ctx.regenerate({ kind: 'preset', presetId: 'quick-wins' }, 'Quick wins only'),
+          true,
+        )}
         {act('Life admin & household', false, () =>
           ctx.flash('Prioritizing life admin + household'),
         )}
-        {act('I’m stuck', false, () => ctx.flash('Let’s break it down'))}
+        {act(
+          'I’m stuck',
+          false,
+          () => ctx.regenerate({ kind: 'preset', presetId: 'stuck' }, 'I’m stuck'),
+          true,
+        )}
         {act('Add something', false, () => ctx.goTab('add'))}
         {act('Move this later', false, () => ctx.flash('Pick an item to move'))}
       </div>
