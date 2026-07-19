@@ -25,6 +25,8 @@ Consequence: v4 still renders an excitement picker, but the field is cut — **d
 
 ## 2. State
 
+**2026-07-18 — the port is integrated, live, and reviewed.** The new surface runs on real Anytype data at `http://localhost:5050/app/`, all six tabs, both themes, 420 and 1440. 995 backend tests, 294 frontend, tsc clean. The cross-family review gate has been run (5 chunks, GPT-4o) and its two real findings are fixed. What remains is **June's own drive of the surface** — the highest-quality signal available, and the thing no agent can substitute for.
+
 ### Track A — the port (`app/`, React 19 + Vite 8 + TS, mounts at `/app/`)
 Tasks 1–6 **done, each through an independent review gate**: atoms · model layer · shell (the wire-in point) · `row()` · `detail()` · structure tabs + picker + Map drill-in. **Task 7 (Today tab) in flight.** Remaining: 8 Add/Settings · 9 Focus editor · 10 desktop panes · 11 toast + orphan buckets + cross-tab search · **12 integration and live-verify (REQUIRED, not a test)**.
 
@@ -64,6 +66,10 @@ Read these; each cost real time and all recurred.
 4. **A filtered view read as a complete one.** `describe_model.py` showed only five types, hiding Focus Period, Page, Note and Bookmark. Three errors from that one omission. **Now fixed** — it discovers types.
 5. **Stale docs relayed as current.** Four of eight "built-but-dead" field claims from 2026-07-11 were stale by 2026-07-18. Re-verify before repeating.
 6. **Machine formats handed to a human.** A migration log shipped as JSONL for June to review; she cannot read it. **If a human is the audience, write a human format** — see `scripts/migration_report.py` and `scripts/semantics_report.py`.
+
+7. **A passing test proved nothing — twice.** A test written to catch the rollback bug passed against the broken code, because its helper compared `id` and `title` while the edit under test wrote `vals.done`. Only the mutation check (break the fix, watch the test fail) caught it. **A test is unverified until you have watched it fail.** Separately, a `/api/complete` mock returning `{}` made the success path uncheck the box itself, so the test measured its own mock.
+8. **The external reviewer praised the code that was broken.** The `as_needed` default had no read-back covering it — the verification loop walks fields present *before* the write, and that field is absent by definition. GPT-4o called it exemplary read-back discipline. The finding came from checking its claim against the source. **The gate's value is what it makes you re-read, not only what it flags.**
+9. **A blank tab that was not blank.** "Strategies renders blank for ~0.5s, reproduced 3/3" was a measurement artifact — one probe timed its own cross-process polling (identical poll counts, different wall-clock), another matched the outgoing tab's animated element. Screenshots at 80/200/400ms show the ordinary 0.26s entry slide. **No long tasks, no fetch, no defect.** Not reproducible; do not chase it.
 
 **The rule that keeps paying out:** *make the wrong thing impossible rather than documenting a rule someone must remember.* The index is derived from the graph so no call site can use a stale one; nav direction is derived during render so nothing can bypass it.
 
