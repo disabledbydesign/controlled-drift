@@ -171,6 +171,7 @@ import api_tree
 import task_actions
 import recurring_active
 import corrections_log
+import intentionally_none
 
 SURFACE = "review_reorganize"
 
@@ -503,6 +504,15 @@ def set_title(object_id, title):
     return {"ok": True, "object": node_for(object_id)}
 
 
+def _marker_values(obj):
+    """The raw `Intentionally none` list on an object, or None when the property is absent."""
+    for p in obj.get("properties", []):
+        if api_tree._prop_name(obj, p) == intentionally_none.PROPERTY:
+            v = api_tree._value(p)
+            return None if isinstance(v, api_tree._Unset) else v
+    return None
+
+
 def set_vals(object_id, vals):
     """Set one or more fields by the UI's valKeys. Every value is proven present on read-back.
 
@@ -524,6 +534,10 @@ def set_vals(object_id, vals):
 
     before_vals = api_tree._vals(before, level)
     props, intended = {}, {}
+    # Which inheritable fields this write turns into, or out of, "intentionally none".
+    # See `intentionally_none` for why the marker is a separate property and not a tag in the
+    # field's own option list.
+    mark, unmark = set(), set()
     for key, value in vals.items():
         prop = _property_for(level, key)
         coerced = _coerce(prop, value)
@@ -531,8 +545,26 @@ def set_vals(object_id, vals):
         # the way IN; `api_tree._vals` flips it back on the way out, so `intended` stays UI-space.
         props[prop] = (not coerced) if (level, key) in api_tree.INVERTED_VALS else coerced
         intended[key] = coerced
+        if key in intentionally_none.MARKABLE:
+            (mark if intentionally_none.is_empty_value(coerced) else unmark).add(key)
+
+    if mark or unmark:
+        was = _marker_values(before)
+        marker = was
+        for k in mark:
+            marker = intentionally_none.with_key(marker, k, True)
+        for k in unmark:
+            marker = intentionally_none.with_key(marker, k, False)
+        # Written ONLY when it actually changes. Setting a real value on a field that was never
+        # marked is the common case by far, and writing an unchanged marker every time would add
+        # a pointless correction-log entry to every ordinary edit — and would demand the property
+        # exist on spaces that have no use for it.
+        if intentionally_none.marked_keys(marker) != intentionally_none.marked_keys(was):
+            props[intentionally_none.PROPERTY] = marker
 
     gsdo_objects.update(object_id, properties=props)     # guard #3 runs inside
+    # A MARKED field is verified as present-and-empty, which is exactly what `_vals` now reports
+    # for it — so `_verify` proves the marker landed, not just that the (deleted) field is gone.
     _verify(object_id, level, intended)
 
     for key in vals:
@@ -575,6 +607,22 @@ def clear_field(object_id, val_key):
             f"verified way to remove its value in Anytype, only to overwrite it")
 
     before_vals = api_tree._vals(before, level)
+
+    # A field can be "set here" by the MARKER alone (intentionally none). Going back to
+    # inheriting has to drop that too, or the object keeps overriding with nothing and the
+    # Inherit button appears to do nothing.
+    marker_before = _marker_values(before)
+    if val_key in intentionally_none.marked_keys(marker_before):
+        gsdo_objects.update(object_id, properties={
+            intentionally_none.PROPERTY: intentionally_none.with_key(marker_before, val_key, False),
+        })
+        after_m = _get_object(object_id)
+        if val_key in api_tree._vals(after_m, level):
+            raise RuntimeError(f"api_write: {val_key!r} did not clear on {object_id!r} "
+                               f"(still marked intentionally-none)")
+        _log(object_id, _type_name(before), prop_name, before_vals.get(val_key), None)
+        return {"ok": True, "object": node_for(object_id)}
+
     if val_key not in before_vals:
         # Already inheriting. Not an error and not a write — saying so beats a no-op that
         # reports success and leaves her unsure whether anything happened.

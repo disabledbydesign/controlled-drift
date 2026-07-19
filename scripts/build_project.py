@@ -3,6 +3,7 @@
 import sys, os
 sys.path.insert(0, os.path.dirname(__file__))
 import gsdo_anytype as g
+import intentionally_none as inone
 
 def build_project():
     p_goal_link   = g.ensure_property("Goal link", "objects")
@@ -66,11 +67,15 @@ def build_project():
     # Written by the AI when proposing ordering; editable by June; read by render_stream.
     p_depends     = g.ensure_property("Depends on", "objects")
     p_arc_why     = g.ensure_property("Arc position rationale", "text")
+    # Spec §4's third state: which inheritable fields are set to "none" ON PURPOSE.
+    # A separate property rather than a tag inside the field, because the daily plan
+    # reads and PRINTS access tags — see `intentionally_none` for the full reasoning.
+    p_inone       = g.ensure_property(inone.PROPERTY, "multi_select", inone.OPTIONS)
     key = g.ensure_type("Project", "Projects",
                         [p_goal_link, p_description, p_reaching, p_deadline,
                          p_parent, p_docs, p_affective, p_barriers, p_access,
                          p_context, p_engagement, p_eng_notes, p_side, p_block_chunk,
-                         p_depends, p_arc_why])
+                         p_depends, p_arc_why, p_inone])
     # Retire Excitement level (cut from the data structure; it was never wired into selection).
     # ensure_type/link_properties_to_type only ADD — they never drop a field a prior run linked,
     # so removal needs its own call. The property definition + any stored values are untouched;

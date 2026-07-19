@@ -43,6 +43,7 @@ import sys, os
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 import gsdo_anytype as g
+import intentionally_none
 import api_schema
 
 # The five GSDO types. Everything else live in the space (Page, Bookmark, Note, Focus Period) is
@@ -153,11 +154,24 @@ def _vals_map(level):
 
 
 def _vals(o, level):
-    """The `vals` bag: ONLY the keys this object actually sets. See tri-state note in the docstring."""
+    """The `vals` bag: ONLY the keys this object actually sets. See tri-state note in the docstring.
+
+    ⚠ The tri-state note's claim that "Anytype cooperates" holds for TEXT and nothing else. It was
+    verified against a text property (`Context`) and is FALSE for a multi_select, where writing an
+    empty value deletes the property outright — so `access` set-here-and-empty and `access` never
+    touched come back identically. `intentionally_none` carries that distinction in its own
+    property; this is where it is folded back in, so every reader downstream sees the tri-state
+    the resolver expects without knowing the marker exists.
+    """
     wanted = _vals_map(level)
     out = {}
+    marker = None
     for p in o.get("properties", []):
         name = _prop_name(o, p)
+        if name == intentionally_none.PROPERTY:
+            v = _value(p)
+            marker = None if isinstance(v, _Unset) else v
+            continue        # never a `vals` key of its own — it is plumbing, not a field
         key = wanted.get(name)
         if key is None:
             continue
@@ -167,6 +181,13 @@ def _vals(o, level):
         if (level, key) in INVERTED_VALS:
             v = not bool(v)
         out[key] = v
+
+    # A marked field is PRESENT and empty — "intentionally none". Emitted only when the field is
+    # not otherwise set, so a real value always wins over a stale marker rather than being hidden
+    # by one.
+    for key in intentionally_none.marked_keys(marker):
+        if key in wanted.values() and key not in out:
+            out[key] = [] if key == "access" else ""
     return out
 
 

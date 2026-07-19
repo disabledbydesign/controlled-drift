@@ -3,6 +3,7 @@
 import sys, os
 sys.path.insert(0, os.path.dirname(__file__))
 import gsdo_anytype as g
+import intentionally_none as inone
 
 def build_recurring():
     p_freq    = g.ensure_property("Frequency", "select", ["Daily", "Weekly", "As-needed"])
@@ -37,11 +38,15 @@ def build_recurring():
     # skip-if-missed (persistence rail): a missed occurrence waits for its next cadence instead of
     # carrying forward daily. Default unset = persist. Read by display name "Fixed appointment".
     p_fixed      = g.ensure_property("Fixed appointment", "checkbox")
+    # Spec §4's third state: which inheritable fields are set to "none" ON PURPOSE.
+    # A separate property rather than a tag inside the field, because the daily plan
+    # reads and PRINTS access tags — see `intentionally_none` for the full reasoning.
+    p_inone       = g.ensure_property(inone.PROPERTY, "multi_select", inone.OPTIONS)
     key = g.ensure_type("Recurring", "Recurring",
                         [p_freq, p_project, p_context,
                          p_dow, p_dom, p_tod, p_dur, p_iunit, p_icount,
                          p_clarify, p_blocked, p_affective, p_access, p_access_nts,
-                         p_autonomous, p_docs, p_active, p_fixed])
+                         p_autonomous, p_docs, p_active, p_fixed, p_inone])
     # Retire Has target/Target (Practice-vs-Routine distinction cut; no scheduling consumer reads
     # either). ensure_type/link_properties_to_type only ADD — they never drop a field a prior run
     # linked, so removal needs its own call. Property definitions + any stored values are untouched;

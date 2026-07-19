@@ -9,6 +9,7 @@ weeding state. Ready = well-specified, executable. In Design = real work, needs 
 import sys, os
 sys.path.insert(0, os.path.dirname(__file__))
 import gsdo_anytype as g
+import intentionally_none as inone
 
 def build_task():
     # reuse the two standalone properties already in the space (do NOT recreate):
@@ -46,6 +47,11 @@ def build_task():
     # it may correct (estimated) vs. must never touch (stated). A select, not a checkbox, so it
     # reads plainly in June's UI and leaves room for a future "corrected" value.
     p_dur_source = g.ensure_property("Duration source", "select", ["stated", "estimated"])
+    # Which inheritable fields this object sets to "none" ON PURPOSE (spec §4's third state).
+    # A separate property, not a tag inside the field itself, because the daily plan reads and
+    # PRINTS access tags — a marker in that list would surface as a fake access condition and
+    # reach plan_generate's tag filtering as a phantom constraint. See `intentionally_none`.
+    p_inone      = g.ensure_property(inone.PROPERTY, "multi_select", inone.OPTIONS)
 
     task_type = g.find_type("task")
     if not task_type:
@@ -53,7 +59,7 @@ def build_task():
     # built-in keys used in place of custom Deadline / Project-link:
     g.link_properties_to_type(task_type["id"],
         [p_duration, p_dur_source, p_clarify, p_status, p_blocked, p_affective, p_access, p_access_nts,
-         p_autonomous, p_docs, p_context, p_surfaced, p_scheduled, "due_date", "linked_projects"])
+         p_autonomous, p_docs, p_context, p_surfaced, p_scheduled, p_inone, "due_date", "linked_projects"])
     print(f"[ok] Task type extended: id={task_type['id']}")
 
 if __name__ == "__main__":
