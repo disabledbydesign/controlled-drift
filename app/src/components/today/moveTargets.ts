@@ -58,6 +58,18 @@ export interface MoveDestination {
    * folded-in appointments and by the item's own removal, which is the whole subject of this file.
    */
   beforeIndex: number;
+  /**
+   * The id of the rendered row this slot sits immediately BELOW, or `null` for the slot at the
+   * top of the band.
+   *
+   * ⚠ Both anchors are carried because the two list containers need different ones, and neither
+   * is a substitute for the other. `Band` renders the plan's band verbatim, so `beforeIndex` is
+   * exact there — including the break and appointment rows, which occupy slots but are never
+   * destinations. `PriorityList` does NOT: it drops breaks and honours June's own local reorder
+   * (`ui.priOrder`), so a numeric plan index does not address a row on that screen at all. It
+   * places the slot under the named row instead, wherever that row currently sits.
+   */
+  afterId: string | null;
 }
 
 /**
@@ -130,10 +142,23 @@ export function moveDestinations(
     const offset = offsetOf(plan, bi);
     const sameBlock = bi === from.bandIndex;
     const targetBlock = priority ? null : bi;
-    const add = (position: number, label: string, key: string, beforeIndex: number) => {
+    const add = (
+      position: number,
+      label: string,
+      key: string,
+      beforeIndex: number,
+      afterId: string | null,
+    ) => {
       // The no-op. Only possible within the item's own block, and a 400 if sent.
       if (sameBlock && position === from.position) return;
-      out.push({ key, label, target: { block: targetBlock, position }, bandIndex: bi, beforeIndex });
+      out.push({
+        key,
+        label,
+        target: { block: targetBlock, position },
+        bandIndex: bi,
+        beforeIndex,
+        afterId,
+      });
     };
 
     // The first slot sits below any folded-in appointments, never above them: an appointment is
@@ -143,6 +168,7 @@ export function moveDestinations(
       priority ? 'first in the list' : 'first in ' + (block.label || 'this block'),
       bi + ':first',
       offset,
+      null,
     );
 
     block.items.forEach((it, j) => {
@@ -154,7 +180,7 @@ export function moveDestinations(
       const anchor = j - offset;
       // Its own block lifts the item out first, so a later anchor is the final index itself.
       const position = sameBlock && anchor > from.position ? anchor : anchor + 1;
-      add(position, 'after ' + titleOf(it), bi + ':' + j, j + 1);
+      add(position, 'after ' + titleOf(it), bi + ':' + j, j + 1, 'id' in it ? (it.id ?? null) : null);
     });
   });
 

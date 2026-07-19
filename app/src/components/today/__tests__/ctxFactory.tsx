@@ -46,6 +46,8 @@ export function ctxWith(
   plan: Plan = freshPlan(),
   /** Which control has a generation in flight — the action row's in-progress state. */
   generating: string | null = null,
+  /** Desktop shell? Phone by default, which is the surface June actually carries. */
+  wide = false,
 ) {
   const graph = freshGraph();
   const up = vi.fn();
@@ -79,6 +81,7 @@ export function ctxWith(
     // Task 9: FocusSlot's expanded body is FocusPanel, which reads this.
     focus: focusCtxWith().ctx,
     ui: { ...BASE_UI, ...ui },
+    wide,
     up,
     apply,
     applyPlan,

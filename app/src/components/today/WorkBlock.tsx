@@ -128,13 +128,11 @@ export function WorkBlock({
         >
           {item.task}
         </span>
-        <EditChip T={ctx.T} onClick={() => ctx.openDetail(item.id)} />
-      </div>
-      {/* `kind="block"` is load-bearing twice over: the removal drops every row of the project,
-          and the length control says "chunk length" rather than "duration" — how long she works
-          on this in a sitting, not how long one thing takes. */}
-      <div style={{ paddingLeft: '22px' }}>
+        {/* Inline in the row (A1). `kind="block"` is load-bearing twice over: the removal drops
+            every row of the project, and the length control says "chunk length" rather than
+            "duration" — how long she works on this in a sitting, not how long one thing takes. */}
         <RowActions ctx={ctx} id={item.id} kind="block" durationMin={item.chunkMin} />
+        <EditChip T={ctx.T} onClick={() => ctx.openDetail(item.id)} />
       </div>
       {open ? (
         <div

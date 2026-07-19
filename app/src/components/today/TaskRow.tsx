@@ -2,6 +2,8 @@ import type { PlanTaskItem } from '../../fixtures/index.ts';
 import { nearestProject, node, planItemDone, toggleDone } from '../../model/index.ts';
 import { EditChip, RoundCheck } from '../atoms/index.ts';
 import { RowActions } from './RowActions.tsx';
+import { movingRowStyle, planDrag } from './placement.ts';
+import { moveOptions } from './moveTargets.ts';
 import type { TodayCtx } from './types.ts';
 import { toggleKey } from './util.ts';
 
@@ -45,9 +47,67 @@ export function TaskRow({ ctx, item, entryKey, showProj }: TaskRowProps) {
   const held = item.heldBack || [];
   const heldOpen = !!ctx.ui.heldOpen[entryKey];
 
+  /**
+   * A3 — CLICK-AND-DRAG, ON THE DESKTOP ONLY.
+   *
+   * June asked for drag on the desktop and rejected it on her phone, where it does not work, so
+   * `ctx.wide` (the 900px breakpoint, one read, drilled from `useSurface`) chooses. The drag does
+   * not open a second way of computing a move: it enters the SAME placement mode a tap does, so
+   * the slots, the arithmetic and the legality rules are one set.
+   *
+   * ⚠ AN ILLEGAL DRAG REFUSES IN WORDS. `dragstart` asks `moveOptions` first, and on a refusal it
+   * calls `preventDefault()` and says why — a row that lifts, travels and snaps back with nothing
+   * said is the failure `desk.test.tsx` documents for the Map drag, arriving here by another
+   * route. An appointment therefore never begins a drag at all.
+   */
+  const moving = ctx.ui.movePick === item.id;
+  const dragProps = !ctx.wide
+    ? {}
+    : {
+        draggable: true,
+        onDragStart: (e: import('react').DragEvent<HTMLDivElement>) => {
+          e.stopPropagation();
+          const opts = moveOptions(ctx.plan, item.id, (it) =>
+            'task' in it && it.task ? it.task : 'this row',
+          );
+          if (opts.refusal) {
+            // Never a silent snap-back.
+            e.preventDefault();
+            ctx.flash(
+              opts.refusal === 'appointment'
+                ? 'This is an appointment at a fixed time, so it does not move.'
+                : opts.refusal === 'not-found'
+                  ? 'I could not find this row in today’s plan, so it cannot be moved.'
+                  : 'There is nowhere else to put this today.',
+            );
+            return;
+          }
+          planDrag.id = item.id;
+          try {
+            e.dataTransfer.setData('text/plain', item.id);
+          } catch {
+            // Some browsers throw on setData outside a real drag; `Row.tsx` swallows it too.
+          }
+          e.dataTransfer.effectAllowed = 'move';
+          ctx.up({ movePick: item.id });
+        },
+        onDragEnd: () => {
+          planDrag.id = null;
+          // The slots come down with the drag. A drop has already cleared `movePick` itself.
+          if (ctx.ui.movePick === item.id) ctx.up({ movePick: null });
+        },
+      };
+
   return (
-    <div style={{ marginBottom: '9px' }}>
-      <div style={{ display: 'flex', alignItems: 'baseline', gap: '7px' }}>
+    <div
+      // Markers, not styling: `data-moving-row` is how a test can see WHERE the moving row sits
+      // relative to the landing slots (the bilateral check), and `data-row-line` is how it can
+      // see that the trigger shares the row's own line rather than having taken a new one.
+      data-moving-row={moving ? '1' : undefined}
+      style={{ marginBottom: '9px', ...(movingRowStyle(ctx, moving) ?? {}) }}
+      {...dragProps}
+    >
+      <div data-row-line="1" style={{ display: 'flex', alignItems: 'baseline', gap: '7px' }}>
         <RoundCheck T={ctx.T} done={done} onClick={() => ctx.apply(toggleDone(ctx.graph, item.id, done))} />
         <span
           style={{
@@ -113,13 +173,13 @@ export function TaskRow({ ctx, item, entryKey, showProj }: TaskRowProps) {
             </span>
           ) : null}
         </span>
-        <EditChip T={ctx.T} onClick={() => ctx.openDetail(item.id)} />
-      </div>
-      {/* "not today" / duration / move. Kept OUT of the flex row above: that row is a single
-          baseline-aligned line, and the panel opens to a second one. `EditChip` stays what it
-          is — the way into the object editor — so the panel brings its own affordance. */}
-      <div style={{ paddingLeft: '22px' }}>
+        {/* A1 — INLINE IN THE ROW, as the old surface had it (`editChipHtml` inside `.item-top`,
+            `docs/overlay_daily.html:2236`). It no longer occupies a line of its own: that line was
+            added to EVERY row of a phone list, and the panel it opened pushed the rows below it
+            down. The panel is now a floating pane anchored to this trigger. `EditChip` stays what
+            it is — the way into the object editor. */}
         <RowActions ctx={ctx} id={item.id} kind="task" durationMin={item.durationMin} />
+        <EditChip T={ctx.T} onClick={() => ctx.openDetail(item.id)} />
       </div>
       {held.length && heldOpen ? (
         <div style={{ paddingLeft: '78px', marginTop: '3px' }}>

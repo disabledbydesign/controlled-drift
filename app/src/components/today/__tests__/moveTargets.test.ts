@@ -95,8 +95,8 @@ describe('moveDestinations — a fragmented (priority) day', () => {
       1,
     );
     expect(moveDestinations(withAppt, 'a', titleOf)).toEqual([
-      { key: '0:2', label: 'after Email', target: { block: null, position: 1 }, bandIndex: 0, beforeIndex: 3 },
-      { key: '0:3', label: 'after Laundry', target: { block: null, position: 2 }, bandIndex: 0, beforeIndex: 4 },
+      { key: '0:2', label: 'after Email', target: { block: null, position: 1 }, bandIndex: 0, beforeIndex: 3, afterId: 'b' },
+      { key: '0:3', label: 'after Laundry', target: { block: null, position: 2 }, bandIndex: 0, beforeIndex: 4, afterId: 'c' },
     ]);
   });
 

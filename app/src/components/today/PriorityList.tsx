@@ -9,6 +9,8 @@ import type { PlanItem } from "../../fixtures/index.ts";
 import { TaskCheck } from "../atoms/index.ts";
 import { ArcStep } from "./ArcStep.tsx";
 import { RowActions } from "./RowActions.tsx";
+import { PlaceTarget } from "./PlaceTarget.tsx";
+import { placementFor, planDrag } from "./placement.ts";
 import type { TodayCtx } from "./types.ts";
 import { toggleKey } from "./util.ts";
 
@@ -96,6 +98,37 @@ export function PriorityList({ ctx, reasonShown = false }: PriorityListProps) {
   for (const it of items) {
     if (order.indexOf(it.id) < 0) order.push(it.id);
   }
+
+  /**
+   * A2 on the FRAGMENTED day — the same landing slots the schedule view draws, anchored by the
+   * ROW they follow rather than by a plan index.
+   *
+   * ⚠ This is why `MoveDestination` carries `afterId` as well as `beforeIndex`. This list is not
+   * the plan's band verbatim: it drops breaks, and it honours June's own local reorder
+   * (`ui.priOrder`), so a numeric plan index does not address a row on this screen. Anchoring to
+   * the named row puts the slot under the row she is actually looking at.
+   *
+   * ⚠ FLAGGED, NOT SILENTLY HANDLED: when she has locally reordered this list, the position sent
+   * to the server is computed against the PLAN's order, which is the order the server holds — so
+   * a move made against a locally reordered view can land somewhere other than where the slot
+   * appeared. That divergence predates this change (`ui.priOrder` is client-only and nothing
+   * persists it, per this file's own header) and is not resolved here.
+   */
+  const placing = placementFor(ctx);
+  const slotFor = (afterId: string | null) =>
+    placing.movingId
+      ? placing.slots
+          .filter((d) => d.afterId === afterId)
+          .map((d) => (
+            <PlaceTarget
+              key={"slot-" + d.key}
+              ctx={ctx}
+              dest={d}
+              dropping={!!planDrag.id}
+              onPick={(dd) => ctx.moveItem(placing.movingId!, dd.target)}
+            />
+          ))
+      : null;
 
   const move = (i: number, d: number) => {
     const a = order.slice();
@@ -193,6 +226,9 @@ export function PriorityList({ ctx, reasonShown = false }: PriorityListProps) {
           No clock times — a ranked to-do list to pull from.
         </div>
       )}
+      {/* The slot at the top of the list — "first in the list", the earlier direction made
+          visible. */}
+      {slotFor(null)}
       {order.map((id, i) => {
         const addr = addressById.get(id);
         const item = addr?.item;
@@ -214,7 +250,8 @@ export function PriorityList({ ctx, reasonShown = false }: PriorityListProps) {
           const chunked = ctx.ui.chunked[item.id] ?? item.didChunkToday ?? false;
           const open = !!ctx.ui.blocksOpen[item.id];
           return (
-            <div key={id} style={{ borderBottom: "1px solid " + C.hair }}>
+            <div key={id}>
+            <div style={{ borderBottom: "1px solid " + C.hair }}>
               <div
                 onClick={
                   expandable
@@ -269,12 +306,10 @@ export function PriorityList({ ctx, reasonShown = false }: PriorityListProps) {
                 >
                   {item.task}
                 </span>
-                {reorder(i)}
-              </div>
-              {/* A block: the removal drops every row of the project, and the length is a chunk
-                  length, not a duration. */}
-              <div style={{ padding: "0 14px 6px 39px" }}>
+                {/* Inline in the row (A1). A block: the removal drops every row of the project,
+                    and the length is a chunk length, not a duration. */}
                 <RowActions ctx={ctx} id={item.id} kind="block" durationMin={item.chunkMin} />
+                {reorder(i)}
               </div>
               {open && expandable ? (
                 <div
@@ -297,6 +332,8 @@ export function PriorityList({ ctx, reasonShown = false }: PriorityListProps) {
                 </div>
               ) : null}
             </div>
+            {slotFor(id)}
+            </div>
           );
         }
         const n = node(ctx.idx, id);
@@ -306,8 +343,10 @@ export function PriorityList({ ctx, reasonShown = false }: PriorityListProps) {
         return (
           // The hairline moves to an OUTER wrapper so the action panel opens INSIDE the row's
           // rule rather than below it. The flex line itself is unchanged.
-          <div key={id} style={{ borderBottom: "1px solid " + C.hair }}>
+          <div key={id} data-moving-row={ctx.ui.movePick === id ? "1" : undefined}>
+          <div style={{ borderBottom: "1px solid " + C.hair }}>
           <div
+            data-row-line="1"
             style={{
               display: "flex",
               alignItems: "center",
@@ -359,16 +398,17 @@ export function PriorityList({ ctx, reasonShown = false }: PriorityListProps) {
               ) : null}
               {n.title}
             </span>
+            {/* Inline in the row (A1) — see `TaskRow`. */}
+            <RowActions
+              ctx={ctx}
+              id={id}
+              kind="task"
+              durationMin={durationOf(itemById.get(id))}
+            />
             {reorder(i)}
           </div>
-            <div style={{ padding: "0 14px 6px 39px" }}>
-              <RowActions
-                ctx={ctx}
-                id={id}
-                kind="task"
-                durationMin={durationOf(itemById.get(id))}
-              />
-            </div>
+          </div>
+          {slotFor(id)}
           </div>
         );
       })}

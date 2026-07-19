@@ -176,6 +176,15 @@ export interface TodayCtx {
    */
   moveItem: (id: string, target: MoveTarget) => void;
   /**
+   * Is this the desktop shell? — v4's `this._wide`, reaching Today for the first time.
+   *
+   * ⚠ ONE reason only: June asked for click-and-drag ON THE DESKTOP, and explicitly not on her
+   * phone, where drag does not work. So the row has to know which surface it is on. Drilled the
+   * same way `PanelCtx.wide` and `DetailCtx.wide` already are — `useSurface` is called once above
+   * the phone/desktop branch, so this is one value with one owner, not a second breakpoint read.
+   */
+  wide: boolean;
+  /**
    * The focus-period context (Task 9). `FocusSlot`'s expanded body is v4's `focusPanel()`
    * (v4:1021), which needs `periods`, `applyPeriods` and the `__focus__` detail route —
    * none of which belong in `TodayUi`. Nested as its own context rather than flattened, for

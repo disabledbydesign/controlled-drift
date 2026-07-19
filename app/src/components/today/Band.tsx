@@ -2,6 +2,8 @@ import { alpha } from '@tokens';
 import type { PlanBlock } from '../../fixtures/index.ts';
 import { bevel } from '../atoms/index.ts';
 import { PlanEntry } from './PlanEntry.tsx';
+import { PlaceTarget } from './PlaceTarget.tsx';
+import { placementFor, planDrag, slotsInBand } from './placement.ts';
 import type { TodayCtx } from './types.ts';
 
 export interface BandProps {
@@ -101,20 +103,49 @@ export function Band({ ctx, band, bandIndex }: BandProps) {
     </div>
   );
 
+  /**
+   * A2 — WHERE THINGS GO, DRAWN IN THE PLAN. While a placement is in flight the band renders its
+   * rows interleaved with landing slots, one at every legal position. Transcribed in mechanism
+   * from the old surface's `renderBlockPlacement` (`docs/overlay_daily.html:2797`); the slot's
+   * own appearance is v4 grammar, see `PlaceTarget`.
+   *
+   * Slots appear ABOVE the moving row as readily as below it. That is what makes the bilateral
+   * move visible without naming a direction in words.
+   */
+  const placing = placementFor(ctx);
+  const slots = placing.movingId ? slotsInBand(placing, bandIndex) : [];
+  const slotsBefore = (ii: number) =>
+    slots
+      .filter((d) => d.beforeIndex === ii)
+      .map((d) => (
+        <PlaceTarget
+          key={'slot-' + d.key}
+          ctx={ctx}
+          dest={d}
+          dropping={!!planDrag.id}
+          onPick={(dd) => ctx.moveItem(placing.movingId!, dd.target)}
+        />
+      ));
+
   const body = (
     <>
       {label}
       {band.items.map((it, ii) => (
-        <PlanEntry
-          key={bandIndex + '-' + ii}
-          ctx={ctx}
-          item={it}
-          entryKey={bandIndex + '-' + ii}
-          showProj
-          bandIndex={bandIndex}
-          itemIndex={ii}
-        />
+        <div key={bandIndex + '-' + ii}>
+          {slotsBefore(ii)}
+          <PlanEntry
+            ctx={ctx}
+            item={it}
+            entryKey={bandIndex + '-' + ii}
+            showProj
+            bandIndex={bandIndex}
+            itemIndex={ii}
+          />
+        </div>
       ))}
+      {/* The slot below the last row — a real destination, and the one an "after the last thing"
+          move lands in. */}
+      {slotsBefore(band.items.length)}
     </>
   );
 
