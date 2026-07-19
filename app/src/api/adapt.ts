@@ -6,7 +6,7 @@
  * names the divergence it closes and cites where the contract records it.
  */
 
-import type { Node, Plan, PlanBlock, PlanItem, Schema } from '../fixtures/index.ts';
+import type { Node, Period, Plan, PlanBlock, PlanItem, Schema } from '../fixtures/index.ts';
 import type { Graph, ModelNode, OrphanBucket } from '../model/index.ts';
 
 // ── GET /api/tree ────────────────────────────────────────────────────────────
@@ -219,14 +219,136 @@ function fmtDay(iso: string): string {
 // ── periods ──────────────────────────────────────────────────────────────────
 
 /*
- * ⚠ FOCUS PERIODS ARE NOT WIRED, and this note is the record of why.
+ * FOCUS PERIODS ARE WIRED, as of `GET /api/periods` (server.py, built 2026-07-18).
  *
- * `GET /api/periods` DOES NOT EXIST — verified live 2026-07-18 (`{"error":"no route
- * /api/periods"}`). Contract §2.5 marks it CHANGE: the singular `/api/period` returns only the
- * ACTIVE period, already rendered for display, which the Focus editor cannot edit. So the Focus
- * tab still runs on `seedPeriods`. Building the endpoint is Track B; inventing a client-side
- * shim over the display-rendered singular endpoint would be guessing at the field mapping
- * (`period_to_fields` is flat snake_case with different names — §2.6 says to agree ONE
- * convention rather than maintain a translation on both sides).
+ * The endpoint answers `{periods: [...]}` — EVERY focus period, each one in the flat
+ * snake_case EDIT shape `focus_period_adapter.period_to_fields` produces, plus `id` and
+ * `active`. It is deliberately not the singular `/api/period`, which is display-rendered
+ * (pre-formatted date strings) and carries only the active period, so it cannot seed an editor.
+ *
+ * The two sides never agreed one naming convention (contract §2.6 wanted that and it did not
+ * happen), so the translation lives HERE, in the one file that exists to hold exactly this kind
+ * of disagreement — not spread across the Focus screen. `periodsFromLive` below is the whole of
+ * it; nothing else in `app/src` may read a snake_case period field.
  */
+
+/** One period as `GET /api/periods` sends it. Every field may be absent or null on the wire. */
+export interface LivePeriod {
+  id?: string | null;
+  active?: boolean | null;
+  name?: string | null;
+  start_date?: string | null;
+  end_date?: string | null;
+  intent?: string | null;
+  availability_start?: string | null;
+  availability_end?: string | null;
+  availability_note?: string | null;
+  days_off?: string[] | null;
+  days_on?: string[] | null;
+  output_format?: string | null;
+  workday_start?: string | null;
+  workday_end?: string | null;
+  foreground_projects?: string[] | null;
+  paused_projects?: string[] | null;
+}
+
+export interface PeriodsResponse {
+  periods: LivePeriod[];
+}
+
+/** A wire string as the app's always-present string. null/undefined become `''`, never absent. */
+function str(v: string | null | undefined): string {
+  return v ?? '';
+}
+
+/** A wire list as the app's always-present array, with empty entries dropped. */
+function list(v: string[] | null | undefined): string[] {
+  return Array.isArray(v) ? v.filter((s) => typeof s === 'string' && s !== '') : [];
+}
+
+/**
+ * One wire period as the app's `Period`.
+ *
+ * Three shape differences the server cannot close on its own:
+ *
+ *  1. NAMES. `start_date`→`start`, `end_date`→`end`, `availability_start`→`availStart`,
+ *     `availability_end`→`availEnd`, `availability_note`→`note`, `days_off`→`daysOff`,
+ *     `output_format`→`output`, `workday_start`→`workdayStart`, `workday_end`→`workdayEnd`,
+ *     `foreground_projects`→`front`, `paused_projects`→`paused`.
+ *  2. `daysOn` IS A STRING in `Period`, while every sibling day list is an array and the server
+ *     sends an array. The v4 fixture typed it that way and the form editor binds it to a text
+ *     input; joined here rather than changing the type under the editor.
+ *  3. `when` IS NOT A SERVER FIELD. The server says which single period contains today
+ *     (`active`); the past/future split is derived HERE, from `end_date` against today.
+ *
+ *     ⚠ Six of her seven real periods have already ended. Mapping every non-active period to
+ *     `'upcoming'` put all six under a heading reading "coming up" with a "Next" chip — a
+ *     period from three weeks ago announced as the next one. `PeriodWhen` gained `'past'` for
+ *     exactly this; see the type's own note.
+ *
+ * `output` falls back to `'Auto'`, matching `formFromPeriod` and the server's own default, so
+ * the select never renders blank. No other field invents a value: a missing string is `''` and a
+ * missing list is `[]` — never `undefined`, so no consumer has to guard.
+ *
+ * `today` is a parameter rather than a `new Date()` inside, so the mapping stays pure and the
+ * boundary cases (a period ending exactly today; a period with no end date) are testable.
+ */
+/** Local calendar date as `YYYY-MM-DD`. NOT `toISOString()`, which converts to UTC first and so
+ *  reports tomorrow's date all evening in her timezone. */
+function todayIso(): string {
+  const d = new Date();
+  const p = (n: number) => String(n).padStart(2, '0');
+  return `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())}`;
+}
+
+/**
+ * `active` is the server's word and wins outright — it owns the window logic
+ * (`focus_period.load_active_focus_period`), and second-guessing it here would put the same
+ * rule in two places.
+ *
+ * Otherwise the split is `end_date` against today. ISO dates compare correctly as strings, so
+ * no parsing is needed. A period ending exactly today is NOT past. A period with no end date
+ * cannot be shown to have ended, so it stays `'upcoming'` rather than being guessed into the
+ * past — the direction that keeps it visible instead of quietly filing it away.
+ */
+function periodWhen(p: LivePeriod, today: string): Period['when'] {
+  if (p.active === true) return 'now';
+  const end = str(p.end_date);
+  return end && end < today ? 'past' : 'upcoming';
+}
+
+export function periodFromLive(p: LivePeriod, today: string = todayIso()): Period {
+  return {
+    id: str(p.id),
+    when: periodWhen(p, today),
+    name: str(p.name),
+    start: str(p.start_date),
+    end: str(p.end_date),
+    intent: str(p.intent),
+    front: list(p.foreground_projects),
+    note: str(p.availability_note),
+    availStart: str(p.availability_start),
+    availEnd: str(p.availability_end),
+    daysOff: list(p.days_off),
+    daysOn: list(p.days_on).join(', '),
+    output: str(p.output_format) || 'Auto',
+    workdayStart: str(p.workday_start),
+    workdayEnd: str(p.workday_end),
+    paused: list(p.paused_projects),
+  };
+}
+
+/**
+ * The endpoint's payload as the app's period list.
+ *
+ * The server already sorts earliest-start-first and that order is kept. A payload with no
+ * `periods` array reads as NO periods rather than throwing — the Focus tab's empty state is a
+ * real state June can be in (she has not authored one), and it is the honest thing to show.
+ */
+export function periodsFromLive(res: PeriodsResponse, today: string = todayIso()): Period[] {
+  // `today` is resolved ONCE and passed down, not defaulted per period: a list mapped across
+  // midnight would otherwise date its first entries yesterday and its last ones today.
+  // The explicit arrow also stops `.map` handing the array INDEX to the `today` parameter.
+  return Array.isArray(res?.periods) ? res.periods.map((p) => periodFromLive(p, today)) : [];
+}
 

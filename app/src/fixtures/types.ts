@@ -200,7 +200,18 @@ export interface Plan {
 
 // ── periods ─────────────────────────────────────────────────────────────────
 
-export type PeriodWhen = 'now' | 'upcoming';
+/**
+ * ⚠ `'past'` added 2026-07-18, with the live `/api/periods` wire-in.
+ *
+ * v4 only ever held two states because its periods were a hand-written fixture containing one
+ * current and one future entry. Her real space has seven, six of which have already ended, and
+ * a two-value type forced every one of those into `'upcoming'` — so the Focus tab labelled a
+ * period from three weeks ago "Next", under a heading reading "coming up".
+ *
+ * That is the same defect class as the seed-data bug this wire-in fixed: real content shown
+ * under a label that misstates it. A period that has ended needs to say so.
+ */
+export type PeriodWhen = 'now' | 'upcoming' | 'past';
 
 export interface Period {
   id: string;

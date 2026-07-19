@@ -595,6 +595,58 @@ class Handler(BaseHTTPRequestHandler):
                 self._send(500, {"error": f"period render failed: {e}"})
             return
 
+        if self.path == "/api/periods":
+            # EVERY Focus Period, in the flat EDIT shape — what the Focus tab lists and seeds its
+            # editor from. Deliberately NOT /api/period (singular): that one is display-rendered
+            # (pre-formatted date strings, lossy) and returns only the active period, so it cannot
+            # seed an editor. Here each period goes through the same parse -> period_to_fields path
+            # the edit flow already uses, plus `id` (so an edit can name what it is changing) and
+            # `active` (the one whose [start, end] contains today).
+            #
+            # ⚠ fetch_all_objects, never POST /spaces/{sid}/search — search silently returns a
+            # broken subset (99 of 296 objects, verified 2026-07-18) and has already produced two
+            # false claims. Read-only: this handler never writes.
+            try:
+                import datetime as _dt
+                sid = g.get_space_id()
+                objects = g.fetch_all_objects(sid)
+                today = _dt.date.today()
+
+                def _type_key(obj):
+                    t = obj.get("type")
+                    return t.get("key") if isinstance(t, dict) else t
+
+                period_objs = [o for o in objects
+                               if _type_key(o) == focus_period.FOCUS_PERIOD_TYPE_KEY]
+                active = focus_period.load_active_focus_period(period_objs, today)
+                active_id = active.get("id") if active else None
+
+                # Foreground/paused links read back as id STRINGS, so the current name is resolved
+                # live against every object in the space (rename-safe — same rule as daily_plan).
+                id_to_name = {o.get("id"): o.get("name") for o in objects if o.get("id")}
+
+                def _resolve(pairs):
+                    return [id_to_name.get(i) or n for i, n in (pairs or [])
+                            if (i in id_to_name) or n]
+
+                out = []
+                for obj in period_objs:
+                    p = focus_period.parse_focus_period(obj)
+                    p["foreground"] = _resolve(p.get("foreground_pairs"))
+                    p["paused"] = _resolve(p.get("paused_pairs"))
+                    fields = focus_period_adapter.period_to_fields(p)
+                    fields["id"] = p.get("id")
+                    fields["active"] = (p.get("id") == active_id)
+                    out.append(fields)
+
+                # Earliest start first. A period with no start sorts last rather than crashing the
+                # comparison — a half-authored period should cost its position, not the whole list.
+                out.sort(key=lambda f: (f.get("start_date") is None, f.get("start_date") or ""))
+                self._send(200, {"periods": out})
+            except Exception as e:
+                self._send(500, {"error": f"periods load failed: {e}"})
+            return
+
         if self.path == "/api/projects":
             # The "in front" selector reads this: every non-Done project with its category (Side —
             # a DATA-DRIVEN stub until June's multi-tier categories land) + engagement + parent, so

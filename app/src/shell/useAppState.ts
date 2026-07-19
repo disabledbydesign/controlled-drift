@@ -10,8 +10,8 @@ import {
 import type { Period, Plan, Schema } from '../fixtures/index.ts';
 import { applySchema, index, updateNode } from '../model/index.ts';
 import { apiGet, apiSend } from '../api/client.ts';
-import { graphFromTree, planFromLive, schemaFromResponse } from '../api/adapt.ts';
-import type { LivePlan, TreeResponse } from '../api/adapt.ts';
+import { graphFromTree, periodsFromLive, planFromLive, schemaFromResponse } from '../api/adapt.ts';
+import type { LivePlan, PeriodsResponse, TreeResponse } from '../api/adapt.ts';
 import type {
   DerivedSchema,
   FocusForm,
@@ -402,6 +402,17 @@ function initialPeriods(): Period[] {
 }
 
 /**
+ * No periods — what `live` starts from, and where a live read FAILURE leaves the Focus tab.
+ *
+ * The seed periods are plausible-looking invented commitments ("Job-search sprint · caregiving
+ * from Sat"). Showing them in live mode is the same fabrication the tree read refuses: an empty
+ * Focus tab plus a loud failure is honest, a fake week she might plan around is not.
+ */
+function emptyPeriods(): Period[] {
+  return [];
+}
+
+/**
  * Where the app's data comes from.
  *
  * `live` — the real endpoints, against June's Anytype space. The only value production uses.
@@ -435,7 +446,7 @@ export function useAppState(source: DataSource = 'live'): AppState {
   const live = source === 'live';
   const [graph, setGraph] = useState<Graph>(live ? emptyGraph : initialGraph);
   const [plan, setPlan] = useState<Plan>(live ? emptyPlan : initialPlan);
-  const [periods, setPeriods] = useState<Period[]>(initialPeriods);
+  const [periods, setPeriods] = useState<Period[]>(live ? emptyPeriods : initialPeriods);
   const [ui, setUi] = useState<UiState>(INITIAL_UI);
   const [toast, setToast] = useState<Signal | null>(null);
   /**
@@ -739,9 +750,10 @@ export function useAppState(source: DataSource = 'live'): AppState {
   );
 
   /**
-   * HYDRATION — the schema, the tree and today's plan, read from the running server on mount.
+   * HYDRATION — the schema, the tree, today's plan and the focus periods, read from the running
+   * server on mount.
    *
-   * Three separate awaits rather than one `Promise.all` result: they fail independently and a
+   * Separate awaits rather than one `Promise.all` result: they fail independently and a
    * schema outage must not blank the tree. Each failure is reported on its own terms.
    */
   useEffect(() => {
@@ -749,10 +761,11 @@ export function useAppState(source: DataSource = 'live'): AppState {
     let cancelled = false;
 
     void (async () => {
-      const [schemaRes, treeRes, planRes] = await Promise.all([
+      const [schemaRes, treeRes, planRes, periodsRes] = await Promise.all([
         apiGet<unknown>('/api/schema'),
         apiGet<TreeResponse>('/api/tree'),
         apiGet<LivePlan>('/api/plan'),
+        apiGet<PeriodsResponse>('/api/periods'),
       ]);
       if (cancelled) return;
 
@@ -784,6 +797,19 @@ export function useAppState(source: DataSource = 'live'): AppState {
       if (planRes.ok && !planRes.data.empty) setPlan(planFromLive(planRes.data));
       else if (!planRes.ok) {
         fail(`Could not read today's plan. ${planRes.error}`, { kind: 'plan_read' });
+      }
+
+      if (periodsRes.ok) {
+        setPeriods(periodsFromLive(periodsRes.data));
+      } else {
+        // Same rule as the tree, for the same reason: NO FIXTURE FALLBACK. `seedPeriods` are
+        // invented weeks that read as real commitments, and a Focus tab quietly showing them
+        // after a failed read is worse than a blank one — she could plan around a week nobody
+        // wrote. Empty plus a loud failure.
+        setPeriods([]);
+        fail(`Could not read your focus periods — none are shown. ${periodsRes.error}`, {
+          kind: 'periods_read',
+        });
       }
     })();
 

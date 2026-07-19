@@ -230,6 +230,8 @@ export function FocusPanel({ ctx }: FocusPanelProps) {
   const C = T.c;
   const now = periods.filter((p) => p.when === 'now');
   const up = periods.filter((p) => p.when === 'upcoming');
+  // Newest first: the most recently ended period is the one she is most likely to want back.
+  const past = periods.filter((p) => p.when === 'past').slice().reverse();
 
   const sectionLabel = {
     fontSize: '10px',
@@ -271,6 +273,26 @@ export function FocusPanel({ ctx }: FocusPanelProps) {
       ) : (
         <div style={emptyLine}>Nothing scheduled yet.</div>
       )}
+
+      {/* Added 2026-07-18 with the live wire-in. Before this, ended periods rendered up in
+          "coming up" badged "Next". They are still fully editable — she asked to be able to see
+          and edit periods other than today's — they just no longer claim to be ahead of her.
+          The section is omitted entirely when empty rather than showing an empty-state line:
+          "no past periods" is not information she needs. */}
+      {past.length ? (
+        <>
+          <div style={{ ...sectionLabel, margin: '14px 0 9px' }}>earlier</div>
+          {past.map((p) => (
+            <PeriodCard
+              key={p.id}
+              T={T}
+              p={p}
+              badge="Ended"
+              onEdit={() => openEditor('edit', p.id, formFromPeriod(p))}
+            />
+          ))}
+        </>
+      ) : null}
 
       {/* v4:836 — the author flow opens with NO form (`focusReflect:null`), which is what
           `FocusEditor` branches on to show the "say it in your own words" screen. */}
