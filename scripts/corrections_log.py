@@ -10,6 +10,18 @@ Existing records were migrated; `kind` values are unchanged.
 
 v1 logs only; the learning loop reads it but does not yet act on it.
 
+WIDENED AGAIN 2026-07-18 (persistence-seam Task 5): also carries `kind='write_failed'` — a write
+the APP could not complete, posted by the surface through `POST /api/log/correction`
+(`server.py`). Same reasoning as the rename above: route the signal through an existing log
+rather than add a fourteenth file. `before` is `{msg, intended}` and `after` is null, because
+nothing persisted.
+
+⚠ These records deliberately carry NO `field`, and `resolve_authored_by` below is why. That fold
+reads any non-'authorship' record for an (object_id, field) pair as June having overwritten the
+field. A write that FAILED changed nothing, so a `field` on one of these would report her as the
+author of a value she never managed to save — a false positive in exactly the direction that
+poisons the loop. Anything adding a new non-correction `kind` here must make the same check.
+
 WHY AUTHORSHIP LIVES HERE (2026-07-18, docs/api_contract_v2.md §7)
 ------------------------------------------------------------------
 June edits a value SHE entered -> an ordinary edit; she changed her mind. June edits a value the
@@ -72,7 +84,8 @@ def _append(rec, path=None):
 
 def log_correction(kind, before, after, path=None, *, object_id=None, object_type=None,
                    field=None, authored_by=None, surface=None, generation_id=None):
-    """kind: e.g. 'move_time' | 'reject' | 'reorder' | 'field_semantics'. before/after: JSON-serializable or None.
+    """kind: e.g. 'move_time' | 'reject' | 'reorder' | 'field_semantics' | 'write_failed'.
+    before/after: JSON-serializable or None.
 
     The keyword provenance arguments are all optional and are written only when given, so every
     pre-existing caller and every pre-existing record keeps its exact shape. When present,

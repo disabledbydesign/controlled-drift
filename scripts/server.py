@@ -26,6 +26,8 @@ Routes:
   GET  /api/session     ?stream=capture|negotiate -> recent session log entries (the receipt)
   POST /api/capture     {text} -> weed input into typed/linked Anytype objects (async, 202)
   POST /api/capture/undo {id}  -> archive a just-captured object + log the undo (sync)
+  POST /api/log/correction {msg, kind?, objectId?, before?} -> record a write the APP could not
+                                complete, into corrections_log so it survives a reload (sync)
 
   The Review & Reorganize write layer (backend spec §1, contract §4). Every one of these returns
   the SAME envelope — {ok, object} where `object` is the RE-FETCHED node, not a success boolean —
@@ -60,6 +62,7 @@ import focus_period_author
 import focus_store
 import daily_plan
 import signal_log
+import corrections_log
 import chunk_log
 import block_duration
 import gsdo_anytype as g
@@ -1254,6 +1257,58 @@ class Handler(BaseHTTPRequestHandler):
                 self._send(500, {"error": str(e)})
                 return
             self._send(200, {"ok": True, "tags": tags})
+            return
+
+        if self.path == "/api/log/correction":
+            # A write the APP could not complete, recorded where it survives a reload. June,
+            # 2026-07-18: "what matters more is error logging if something fails." Until now a
+            # failed write reached console.error and a 50-entry in-memory array that died with
+            # the tab, so the one thing she asked for — a failure being diagnosable AFTERWARDS —
+            # was the thing that did not exist.
+            #
+            # Routed through corrections_log, NOT a new file: `scripts/data/` already holds 13
+            # .jsonl files and the repo rule (docs/handoff_2026-07-17_surface_rebuild.md §5) is
+            # to widen an existing log rather than add a fourteenth. The shape fits without
+            # distortion — a failed write is a divergence between what the surface reported and
+            # what actually persisted, which is the family this log already carries.
+            #
+            # ⚠ `field` is deliberately NEVER set on these records, and this is load-bearing.
+            # `corrections_log.resolve_authored_by` folds over the log and reads ANY non-
+            # 'authorship' record for an (object_id, field) pair as "June overwrote this, so the
+            # current value is hers." A write that FAILED changed nothing, so stamping a field on
+            # it would tell the learning loop she authored a value she never managed to save.
+            # Leaving `field` unset keeps these records invisible to that fold.
+            body = self._read_json_body()
+            msg = (body.get("msg") or "").strip() if isinstance(body.get("msg"), str) else ""
+            if not msg:
+                self._send(400, {"error": "a failure log needs a message"})
+                return
+            raw_kind = body.get("kind", "write_failed")
+            if not isinstance(raw_kind, str) or not raw_kind.strip():
+                self._send(400, {"error": "kind must be a non-empty name"})
+                return
+            object_id = body.get("objectId")
+            if object_id is not None and not isinstance(object_id, str):
+                self._send(400, {"error": "objectId must be an id or nothing"})
+                return
+            object_id = (object_id or "").strip() or None
+            try:
+                # `before` carries BOTH what was intended and the sentence June was shown. The
+                # message is the diagnostic half — without it a record says a write failed but
+                # not which one — and `log_correction` has no parameter for it, so it rides in
+                # `before` rather than widening a module every other caller shares. `after` is
+                # null because nothing persisted; that is literally true, not a placeholder.
+                corrections_log.log_correction(
+                    raw_kind.strip(),
+                    {"msg": msg, "intended": body.get("before")},
+                    None,
+                    object_id=object_id,
+                    surface="app",
+                )
+            except Exception as e:
+                self._send(500, {"error": str(e)})
+                return
+            self._send(200, {"ok": True})
             return
 
         if self.path == "/api/capture":
