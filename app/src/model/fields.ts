@@ -200,10 +200,22 @@ export function sideColor(_v: string | undefined, C: ModelColors): string {
  * Per the resolved §7 note in docs/api_contract_v2.md, this chip row is what
  * absorbs the old surface's "primary inline field".
  *
- * Note the asymmetry, which is v4's: only the GOAL / PROJECT / SUBPROJECT /
- * TASK chips carry `unset`. The RECURRING and STRATEGY chips never do — they
- * always have a displayable default ('every week', 'Active', 'when: Always'),
- * so there is no unset state to render.
+ * ⚠ EVERY chip carries `unset`, and an unpopulated field renders as unset on all
+ * of them. This used to be asymmetric: RECURRING and STRATEGY substituted a
+ * default ('every week', 'Active', 'when: Always') for a field she had never
+ * filled in, and the docstring here defended that as "always having a
+ * displayable default, so there is no unset state to render".
+ *
+ * That reasoning was the defect, and it had live consequences: `when: Always`
+ * was rendering on 11 of her 12 Strategy objects, none of which say Always. The
+ * substitution is not cosmetic — a blank field means SHE HAS NOT SAID, and
+ * answering on her behalf both invents a commitment she never made and destroys
+ * her ability to tell a strategy that genuinely applies always from one nobody
+ * has filled in. The unset treatment (`components/atoms/Chip.tsx`) already
+ * exists and forks on shape, not only colour, so it reads in both themes.
+ *
+ * This is a RENDERING change only. Nothing here writes, and no stored value is
+ * altered — an absent value is displayed as absent, not made absent.
  */
 export function chipsFor(n: ModelNode, C: ModelColors): Chip[] {
   const v: NodeVals = n.vals || {};
@@ -242,15 +254,20 @@ export function chipsFor(n: ModelNode, C: ModelColors): Chip[] {
   }
 
   if (n.level === 'RECURRING') {
-    if (v.unit === 'as_needed') return [{ text: 'as needed', color: C.teal, field: 'unit' }];
-    // v4: `const c=v.count||1, u=v.unit||'week'`
+    if (v.unit === 'as_needed')
+      return [{ text: 'as needed', color: C.teal, field: 'unit', unset: false }];
+    // v4 had `u = v.unit || 'week'`. The unit is now REQUIRED to render an interval: with no
+    // unit there is no period to name, and 'week' was an invention. `count` still defaults to
+    // 1, which is not an invention — it is what "every <unit>" already means.
+    const u = sv(v.unit);
+    if (!u) return [{ text: 'set interval', color: C.dimmer, field: 'unit', unset: true }];
     const c = Number(v.count) || 1;
-    const u = sv(v.unit) || 'week';
     return [
       {
         text: 'every ' + (c > 1 ? c + ' ' : '') + u + (c > 1 ? 's' : ''),
         color: C.orange,
         field: 'unit',
+        unset: false,
       },
     ];
   }
@@ -258,13 +275,23 @@ export function chipsFor(n: ModelNode, C: ModelColors): Chip[] {
   if (n.level === 'TASK') return [stat()];
 
   if (n.level === 'STRATEGY') {
+    const st = sv(v.status);
+    const wh = sv(v.when);
     return [
       {
-        text: sv(v.status) || 'Active',
-        color: isInactive(n) ? C.dimmer : C.strategy,
+        text: st || 'set status',
+        color: st ? (isInactive(n) ? C.dimmer : C.strategy) : C.dimmer,
         field: 'status',
+        unset: !st,
       },
-      { text: 'when: ' + (sv(v.when) || 'Always'), color: C.dimmer, field: 'when' },
+      {
+        // The 'when: ' prefix is dropped when unset — 'when: set when' is not a sentence, and
+        // the other unset chips read as a bare instruction ('set side', 'set horizon').
+        text: wh ? 'when: ' + wh : 'set when',
+        color: C.dimmer,
+        field: 'when',
+        unset: !wh,
+      },
     ];
   }
 

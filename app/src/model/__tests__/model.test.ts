@@ -263,16 +263,36 @@ describe('chipsFor', () => {
 
   it('RECURRING — as_needed short-circuits the interval phrasing', () => {
     expect(chipsFor(n('a', 'RECURRING', { unit: 'as_needed' }), C)).toEqual([
-      { text: 'as needed', color: C.teal, field: 'unit' },
+      { text: 'as needed', color: C.teal, field: 'unit', unset: false },
     ]);
   });
 
-  it('RECURRING — pluralises only above 1 and defaults to "every week"', () => {
+  it('RECURRING — pluralises only above 1', () => {
     expect(chipsFor(n('a', 'RECURRING', { count: 1, unit: 'day' }), C)[0]?.text).toBe('every day');
     expect(chipsFor(n('a', 'RECURRING', { count: 3, unit: 'week' }), C)[0]?.text).toBe(
       'every 3 weeks',
     );
-    expect(chipsFor(n('a', 'RECURRING', {}), C)[0]?.text).toBe('every week');
+  });
+
+  /*
+   * TRUTH CONDITION, not mechanism: an interval nobody has filled in must READ as
+   * unfilled. The old behaviour answered 'every week' for an absent unit, so a
+   * recurring item she never set an interval on was indistinguishable on screen from
+   * one she deliberately set to weekly.
+   */
+  it('RECURRING — an absent unit reads as unset, never as "every week"', () => {
+    const chip = chipsFor(n('a', 'RECURRING', {}), C)[0];
+    expect(chip?.text).toBe('set interval');
+    expect(chip?.unset).toBe(true);
+    expect(chip?.field).toBe('unit');
+  });
+
+  /*
+   * A count with no unit is still an unset interval: 'every 3' names no period, and
+   * inventing 'weeks' to complete it is the same invention one level down.
+   */
+  it('RECURRING — a count with no unit is still unset', () => {
+    expect(chipsFor(n('a', 'RECURRING', { count: 3 }), C)[0]?.unset).toBe(true);
   });
 
   it('PROJECT — engagement plus a side chip; WORKSTREAM gets engagement only', () => {
@@ -287,12 +307,32 @@ describe('chipsFor', () => {
     expect(chipsFor(n('a', 'PROJECT', { side: 'Fun / hobby' }), C)[1]?.text).toBe('hobby');
   });
 
-  it('STRATEGY — dims when retired, and defaults the when-chip to Always', () => {
-    expect(chipsFor(n('a', 'STRATEGY', {}), C)).toEqual([
-      { text: 'Active', color: C.strategy, field: 'status' },
-      { text: 'when: Always', color: C.dimmer, field: 'when' },
+  it('STRATEGY — renders the values she actually stored', () => {
+    expect(chipsFor(n('a', 'STRATEGY', { status: 'Active', when: 'Low energy' }), C)).toEqual([
+      { text: 'Active', color: C.strategy, field: 'status', unset: false },
+      { text: 'when: Low energy', color: C.dimmer, field: 'when', unset: false },
     ]);
     expect(chipsFor(n('a', 'STRATEGY', { status: 'Retired' }), C)[0]?.color).toBe(C.dimmer);
+  });
+
+  /*
+   * TRUTH CONDITION. This is the one with live consequences: 'when: Always' was showing on
+   * 11 of her 12 Strategy objects, none of which say Always — the field is empty and the UI
+   * filled it in. She could not tell a strategy that genuinely applies always from one
+   * nobody has filled in. An empty field means she has not said.
+   */
+  it('STRATEGY — an empty when-field reads as unset, never as "Always"', () => {
+    const when = chipsFor(n('a', 'STRATEGY', {}), C)[1];
+    expect(when?.text).toBe('set when');
+    expect(when?.unset).toBe(true);
+    expect(when?.field).toBe('when');
+  });
+
+  it('STRATEGY — an empty status reads as unset, never as "Active"', () => {
+    const status = chipsFor(n('a', 'STRATEGY', {}), C)[0];
+    expect(status?.text).toBe('set status');
+    expect(status?.unset).toBe(true);
+    expect(status?.field).toBe('status');
   });
 });
 
