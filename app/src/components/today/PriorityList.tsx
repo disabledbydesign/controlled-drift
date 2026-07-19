@@ -1,3 +1,4 @@
+import { useEffect, useRef } from "react";
 import {
   addressedWorkItems,
   nearestProject,
@@ -5,6 +6,7 @@ import {
   planItemDone,
   toggleDone,
 } from "../../model/index.ts";
+import { readPriorityOrder, savePriorityOrder } from "../../api/planRow.ts";
 import type { PlanItem } from "../../fixtures/index.ts";
 import { TaskCheck } from "../atoms/index.ts";
 import { ArcStep } from "./ArcStep.tsx";
@@ -37,10 +39,16 @@ export interface PriorityListProps {
  *   3. append any plan item the stored order does not mention
  * so a regenerated plan cannot silently lose an item to a stale reorder.
  *
- * ⚠ Spec §14 leaves the ordering's source-of-truth OPEN ("what sets the order? … Decide the
- * source-of-truth and expose it as an ordered list on the plan payload"). This port keeps
- * v4's client-local reorder; nothing persists it and no reorder is logged. That is the
- * backend question, not this task's.
+ * ⚠ RESOLVED 2026-07-19 — this note used to read "nothing persists it". Spec §14 left the
+ * ordering's source-of-truth open ("Decide the source-of-truth and expose it as an ordered list
+ * on the plan payload") and June has now decided it: "Yes, should persist." Her reorder is
+ * written to `POST /api/plan/priority-order` and rides back on the plan payload as
+ * `priority_order`, which is exactly the shape §14 asked for. See `move` below.
+ *
+ * The three-step ordering rule above is what makes a stale order safe: ids no longer in the
+ * plan are dropped and unmentioned items are appended, so a persisted order can never hide a
+ * row. A REGENERATION drops the saved order outright — see `plan_store.set_priority_order`
+ * for that decision and the alternative left open for June.
  *
  * ── work blocks (2026-07-18) ────────────────────────────────────────────────
  * Blocks appear here too. They USED to render their graph node's title with a project prefix
@@ -108,11 +116,22 @@ export function PriorityList({ ctx, reasonShown = false }: PriorityListProps) {
    * (`ui.priOrder`), so a numeric plan index does not address a row on this screen. Anchoring to
    * the named row puts the slot under the row she is actually looking at.
    *
-   * ⚠ FLAGGED, NOT SILENTLY HANDLED: when she has locally reordered this list, the position sent
-   * to the server is computed against the PLAN's order, which is the order the server holds — so
-   * a move made against a locally reordered view can land somewhere other than where the slot
-   * appeared. That divergence predates this change (`ui.priOrder` is client-only and nothing
-   * persists it, per this file's own header) and is not resolved here.
+   * ⚠ FLAGGED, NOT SILENTLY HANDLED, AND NOW MORE REACHABLE: when she has reordered this list,
+   * the position sent to the server is computed against the PLAN's order (`moveTargets.locate`
+   * works in the server's index space) while the slot she taps is anchored by `afterId` in her
+   * DISPLAYED order. So a move made against a reordered view can land somewhere other than
+   * where the slot appeared.
+   *
+   * That divergence predates this file's persistence change, but persistence widens it: the
+   * reorder used to die on reload, so a fresh session always displayed the plan's own order and
+   * the two spaces agreed. Now her order is there every session.
+   *
+   * ⚠ PARTIALLY MITIGATED, NOT FIXED. `plan_store.move_priority_item` clears the saved ranking,
+   * so after a move the list falls back to the plan's real order and she SEES where the item
+   * actually went instead of a stale ranking hiding it. The move can still land in the wrong
+   * spot. The clean fix is available now and is NOT done here: this screen could send the
+   * resulting full id order to `POST /api/plan/priority-order` instead of a position, which has
+   * no index space to disagree with. Reported for a separate task.
    */
   const placing = placementFor(ctx);
   const slotFor = (afterId: string | null) =>
@@ -130,6 +149,42 @@ export function PriorityList({ ctx, reasonShown = false }: PriorityListProps) {
           ))
       : null;
 
+  /**
+   * ── HER ORDERING NOW SURVIVES A RELOAD (2026-07-19) ─────────────────────────
+   * June's decision: "Yes, should persist." This closes `docs/api_contract_v2.md` §6 Q1 and the
+   * open question this file's header used to record ("nothing persists it").
+   *
+   * ⚠ WHY THE READ AND THE WRITE ARE HERE AND NOT IN THE SHELL. Every other server write on this
+   * screen arrives as a `TodayCtx` callback that `useAppState` implements — `chunk`, `notToday`,
+   * `setDuration`, `moveItem` — and that is where this one belongs too. It is not there because
+   * `shell/useAppState.ts`, `today/types.ts` and `api/adapt.ts` were all held by a concurrent
+   * build when this landed, and staging a shared file would have committed someone else's
+   * unfinished work. The seam is deliberately shaped so lifting it later is a move, not a
+   * rewrite: both calls are single expressions against `api/planRow.ts` and neither reads
+   * anything a shell callback could not be handed.
+   *
+   * The hydrating read costs one extra `GET /api/plan` on first render of a fragmented day. If
+   * this is lifted into the shell, that read disappears entirely — the shell already has the
+   * plan payload the order rides on.
+   */
+  const hydrated = useRef(false);
+  const storedOrder = ctx.ui.priOrder;
+  const upFn = ctx.up;
+  useEffect(() => {
+    // Only when she has no ordering on screen yet. An order already in `ui` is either hers from
+    // this session or an earlier hydration, and re-reading would overwrite a fresh reorder with
+    // whatever the server last heard.
+    if (storedOrder || hydrated.current) return;
+    hydrated.current = true;
+    void (async () => {
+      const saved = await readPriorityOrder();
+      // ⚠ `null` covers BOTH "nothing saved" and "the read failed", and both must leave the
+      // generator's order standing in silence. Neither is something she did wrong, and neither
+      // is worth a message about a ranking she may never have made.
+      if (saved && saved.length) upFn({ priOrder: saved });
+    })();
+  }, [storedOrder, upFn]);
+
   const move = (i: number, d: number) => {
     const a = order.slice();
     const j = i + d;
@@ -137,7 +192,18 @@ export function PriorityList({ ctx, reasonShown = false }: PriorityListProps) {
     const t = a[i]!;
     a[i] = a[j]!;
     a[j] = t;
+    // The screen moves first and the write follows. Gating the reorder on the round-trip would
+    // make an arrow tap feel dead; the ordering is hers either way, and a failure says so below.
     ctx.up({ priOrder: a });
+    void (async () => {
+      const res = await savePriorityOrder(a);
+      // No silent failures: an unsaved ordering that looks saved is the exact thing this whole
+      // change removes. The row stays where she put it for this session — undoing her move on
+      // top of the bad news would be a second surprise — and the sentence is the server's own.
+      if (res.kind === 'failed') {
+        ctx.flash('That new order did not save, so it will not be here next time. ' + res.error);
+      }
+    })();
   };
 
   /**

@@ -50,6 +50,10 @@ Routes:
   POST /api/task/move   {id, target_block?, position?} -> relocate one task in the CACHED plan with
                         clock times re-flowed from existing durations. No LLM, no Anytype write —
                         the move dies at the next generation, and the copy says so. {ok, plan}
+  POST /api/plan/priority-order {order:[task ids]} -> persist June's OWN ranking of a
+                        fragmented-day priority list, keyed by object id (never slot position).
+                        Cache-only, like /api/task/move; a regeneration drops it. Rides back on
+                        GET /api/plan as `priority_order`, so there is no read route. {ok, plan}
   POST /api/duration    {id, minutes} -> set an item's duration, dispatched by what the row IS:
                         a BLOCK writes the durable Project chunk length (block_duration, a
                         preference not a completion); a real TASK/RECURRING writes its own
@@ -1247,6 +1251,38 @@ class Handler(BaseHTTPRequestHandler):
                 self._send(400, {"error": str(e)})
                 return
             except LookupError as e:     # no cache / wrong shape / id not found
+                self._send(404, {"error": str(e)})
+                return
+            self._send(200, {"ok": True, "plan": plan})
+            return
+
+        if self.path == "/api/plan/priority-order":
+            # June's OWN ranking of a fragmented-day list, made durable. Until now the up/down
+            # controls wrote to client state only (`ctx.up({priOrder})`) and there was no server
+            # reference anywhere — every reordering she made was gone on reload. Her decision,
+            # 2026-07-19: "Yes, should persist" (closes docs/api_contract_v2.md §6 Q1).
+            #
+            # Cache-only and honest about it, exactly like /api/task/move: a day-of adjustment
+            # to the cached plan, which the next generation replaces. See
+            # `plan_store.set_priority_order` for what a regeneration does to it and why.
+            #
+            # No dedicated READ route: the order rides back inside GET /api/plan with the rest
+            # of the plan, so the surface needs no second fetch.
+            body = self._read_json_body()
+            order = body.get("order")
+            if not isinstance(order, list) or not order:
+                self._send(400, {"error": "a priority order needs a non-empty `order` list of "
+                                          "task ids"})
+                return
+            if not all(isinstance(i, str) and i.strip() for i in order):
+                self._send(400, {"error": "every entry in `order` must be a task id"})
+                return
+            try:
+                plan = plan_store.set_priority_order(order)
+            except ValueError as e:      # unknown id / partial order / duplicate
+                self._send(400, {"error": str(e)})
+                return
+            except LookupError as e:     # no cache / clock-shape day
                 self._send(404, {"error": str(e)})
                 return
             self._send(200, {"ok": True, "plan": plan})

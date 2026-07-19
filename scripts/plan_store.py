@@ -604,8 +604,67 @@ def move_priority_item(task_id, position):
         raise ValueError("that task is already in that spot — nothing to move")
     item = items.pop(src_pos)
     items.insert(position, item)   # after the pop, inserting at `position` = final index
+    # A move rewrites the plan's OWN order, so a manual ranking saved by set_priority_order is
+    # now stale. Keeping it would leave it governing the display and make the move she just made
+    # look like it did not take — the worse of the two surprises. The move wins.
+    plan.pop("priority_order", None)
     _write_plan(plan)
     return plan
+
+
+def set_priority_order(order):
+    """Persist June's OWN ranking of a fragmented-day (priority-shape) list.
+
+    `order` is the complete list of item ids in the order she put them in. Stored on the cached
+    plan under `priority_order`; the surface reads it back on load, so a reordering survives a
+    reload instead of dying with the tab (June's decision 2026-07-19, closing
+    docs/api_contract_v2.md §6 Q1).
+
+    ── KEYED BY OBJECT ID, NEVER BY SLOT POSITION ──────────────────────────────
+    A regenerated plan reassigns slots, so an index-keyed ranking silently reattaches to
+    whatever now sits at that index. Commit b721103 moved block state off slot keys for exactly
+    this reason and `chunked` carried the same bug before it.
+
+    ── WHAT A REGENERATION DOES TO IT — the decision, stated ────────────────────
+    Nothing explicit: the ranking lives INSIDE the plan record, and `save_plan` writes a fresh
+    record, so a regeneration drops it and the generator's order stands. That is deliberate and
+    conservative. A regenerated plan is a fresh ranking over possibly different items, and
+    reapplying her ordering across it would silently govern a set she never ordered — the
+    failure mode the id-keying above exists to prevent, arriving by a second route. The
+    alternative (carry it over, merging by id) is a real option and is FLAGGED FOR JUNE rather
+    than decided here.
+
+    ── WHY NOT A NEW .jsonl ────────────────────────────────────────────────────
+    This is per-plan state, the same family as the moves, deferrals and chunk flags this module
+    already holds. `scripts/data/` has thirteen .jsonl files and the rule is to widen what
+    exists rather than add a fourteenth.
+
+    Raises LookupError (no cached plan / not a priority-shape plan) and ValueError (the order
+    does not name exactly the plan's items, once each).
+    """
+    plan = load_plan()
+    if plan is None:
+        raise LookupError("no cached plan to rank")
+    items = plan.get("items")
+    if not items:
+        raise LookupError("plan has no priority list to rank (a clock-shape day orders its rows "
+                          "under blocks[])")
+
+    order = [str(i) for i in order]
+    if len(set(order)) != len(order):
+        raise ValueError("that order names the same task twice — one row, one rank")
+    known = [it.get("id") for it in items]
+    if set(order) != set(known):
+        unknown = sorted(set(order) - set(known))
+        missing = sorted(set(known) - set(order))
+        raise ValueError(
+            "that order does not match the plan's list"
+            + (f"; not in the plan: {unknown}" if unknown else "")
+            + (f"; left out of the order: {missing}" if missing else ""))
+
+    plan["priority_order"] = order
+    _write_plan(plan)      # deliberately does NOT re-stamp generated_at — a reorder is not a
+    return plan            # regeneration, and the surface reports the plan's age from that stamp
 
 
 # --- generation status (for async generate-and-poll) ------------------------

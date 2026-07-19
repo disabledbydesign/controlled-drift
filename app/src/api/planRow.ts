@@ -36,7 +36,7 @@
  * voice (June's correction, 2026-07-18; commit 1522ad5).
  */
 
-import { apiSend } from './client.ts';
+import { apiGet, apiSend } from './client.ts';
 import type { ApiResult } from './client.ts';
 import type { LivePlan } from './adapt.ts';
 
@@ -139,4 +139,48 @@ export async function moveItem(id: string, to: MoveTarget): Promise<MoveWrite> {
   const body: Record<string, unknown> = { id, position: to.position };
   if (to.block !== null) body['target_block'] = to.block;
   return rowOutcome(await apiSend<RowBody>('POST', '/api/task/move', body));
+}
+
+/**
+ * `POST /api/plan/priority-order` — make June's OWN ranking of a fragmented-day list durable.
+ *
+ * Until 2026-07-19 the up/down controls wrote to `ctx.up({priOrder})` and nothing else: there was
+ * no server reference anywhere, and every reordering she made was gone on the next load. Her
+ * decision — "Yes, should persist" — closes `docs/api_contract_v2.md` §6 Q1.
+ *
+ * ⚠ `order` is a list of OBJECT IDS, in her order — never slot positions. A regenerated plan
+ * reassigns slots, so an index-keyed ranking silently reattaches to whatever now sits at that
+ * index. Commit b721103 moved block state off slot keys for exactly this reason and `chunked`
+ * carried the same bug before it.
+ *
+ * Cache-only, like `moveItem`: a regeneration drops it and the generator's order stands. See
+ * `plan_store.set_priority_order` for that decision and the alternative left open for June.
+ */
+export async function savePriorityOrder(order: readonly string[]): Promise<MoveWrite> {
+  return rowOutcome(await apiSend<RowBody>('POST', '/api/plan/priority-order', {
+    order: [...order],
+  }));
+}
+
+/**
+ * Her saved ranking, or `null` if there isn't one.
+ *
+ * ⚠ THERE IS NO DEDICATED READ ROUTE, deliberately: the order rides back inside `GET /api/plan`
+ * with the rest of the plan. This reads that payload and picks the field out.
+ *
+ * ⚠ `null` MEANS "NOTHING TO APPLY", NOT "SHE HAS NO ORDERING". A failed read answers `null`
+ * too, because in both cases there is nothing to render — but no caller may report this to her
+ * as "no ordering saved", and nothing may write `null` back to the server on the strength of it.
+ * That would turn one dropped request into the loss of the ordering this whole seam exists to
+ * keep.
+ */
+export async function readPriorityOrder(): Promise<string[] | null> {
+  const res = await apiGet<{ empty?: boolean; priority_order?: unknown }>('/api/plan');
+  if (!res.ok || res.data?.empty) return null;
+  const raw = res.data?.priority_order;
+  if (!Array.isArray(raw) || raw.length === 0) return null;
+  // A malformed field is dropped rather than half-applied: a partly-string ranking would
+  // reorder some rows and lose others, which is worse than showing the generator's order.
+  if (!raw.every((i) => typeof i === 'string' && i)) return null;
+  return raw as string[];
 }
