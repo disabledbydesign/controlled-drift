@@ -125,10 +125,12 @@ class _Rng:
         return self.s / 0x7FFFFFFF
 
 
-# The macOS icon grid: the art sits inside the 1024 canvas with a small transparent margin and
-# is masked to the Apple "squircle" so the Dock shows it rounded like every other icon instead
-# of a hard square. GRID_PAD 36 → 952px art (~93%), the visual size of Dock neighbours.
-GRID_PAD = 36
+# The macOS icon grid: the art must sit at Apple's standard ~80.5% of the 1024 canvas (a ~100px
+# transparent margin), masked to the "squircle". This is NOT cosmetic — the Dock reserves that
+# outer ~10% for the shadow and the launch-bounce layer. An icon that overflows the grid (we had
+# 93%) gets rendered/masked inconsistently between the resting state and the bounce, so its edge
+# appears to "change" on the first hop. Measured against Notes.app: side margin 98px, body 80.9%.
+GRID_PAD = 100  # → 824px art, Apple's canonical icon size
 
 
 def _apple_squircle_mask(size, n=5.0):
