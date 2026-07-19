@@ -18,6 +18,24 @@ Routes:
                         carries. Names are only ever ones shot_store generated, so the path is
                         contained; anything else is 400.
   GET  /api/status      generation state {idle|running|error} + plan timestamp (for polling)
+  GET  /api/period      the ACTIVE Focus Period rendered for display (period_view.render_period) —
+                        pre-formatted, lossy, read-only; {"active": false} when none is set
+  GET  /api/periods     EVERY Focus Period in the flat EDIT shape (parse -> period_to_fields) plus
+                        `id` and `active`, earliest start first — what the Focus tab lists and seeds
+                        its editor from. Deliberately NOT /api/period, which cannot seed an editor.
+  GET  /api/projects    every non-Done project with {id, name, side, engagement, parent_id} — what
+                        the "in front" selector groups by, category read live (never hardcoded)
+  GET  /api/project-summaries  per-project 'what it is / next step' parsed deterministically from
+                        each project's Context (NO LLM); only projects whose Context parses appear
+  GET  /api/focus/status       authoring poll: the structure step's state + `result_ready`
+  GET  /api/focus/result       the structured fields + reflect-back payload, or {"empty": true}
+  GET  /api/focus/edit-fields  the active period as editable fields + reflect-back, to seed a
+                        direct per-field edit (route A, no LLM); {"active": false} when none
+  GET  /api/settings    which backend is live + each option's real routing mechanism and concrete
+                        model (computed by plan_generate, so the UI shows truth not a stale blurb),
+                        plus the hobby-block toggle and a health summary
+  POST /api/settings    {backend?, include_hobby_block?} -> MERGE into settings.json (never clobber
+                        the other key) + set CD_BACKEND live; unknown backend is 400
   POST /api/refresh     start a fresh generation (async, 202); poll /api/status  [logs surfaced]
   POST /api/negotiate   {preset_id}|{message} -> start a renegotiation (async, 202); poll status
   POST /api/complete    {id} -> mark a task done in Anytype (read-back) + flip the cache
@@ -25,6 +43,17 @@ Routes:
   POST /api/project/engagement {id, old, new} -> correct a Project's Engagement (read-back) {ok, engagement}
   POST /api/recurring/active {id, active} -> set a Recurring's Active flag (read-back) {ok, active} —
                                               undo-a-reactivation / June's tick-list share this primitive
+  POST /api/task/not-today {id, kind?:"task"|"block", name?} -> take an item off TODAY'S list only.
+                        Cache-only: no Anytype write, no status change, no reschedule. Logged twice
+                        (session_store "deferral" for the 8h same-day window; corrections_log
+                        "not_today" as the permanent record) -> {ok, plan, warning?}
+  POST /api/task/move   {id, target_block?, position?} -> relocate one task in the CACHED plan with
+                        clock times re-flowed from existing durations. No LLM, no Anytype write —
+                        the move dies at the next generation, and the copy says so. {ok, plan}
+  POST /api/duration    {id, minutes} -> set an item's duration, dispatched by what the row IS:
+                        a BLOCK writes the durable Project chunk length (block_duration, a
+                        preference not a completion); a real TASK/RECURRING writes its own
+                        'Duration min' (read-back). {ok, id, duration_min, plan}
   POST /api/uncomplete  {id} -> undo: status back to Ready (read-back) + un-flip the cache
   GET  /api/session     ?stream=capture|negotiate -> recent session log entries (the receipt)
   POST /api/capture     {text} -> weed input into typed/linked Anytype objects (async, 202)
@@ -36,6 +65,22 @@ Routes:
                                 request rather than saving the text alone.
   POST /api/log/correction {msg, kind?, objectId?, before?} -> record a write the APP could not
                                 complete, into corrections_log so it survives a reload (sync)
+
+  The Focus Period authoring flow. Speak -> structure (LLM) -> reflect back -> confirm -> write.
+  The two async steps share the one generation lock, so `started: false` means "one thing at a
+  time," never a silent hang; both write paths read the object BACK and verify every field.
+  POST /api/focus/author  {text} -> start the LLM structure step (async, 202); poll /api/focus/status
+  POST /api/focus/reflect {fields, original?} -> re-render the deterministic reflect-back after a
+                                client-side per-field fix (sync, NO LLM — keeps the template in
+                                Python rather than duplicating date/label formatting in the client)
+  POST /api/focus/commit  {fields, raw_text} -> CREATE the period (sync). Missing start/end returns
+                                {blocked:[...]} rather than writing a period that never activates;
+                                on success re-fetches and verifies every field, reactivates any
+                                as-needed tasks she named -> {ok, id, name, reactivate_*?}
+  POST /api/focus/edit    {text} -> a broad SPOKEN revision of the ACTIVE period (async, 202); the
+                                result carries a changed-vs-stayed DIFF so a clobber is visible
+  POST /api/focus/update  {id, fields, raw_text} -> confirm an edit: UPDATE IN PLACE (same guards,
+                                same read-back verification and reactivation as /api/focus/commit)
 
   The Review & Reorganize write layer (backend spec §1, contract §4). Every one of these returns
   the SAME envelope — {ok, object} where `object` is the RE-FETCHED node, not a success boolean —
