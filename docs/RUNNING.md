@@ -55,18 +55,20 @@ Two things have to be true:
 
 If you want it reachable while the laptop stays home, leave it **plugged in** and stop it sleeping — System Settings → Battery → Options → *"Prevent automatic sleeping when the display is off"*, or run `caffeinate -s` in a terminal and leave that terminal open.
 
-### ⚠ One security note worth acting on
+### ⚠ One security note, and a decision that is still yours
 
 The server currently binds `0.0.0.0` — **every interface, including your wifi.** It has no authentication of any kind and serves your medical and financial task data. Anything on your home network can read it.
 
-Tailscale makes that unnecessary. In the plist, change:
+**What changed:** `CD_BIND` now takes a list of addresses and tries them in order, so preferring the mesh no longer means the server refuses to start when Tailscale is down. It falls back to wifi and prints a warning that says the mesh is down, that wifi is wider than you chose, and how to check and restart Tailscale. That was the fragility that made this your call last time, and it is fixed.
+
+**What has not changed:** the plist still says `0.0.0.0`, so none of that is in effect yet. Turning it on is one line:
 
 ```xml
 <key>CD_BIND</key>
-<string>0.0.0.0</string>     <!-- change to: 100.86.195.93 -->
+<string>100.86.195.93,0.0.0.0</string>
 ```
 
-Then nothing on your wifi can reach it, and your phone still can over the mesh. **Trade-off:** `http://localhost:5050` stops working on the laptop — you'd use the Tailscale name from both devices instead. And if Tailscale is ever down, the server won't start at all. That's a real fragility, which is why this is your call rather than a change already made.
+**The trade-off that is still real, and the reason this is not already done:** binding the mesh address means `http://localhost:5050` stops answering *on the laptop*. You would use `http://lauras-macbook-air.tail2905c9.ts.net:5050/app/` from both the laptop and the phone. Everything keeps working; the address you type changes. If that sounds annoying, say so — the exposure can also be narrowed by keeping `0.0.0.0` and refusing requests that arrive from anywhere other than the mesh or the laptop itself, which would give you the narrow surface *and* keep `localhost` working. That is a small piece of work, not built, and worth doing if the address change is the part you would resent.
 
 ---
 
