@@ -201,6 +201,19 @@ describe('AddScreen — capture', () => {
     expect(openDetail).toHaveBeenCalledWith('t1');
   });
 
+  /**
+   * A real payload shape, not a hypothetical: `project` is absent on a created Project or Goal
+   * (the live weed on 2026-07-18 returned it only for the Task). Rendering "sorted into" with
+   * nothing after it would read as a lost link rather than a thing that has no parent.
+   */
+  it('an item with no project says what it is instead of a dangling "sorted into"', () => {
+    const entries = [weed([{ id: 'p1', type: 'Project', name: 'A whole new project' }])];
+    render(<AddScreen ctx={addCtx({ captureEntries: entries })} />);
+    expect(screen.getByText('A whole new project')).toBeTruthy();
+    expect(screen.getByText(/added as project/i)).toBeTruthy();
+    expect(screen.queryByText(/sorted into/)).toBeNull();
+  });
+
   it('shows the empty-state line until something is captured', () => {
     render(<AddScreen ctx={addCtx()} />);
     expect(screen.getByText(/Nothing yet today/)).toBeTruthy();
