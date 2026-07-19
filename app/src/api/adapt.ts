@@ -165,6 +165,10 @@ export function planFromLive(live: LivePlan): Plan {
         time: it.time ?? '',
         chunkMin: it.chunk_min ?? 0,
         why: '',
+        // The server's own record of today's chunk (`plan_store.mark_block_chunked`). Carried
+        // through so a reload renders the check from the plan rather than from UI state, which
+        // does not survive one.
+        didChunkToday: Boolean(it.did_chunk_today),
         ...(it.arc ? { arc: it.arc } : null),
       };
     }

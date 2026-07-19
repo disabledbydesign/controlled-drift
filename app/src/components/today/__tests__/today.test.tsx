@@ -132,7 +132,7 @@ describe('spec §14 — the work block check reads as completion', () => {
   });
 
   it('strikes the block title through when checked', () => {
-    const { ctx } = ctxWith({ chunked: { '0-0': true } });
+    const { ctx } = ctxWith({ chunked: { l3pdzq: true } });
     render(<TodayPanel ctx={ctx} />);
     const title = screen.getByText('Work on the reviewer response');
     expect(title.style.textDecoration).toBe('line-through');
@@ -144,13 +144,54 @@ describe('spec §14 — the work block check reads as completion', () => {
     expect(screen.getByText('Work on the reviewer response').style.textDecoration).toBe('none');
   });
 
-  it('toggling writes the entry key into `chunked` and toasts a completion', () => {
-    const { ctx, up, flash } = ctxWith();
+  /**
+   * The check is a SERVER write now, not a UI flag: it routes through `ctx.chunk`, which posts
+   * `/api/complete` and only then says anything. The old assertion — a `chunked` patch keyed
+   * `'0-0'` plus an immediate `flash('Done')` — described a check that vanished on reload and
+   * a message raised before any request went out.
+   */
+  it('checking the block records a chunk against the block’s own id', () => {
+    const { ctx, chunk } = ctxWith();
     render(<TodayPanel ctx={ctx} />);
     fireEvent.click(screen.getAllByLabelText('mark done')[0]!);
-    expect(up).toHaveBeenCalledWith({ chunked: { '0-0': true } });
-    expect(flash).toHaveBeenCalledWith('Done');
-    expect(flash).not.toHaveBeenCalledWith('Did a chunk today');
+    expect(chunk).toHaveBeenCalledWith('l3pdzq', true);
+  });
+
+  it('un-checking a recorded chunk reopens it, by the same id', () => {
+    const { ctx, chunk } = ctxWith({ chunked: { l3pdzq: true } });
+    render(<TodayPanel ctx={ctx} />);
+    fireEvent.click(screen.getAllByLabelText('mark done')[0]!);
+    expect(chunk).toHaveBeenCalledWith('l3pdzq', false);
+  });
+
+  /**
+   * The plan the server hands back carries `did_chunk_today` on the block row, so a reload
+   * renders the check from the plan alone — with no UI state at all.
+   */
+  it('renders as checked from the plan’s own record, with no UI state set', () => {
+    const plan = freshPlan();
+    const item = plan.blocks[0]!.items[0]!;
+    if (item.kind !== 'block') throw new Error('seedPlan[0][0] is not a work block');
+    item.didChunkToday = true;
+    const { ctx } = ctxWith({}, plan);
+    render(<TodayPanel ctx={ctx} />);
+    expect(screen.getByText('Work on the reviewer response').style.textDecoration).toBe(
+      'line-through',
+    );
+  });
+
+  it('her un-check outranks the server record until the write is answered', () => {
+    // The gap this closes: with `||` instead of `??`, an explicit `false` falls THROUGH to
+    // `didChunkToday` — so un-checking a block the server already recorded as done springs it
+    // straight back to checked, and she cannot undo a mis-tap. Absent means "the server
+    // decides"; present means "she decided", including when she decided `false`.
+    const plan = freshPlan();
+    const item = plan.blocks[0]!.items[0]!;
+    if (item.kind !== 'block') throw new Error('seedPlan[0][0] is not a work block');
+    item.didChunkToday = true;
+    const { ctx } = ctxWith({ chunked: { [item.id]: false } }, plan);
+    render(<TodayPanel ctx={ctx} />);
+    expect(screen.getByText('Work on the reviewer response').style.textDecoration).toBe('none');
   });
 });
 
@@ -222,7 +263,7 @@ describe('spec §14 — the arc "here" advance', () => {
     expect(screen.queryByText('Draft the rebuttal paragraph')).toBeNull();
     cleanup();
 
-    const open = ctxWith({ blocksOpen: { '0-0': true } });
+    const open = ctxWith({ blocksOpen: { l3pdzq: true } });
     render(<TodayPanel ctx={open.ctx} />);
     const step = screen.getByText('Draft the rebuttal paragraph');
     expect(step).toBeTruthy();

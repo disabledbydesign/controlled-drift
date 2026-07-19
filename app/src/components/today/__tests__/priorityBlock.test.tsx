@@ -80,29 +80,56 @@ describe('PriorityList — a block row', () => {
     render(<PriorityList ctx={ctx} />);
     expect(screen.queryByText('Read chapter 2')).toBeNull();
     fireEvent.click(screen.getByText('Work on IOP and recovery'));
-    // The open-state write must use the band/item address, NOT the row id — the same key the
-    // schedule view uses, or one block gets two states that diverge across the toggle.
-    expect(up).toHaveBeenCalledWith({ blocksOpen: { '0-0': true } });
+    // Keyed by the block's own id — the same key the schedule view uses, so one block has one
+    // expand state across the Schedule/Priority toggle, and a regenerated plan cannot hand that
+    // state to whatever item lands in the old slot.
+    expect(up).toHaveBeenCalledWith({ blocksOpen: { l3pdzq: true } });
   });
 
   it('shows the arc steps once the open state is set', () => {
-    const { ctx } = ctxWith({ blocksOpen: { '0-0': true } }, blockPlan());
+    const { ctx } = ctxWith({ blocksOpen: { l3pdzq: true } }, blockPlan());
     render(<PriorityList ctx={ctx} />);
     expect(screen.getByText('Read chapter 2')).toBeTruthy();
     expect(screen.getByText('Write the summary paragraph')).toBeTruthy();
   });
 
-  it('checking it records a chunk — a POSITIVE assertion, so an inert box fails', () => {
-    const { ctx, up } = blockCtx();
+  /**
+   * ⚠ THE POINT OF THIS FILE: this row and `WorkBlock`'s are the same control in two views. A
+   * previous session found them disagreeing about what checking a block means. Both now call
+   * `ctx.chunk` with the block's id, and these assertions are written to match `today.test.tsx`
+   * line for line so a future divergence fails here.
+   */
+  it('checking it records a chunk against the block’s own id', () => {
+    const { ctx, chunk } = blockCtx();
     render(<PriorityList ctx={ctx} />);
     fireEvent.click(screen.getAllByLabelText('mark done')[0]!);
-    expect(up).toHaveBeenCalledWith({ chunked: { '0-0': true } });
+    expect(chunk).toHaveBeenCalledWith('l3pdzq', true);
   });
 
-  it('does NOT mark the underlying project done', () => {
-    const { ctx, apply } = blockCtx();
+  it('un-checking a recorded chunk reopens it, by the same id', () => {
+    const { ctx, chunk } = ctxWith({ chunked: { l3pdzq: true } }, blockPlan());
     render(<PriorityList ctx={ctx} />);
     fireEvent.click(screen.getAllByLabelText('mark done')[0]!);
+    expect(chunk).toHaveBeenCalledWith('l3pdzq', false);
+  });
+
+  it('renders as checked from the plan’s own record, with no UI state set', () => {
+    const p = blockPlan();
+    const item = p.blocks[0]!.items[0]!;
+    if (item.kind !== 'block') throw new Error('the block row moved');
+    item.didChunkToday = true;
+    const { ctx } = ctxWith({}, p);
+    render(<PriorityList ctx={ctx} />);
+    expect(screen.getByText('Work on IOP and recovery').style.textDecoration).toBe('line-through');
+  });
+
+  it('leaves the underlying project unfinished — the check is time spent, not a project closed', () => {
+    const { ctx, apply, chunk } = blockCtx();
+    render(<PriorityList ctx={ctx} />);
+    fireEvent.click(screen.getAllByLabelText('mark done')[0]!);
+    // The one write it makes is the chunk. `apply` is the graph-mutation seam, and a block
+    // check must never reach it: `display_grain_design.md` §REVISION §B.
+    expect(chunk).toHaveBeenCalledTimes(1);
     expect(apply).not.toHaveBeenCalled();
   });
 

@@ -23,9 +23,15 @@ export interface TodayUi {
   focusExpanded: boolean;
   /** Plan-entry keys whose held-back list is open — v4's `st.heldOpen` Set. */
   heldOpen: Readonly<Record<string, true>>;
-  /** Plan-entry keys of work blocks checked off — v4's `st.chunked` Set. */
-  chunked: Readonly<Record<string, true>>;
-  /** Plan-entry keys of work blocks whose arc is expanded — v4's `st.blocksOpen` Set. */
+  /**
+   * Work blocks she has checked off, KEYED BY BLOCK ID — v4's `st.chunked` Set.
+   *
+   * Absent means "the plan row's own `didChunkToday` decides"; an explicit `false` is her
+   * un-check, which outranks the plan until the server answers. See `useAppState`'s `chunked`
+   * for why the key is the id and not the `bandIndex-itemIndex` slot v4 used.
+   */
+  chunked: Readonly<Record<string, boolean>>;
+  /** Work blocks whose arc is expanded, keyed by block id — v4's `st.blocksOpen` Set. */
   blocksOpen: Readonly<Record<string, true>>;
   /** User reorder of the Priority list, or null for generator order — v4's `st.priOrder`. */
   priOrder: string[] | null;
@@ -50,6 +56,15 @@ export interface TodayCtx {
   applyPlan: (result: PlanResult) => void;
   /** v4's `flash(msg)` — a toast with no state change behind it. */
   flash: (msg: string) => void;
+  /**
+   * Record (or un-record) a chunk of work on a block — the work-block check, in BOTH views.
+   *
+   * ⚠ Deliberately NOT `apply(toggleDone(...))`. A block check means "did a chunk today", never
+   * "this project is finished" (`docs/display_grain_design.md` §REVISION 2026-07-14 §B), and the
+   * server dispatches on that distinction. Fire-and-forget from here: the shell raises the
+   * success signal only once the write is confirmed, and reports a failure itself.
+   */
+  chunk: (id: string, done: boolean) => void;
   /**
    * Ask the server for a new plan — `/api/refresh` or one of the stored `/api/negotiate` presets.
    *

@@ -169,9 +169,24 @@ export interface UiState {
   focusExpanded: boolean;
   /** Which plan rows have their held-back list expanded, keyed by plan-entry key. */
   heldOpen: Readonly<Record<string, true>>;
-  /** Which work blocks are checked off. v4's `st.chunked` — see `WorkBlock` on the naming. */
-  chunked: Readonly<Record<string, true>>;
-  /** Which work blocks have their arc expanded. v4's `st.blocksOpen`. */
+  /**
+   * Which work blocks are checked off, KEYED BY THE BLOCK'S ID — see `WorkBlock` on the naming.
+   *
+   * ⚠ Two changes from v4, both load-bearing (2026-07-18):
+   *
+   * · The key was `bandIndex-itemIndex`. A regeneration reassigns those slots, so a check that
+   *   outlives one generation reattaches to whatever item now sits in the slot — the wrong row
+   *   showing as done. The id travels with the block.
+   * · The value is a full boolean, not `true`-or-absent. Absent means "the plan's own
+   *   `didChunkToday` decides"; an explicit `false` is her un-check, which has to outrank the
+   *   plan row until the server's answer replaces it.
+   */
+  chunked: Readonly<Record<string, boolean>>;
+  /**
+   * Which work blocks have their arc expanded. v4's `st.blocksOpen`, keyed by block id for the
+   * same slot-reassignment reason as `chunked` — and so a block has ONE expand state across the
+   * Schedule/Priority toggle rather than one per view. Client-only: nothing persists it.
+   */
   blocksOpen: Readonly<Record<string, true>>;
   /**
    * User-reordered Priority ranking, or null for generator order. v4's `st.priOrder`.
@@ -402,6 +417,17 @@ export interface AppState {
    */
   logDay: (text: string, tags: string[]) => Promise<boolean>;
   /**
+   * Record (or un-record) a chunk of work on a block — `POST /api/complete` / `/api/uncomplete`
+   * with the block's id, which on the wire is its `project_id`.
+   *
+   * ⚠ A block check means "did a chunk today", NEVER "this project is finished"
+   * (`docs/display_grain_design.md` §REVISION 2026-07-14 §B). This is a separate entry point
+   * from `apply(toggleDone(...))` for exactly that reason: the server dispatches on
+   * `plan_store.is_block_item` and writes the chunk log, and nothing here touches the project's
+   * done state.
+   */
+  chunkBlock: (id: string, done: boolean) => Promise<void>;
+  /**
    * Ask the server for a new plan, and do not claim anything until it has one.
    *
    * `label` is the June-facing name of the control that started it, so the surface can show
@@ -485,7 +511,7 @@ function emptyPlan(): Plan {
  * `move`, `create` and `archive` are deliberately absent: undoing those means re-parenting,
  * removing, or re-inserting at a remembered position, which the snapshot path still handles.
  */
-const PER_NODE_OPS = new Set(['patchVals', 'patchTitle', 'complete', 'recurringActive', 'unsupported']);
+const PER_NODE_OPS = new Set(['patchVals', 'patchTitle', 'complete', 'recurringActive', 'unsupported', 'clearField']);
 
 export function useAppState(source: DataSource = 'live'): AppState {
   const live = source === 'live';
@@ -688,6 +714,24 @@ export function useAppState(source: DataSource = 'live'): AppState {
         // A saved write whose read-back could not be assembled is reported, not swallowed —
         // the toggle itself was already proven inside `set_recurring_active`.
         else if (res.data.warning) fail(res.data.warning, { nodeId: intent.id, kind: 'read_back' });
+        return;
+      }
+
+      if (intent.op === 'clearField') {
+        // Removes the property so the field inherits again (contract §4). A 400 here is the
+        // server refusing a format it has no verified way to clear — that is a real not-saved
+        // and must roll back, exactly like any other failed write. `already_inheriting` is a
+        // success with no write behind it; the optimistic change was already correct.
+        const res = await apiSend<{ object?: ModelNode; already_inheriting?: boolean }>(
+          'POST',
+          `/api/object/${intent.id}/clear-field`,
+          { field: intent.field },
+        );
+        if (!res.ok) {
+          rollback(`Could not go back to inheriting ${intent.field} — it is NOT saved. ${res.error}`, intent.id);
+          return;
+        }
+        if (res.data.object) acceptServerNode(res.data.object);
         return;
       }
 
@@ -916,6 +960,71 @@ export function useAppState(source: DataSource = 'live'): AppState {
   );
 
   /**
+   * THE WORK-BLOCK CHECK — one control, two views (`WorkBlock` in the schedule, the block row in
+   * `PriorityList`), one write.
+   *
+   * It used to write `ui.chunked` and flash "Done". `ui.chunked` is in-memory state: she checked
+   * a chunk of work off, read the confirmation, reloaded, and it was gone. `POST /api/complete`
+   * already did the right thing and nothing called it.
+   *
+   * ⚠ WHAT THE SERVER DOES WITH THIS, AND WHY IT IS NOT A DONE-WRITE. `complete_task_row`
+   * dispatches on `plan_store.is_block_item` (`server.py:187`): a block id goes to
+   * `chunk_log.log_chunk` plus `plan_store.mark_block_chunked`, and NEVER to
+   * `task_actions.complete_task`. A block must not finish the project underneath it — it comes
+   * back tomorrow (`display_grain_design.md` §REVISION 2026-07-14 §B). That is why this does not
+   * route through `apply(toggleDone(...))` like every other check on the surface.
+   *
+   * ⚠ THE ORDER OF THE TWO EFFECTS IS THE POINT. The box checks immediately, because a checkbox
+   * that waits on a round trip reads as broken; the SUCCESS SIGNAL waits for `res.ok`, because
+   * that is the only moment anything is known to have been saved. `logDay` is the model. A
+   * failure puts the box back and says so — the optimistic change is never left standing.
+   */
+  const chunkBlock = useCallback(
+    async (id: string, done: boolean): Promise<void> => {
+      if (!id) {
+        // A block row with no id cannot be addressed on the server, so there is nothing to
+        // write and nothing to claim. Silence here would look exactly like a save.
+        fail('That work block has no id on it, so the time on it was NOT saved.');
+        return;
+      }
+      // Optimistic VISUAL state, keyed by the block's id. Explicitly `false` on an un-check
+      // rather than deleted, so it outranks the plan row's own `didChunkToday` until the
+      // server's answer arrives.
+      setUi((prev) => ({ ...prev, chunked: { ...prev.chunked, [id]: done } }));
+      const undo = () => {
+        setUi((prev) => ({ ...prev, chunked: { ...prev.chunked, [id]: !done } }));
+      };
+
+      if (!live) {
+        undo();
+        fail('Not connected to the server — the time on this was NOT saved.');
+        return;
+      }
+
+      const res = await apiSend<{
+        completed?: Record<string, unknown>;
+        uncompleted?: Record<string, unknown>;
+        plan?: LivePlan;
+      }>('POST', done ? '/api/complete' : '/api/uncomplete', { id });
+
+      if (!res.ok) {
+        undo();
+        fail(
+          `Could not ${done ? 'record time on that' : 'reopen that'} — it is NOT saved. ${res.error}`,
+          { nodeId: id },
+        );
+        return;
+      }
+      // The response carries today's rewritten plan cache, whose block row now holds
+      // `did_chunk_today`. Taking it is what makes the check survive a reload rather than
+      // depending on `ui.chunked` staying alive.
+      if (res.data.plan && !res.data.plan.empty) setPlan(planFromLive(res.data.plan));
+      succeed(done ? 'Done' : 'Reopened', null);
+    },
+    [live, fail, succeed],
+  );
+
+  /**
    * THE GENERATION SEAM — the action row's six buttons, wired to the two endpoints that already
    * implement them.
    *
@@ -1029,6 +1138,7 @@ export function useAppState(source: DataSource = 'live'): AppState {
     applyPeriods,
     fail,
     logDay,
+    chunkBlock,
     regenerate,
     generating,
     dismissToast,

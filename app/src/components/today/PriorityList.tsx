@@ -194,8 +194,14 @@ export function PriorityList({ ctx, reasonShown = false }: PriorityListProps) {
           // A block with no arc is a bare did-a-chunk row with nothing to open —
           // `display_grain_design.md` decision 4 (a container project with no discrete tasks).
           const expandable = arc.length >= 1;
-          const chunked = !!ctx.ui.chunked[entryKey];
-          const open = !!ctx.ui.blocksOpen[entryKey];
+          // Keyed by BLOCK ID, matching the schedule view — see `WorkBlock`. A slot-position
+          // key would reattach to the wrong item after a regenerate, and would give one block
+          // two independent states across the Schedule/Priority toggle.
+          // Absent means the SERVER's record decides (`didChunkToday` off the plan). An explicit
+          // entry is her own tap, which must outrank the plan row until the server's answer
+          // replaces it — including an explicit `false`, which is an un-check.
+          const chunked = ctx.ui.chunked[item.id] ?? item.didChunkToday ?? false;
+          const open = !!ctx.ui.blocksOpen[item.id];
           return (
             <div key={id} style={{ borderBottom: "1px solid " + C.hair }}>
               <div
@@ -203,7 +209,7 @@ export function PriorityList({ ctx, reasonShown = false }: PriorityListProps) {
                   expandable
                     ? () =>
                         ctx.up({
-                          blocksOpen: toggleKey(ctx.ui.blocksOpen, entryKey),
+                          blocksOpen: toggleKey(ctx.ui.blocksOpen, item.id),
                         })
                     : undefined
                 }
@@ -219,8 +225,9 @@ export function PriorityList({ ctx, reasonShown = false }: PriorityListProps) {
                 <button
                   onClick={(e) => {
                     e.stopPropagation();
-                    ctx.up({ chunked: toggleKey(ctx.ui.chunked, entryKey) });
-                    ctx.flash(chunked ? "Reopened" : "Done");
+                    // Identical to the schedule view's handler: the shell owns the write and
+                    // the message, and only confirms once the server has answered.
+                    ctx.chunk(item.id, !chunked);
                   }}
                   aria-label="mark done"
                   aria-pressed={chunked}

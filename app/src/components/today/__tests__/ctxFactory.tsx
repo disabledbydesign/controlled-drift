@@ -51,6 +51,7 @@ export function ctxWith(
   const applyPlan = vi.fn();
   const flash = vi.fn();
   const regenerate = vi.fn();
+  const chunk = vi.fn();
   const openDetail = vi.fn();
   const goTab = vi.fn();
   const ctx: TodayCtx = {
@@ -67,9 +68,10 @@ export function ctxWith(
     applyPlan,
     flash,
     regenerate,
+    chunk,
     generating,
     openDetail,
     goTab,
   };
-  return { ctx, up, apply, applyPlan, flash, regenerate, openDetail, goTab };
+  return { ctx, up, apply, applyPlan, flash, regenerate, chunk, openDetail, goTab };
 }

@@ -175,6 +175,9 @@ export function useSurface({ T, name, setTheme, wide, source }: SurfaceOptions):
     apply: st.apply,
     applyPlan: st.applyPlan,
     flash: (msg: string) => st.apply({ graph: st.graph, toast: msg, ui: null, node: null }),
+    // The work-block check. `void` for the same reason as `regenerate`: every outcome reports
+    // itself through `succeed`/`fail` inside `chunkBlock`, so the row has nothing to await.
+    chunk: (id, done) => void st.chunkBlock(id, done),
     // The action row's generation controls. `void` because the row's handlers are fire-and-
     // forget: every outcome of the generation reports itself through `succeed`/`fail` inside
     // `regenerate`, so there is nothing for a caller to await or to catch.

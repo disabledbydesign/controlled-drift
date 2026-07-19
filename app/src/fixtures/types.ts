@@ -163,6 +163,13 @@ export interface PlanBlockItem {
   chunkMin: number;
   why: string;
   arc?: PlanArcStep[];
+  /**
+   * The SERVER's record that a chunk of this block was done today — `did_chunk_today` on the
+   * cached plan row, written by `plan_store.mark_block_chunked` when `/api/complete` routes a
+   * block id to `chunk_log`. This is what makes the check survive a reload: `ui.chunked` is
+   * in-memory only, so without this the plan alone could not say the block had been worked on.
+   */
+  didChunkToday?: boolean;
 }
 
 export interface PlanTaskItem {

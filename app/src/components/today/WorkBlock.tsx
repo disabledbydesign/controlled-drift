@@ -49,8 +49,15 @@ export function WorkBlock({
   const C = ctx.T.c;
   const arc = item.arc || [];
   const expandable = arc.length >= 1;
-  const chunked = !!ctx.ui.chunked[entryKey];
-  const open = !!ctx.ui.blocksOpen[entryKey];
+  // ⚠ Keyed by the BLOCK ID, not `entryKey`. `entryKey` is `bandIndex-itemIndex` — a slot
+  // position — and a regenerated plan reassigns those slots, so a persisted check would
+  // reattach to whatever item now occupies the slot. The id also gives a block ONE state
+  // across the Schedule/Priority toggle instead of one per view.
+  // Absent means the SERVER's record decides (`didChunkToday` off the plan). An explicit
+  // entry is her own tap, which must outrank the plan row until the server's answer
+  // replaces it — including an explicit `false`, which is an un-check.
+  const chunked = ctx.ui.chunked[item.id] ?? item.didChunkToday ?? false;
+  const open = !!ctx.ui.blocksOpen[item.id];
 
   return (
     <div style={{ marginBottom: "8px" }}>
@@ -58,7 +65,7 @@ export function WorkBlock({
         onClick={
           expandable
             ? () =>
-                ctx.up({ blocksOpen: toggleKey(ctx.ui.blocksOpen, entryKey) })
+                ctx.up({ blocksOpen: toggleKey(ctx.ui.blocksOpen, item.id) })
             : undefined
         }
         style={{
@@ -71,8 +78,10 @@ export function WorkBlock({
         <button
           onClick={(e) => {
             e.stopPropagation();
-            ctx.up({ chunked: toggleKey(ctx.ui.chunked, entryKey) });
-            ctx.flash(chunked ? "Reopened" : "Done");
+            // The shell owns the write AND the message: it raises success only once the
+            // server confirms, and reports the failure itself. Previously this wrote local
+            // state and flashed "Done" immediately — which reverted on reload.
+            ctx.chunk(item.id, !chunked);
           }}
           aria-label="mark done"
           aria-pressed={chunked}
