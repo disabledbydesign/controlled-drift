@@ -17,39 +17,17 @@
  * `afterEach(cleanup)` is explicit or renders accumulate and every `getByText` finds several.
  */
 
-import { describe, it, expect, vi, afterEach } from 'vitest';
+import { describe, it, expect, afterEach } from 'vitest';
 import { render, screen, fireEvent, cleanup } from '@testing-library/react';
 import { themes } from '@tokens';
-import { seed, seedPeriods, seedPlan, seedStrategies } from '../../../fixtures/index.ts';
+import { seedPeriods, seedPlan } from '../../../fixtures/index.ts';
 import type { Plan, PlanBlockItem, PlanTaskItem } from '../../../fixtures/index.ts';
 import { index, toggleArcStep, workItems } from '../../../model/index.ts';
-import type { Graph, ModelNode } from '../../../model/index.ts';
 import { TodayPanel } from '../TodayPanel.tsx';
-import type { TodayCtx, TodayUi } from '../types.ts';
-import { focusCtxWith } from '../../focus/__tests__/harness.ts';
+import type { TodayCtx } from '../types.ts';
+import { ctxWith, freshGraph, freshPlan } from './ctxFactory.tsx';
 
 afterEach(cleanup);
-
-const BASE_UI: TodayUi = {
-  todayShape: 'schedule',
-  focusExpanded: false,
-  heldOpen: {},
-  chunked: {},
-  blocksOpen: {},
-  priOrder: null,
-  ask: '',
-};
-
-function freshGraph(): Graph {
-  return {
-    roots: structuredClone(seed) as ModelNode[],
-    strategies: structuredClone(seedStrategies) as ModelNode[],
-  };
-}
-
-function freshPlan(): Plan {
-  return structuredClone(seedPlan) as Plan;
-}
 
 /**
  * `Plan.blocks[].items[]` is a discriminated union, so the tests narrow rather than cast:
@@ -73,34 +51,6 @@ function arcOf(p: Plan): { state: string }[] {
   const arc = blockAt(p, 0, 0).arc;
   if (!arc) throw new Error('the fixture block has no arc');
   return arc;
-}
-
-/** A context whose `up` / `apply` / `applyPlan` are spies, so writes are observable. */
-function ctxWith(ui: Partial<TodayUi> = {}, plan: Plan = freshPlan()) {
-  const graph = freshGraph();
-  const up = vi.fn();
-  const apply = vi.fn();
-  const applyPlan = vi.fn();
-  const flash = vi.fn();
-  const openDetail = vi.fn();
-  const goTab = vi.fn();
-  const ctx: TodayCtx = {
-    T: themes.celestial,
-    graph,
-    idx: index(graph),
-    plan,
-    periods: seedPeriods,
-    // Task 9: FocusSlot's expanded body is FocusPanel, which reads this.
-    focus: focusCtxWith().ctx,
-    ui: { ...BASE_UI, ...ui },
-    up,
-    apply,
-    applyPlan,
-    flash,
-    openDetail,
-    goTab,
-  };
-  return { ctx, up, apply, applyPlan, flash, openDetail, goTab };
 }
 
 describe('the two plan shapes', () => {
