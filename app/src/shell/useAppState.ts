@@ -365,6 +365,11 @@ export interface AppState {
    * (`errorLog.ts`) on the way to the screen, so a dismissed message still leaves a trace.
    */
   fail: (msg: string, opts?: { nodeId?: string | null; before?: unknown; kind?: string }) => void;
+  /**
+   * Append a log entry to the friction log via `POST /api/logday`. Resolves `true` only when the
+   * server confirmed the write — callers must not clear her text on `false`.
+   */
+  logDay: (text: string, tags: string[]) => Promise<boolean>;
   dismissToast: () => void;
 }
 
@@ -806,6 +811,39 @@ export function useAppState(source: DataSource = 'live'): AppState {
 
   const dismissToast = useCallback(() => setToast(null), []);
 
+  /**
+   * The Log button's write — `POST /api/logday`, which appends to `scripts/data/signal_log.jsonl`
+   * through `signal_log.log_signal(source="log_day")`.
+   *
+   * The endpoint was already live; the port left the button dropping her text on the floor
+   * (documented at `AddScreen`'s `LogTab`). This is that wire-in.
+   *
+   * ⚠ The toast is raised ONLY after the server confirms. The old behaviour flashed "Logged"
+   * unconditionally, which is the worse half of the bug: a silent drop still looks like a save.
+   * Returns whether it landed, so the caller only clears the box on a real write.
+   */
+  const logDay = useCallback(
+    async (text: string, tags: string[]): Promise<boolean> => {
+      const body = text.trim();
+      if (!body) return false;
+      if (!live) {
+        fail('Not connected to the server — that was NOT logged. Nothing was saved.');
+        return false;
+      }
+      const res = await apiSend<{ ok?: boolean; tags?: string[] }>('POST', '/api/logday', {
+        text: body,
+        tags,
+      });
+      if (!res.ok) {
+        fail(`That was NOT logged, so nothing was saved. ${res.error}`);
+        return false;
+      }
+      succeed('Logged', null);
+      return true;
+    },
+    [live, fail, succeed],
+  );
+
   return {
     graph,
     idx,
@@ -819,6 +857,7 @@ export function useAppState(source: DataSource = 'live'): AppState {
     applyPlan,
     applyPeriods,
     fail,
+    logDay,
     dismissToast,
   };
 }

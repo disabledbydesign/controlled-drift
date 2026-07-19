@@ -36,8 +36,13 @@ export interface AddCtx {
    * putting them in `AddUi` would let this tab write the router.
    */
   openDetail: (id: string) => void;
-  /** v4's `flash(msg)` with no model change behind it — used by the Log button. */
+  /** v4's `flash(msg)` with no model change behind it. */
   flash: (msg: string) => void;
+  /**
+   * The Log button's real write. Resolves `true` only once the server has confirmed, so the
+   * text box is cleared on a proven save and never on a dropped one.
+   */
+  logDay: (text: string, tags: string[]) => Promise<boolean>;
 }
 
 export function AddScreen({ ctx }: { ctx: AddCtx }) {
@@ -178,16 +183,29 @@ function CaptureTab({ ctx }: { ctx: AddCtx }) {
 const LOG_TAGS: readonly LogTag[] = ['The day', 'Friction'];
 
 /**
+ * Her label -> the tag `/api/logday` stores. The server keeps only `"day"` and `"issue"` and
+ * silently substitutes `["day"]` for anything else, so a wrong mapping here would file every
+ * friction entry as a day entry — losing exactly the issue-tagged subset the triage passes read.
+ */
+const TAG_WIRE: Record<LogTag, string> = { 'The day': 'day', Friction: 'issue' };
+
+/**
  * v4 `logTab()` (1126).
  *
- * ⚠ FLAGGED, PORTED AS-IS. The Log button does exactly this in v4:
+ * ── WIRED 2026-07-18 ────────────────────────────────────────────────────────
+ * Previously ported as-is from v4, which did:
  *     if((st.logText||'').trim()){this.flash('Logged');this.up({logText:''});}
- * It raises a toast and clears the box. The text and the selected tag are DISCARDED — v4
- * has no log list, no store, and does not put the tag in the message. So the tag selection is
- * visible and sticky, but nothing downstream ever reads it. This is the friction-log entry
- * point whose real backend appends to `scripts/data/signal_log.jsonl`; Track A makes no
- * network calls, so the write has nowhere to go yet and the drop is left in place rather than
- * papered over with an invented client-side store.
+ * — a toast, a cleared box, and her text discarded. v4 had no store to write to, so Track A
+ * left the drop in place rather than invent a client-side one.
+ *
+ * It now posts to `/api/logday`, which was already live and appends to
+ * `scripts/data/signal_log.jsonl` (`signal_log.log_signal(source="log_day")`) — the friction
+ * log the triage sessions actually read.
+ *
+ * Two rules the old code broke and this one keeps:
+ *   · the toast is raised only AFTER the server confirms — an unconditional "Logged" makes a
+ *     silent drop indistinguishable from a save
+ *   · her text is cleared only on a confirmed write, so a failure leaves it recoverable on screen
  */
 function LogTab({ ctx }: { ctx: AddCtx }) {
   const { T, ui } = ctx;
@@ -243,10 +261,12 @@ function LogTab({ ctx }: { ctx: AddCtx }) {
           />
           <button
             onClick={() => {
-              if (ui.logText.trim()) {
-                ctx.flash('Logged');
-                ctx.up({ logText: '' });
-              }
+              if (!ui.logText.trim()) return;
+              // Fire and let the shell own both toasts. The box is cleared only on a confirmed
+              // write — see this component's header.
+              void ctx.logDay(ui.logText, [TAG_WIRE[tag]]).then((saved) => {
+                if (saved) ctx.up({ logText: '' });
+              });
             }}
             // v4 gives this button no `whiteSpace:'nowrap'`, unlike "+ Add" (v4:1114). One word.
             style={{ ...ACTION_BUTTON(T), whiteSpace: undefined }}

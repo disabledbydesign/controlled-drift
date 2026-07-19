@@ -19,7 +19,7 @@
  */
 
 import { describe, it, expect, vi, afterEach } from 'vitest';
-import { render, screen, fireEvent, cleanup } from '@testing-library/react';
+import { render, screen, fireEvent, cleanup, waitFor } from '@testing-library/react';
 import { themes } from '@tokens';
 import { seed, seedStrategies } from '../../fixtures/index.ts';
 import { CAPTURE_PROJECT_ID, capture, index, node } from '../../model/index.ts';
@@ -51,6 +51,7 @@ function addCtx(over: Omit<Partial<AddCtx>, 'ui'> & { ui?: Partial<AddUi> } = {}
     apply: over.apply ?? vi.fn(),
     openDetail: over.openDetail ?? vi.fn(),
     flash: over.flash ?? vi.fn(),
+    logDay: over.logDay ?? vi.fn().mockResolvedValue(true),
   };
 }
 
@@ -194,37 +195,48 @@ describe('AddScreen — log', () => {
     expect(day).not.toContain('rgb(242, 166, 200)');
   });
 
-  it('Log clears the box and flashes; with an empty box it does nothing', () => {
+  it('an empty box logs nothing', async () => {
     const up = vi.fn();
-    const flash = vi.fn();
-    render(<AddScreen ctx={addCtx({ up, flash })} />);
+    const logDay = vi.fn().mockResolvedValue(true);
+    render(<AddScreen ctx={addCtx({ up, logDay })} />);
     fireEvent.click(screen.getByText('Log'));
-    expect(flash).not.toHaveBeenCalled();
+    expect(logDay).not.toHaveBeenCalled();
     expect(up).not.toHaveBeenCalled();
-    cleanup();
-
-    render(<AddScreen ctx={addCtx({ up, flash, ui: { logText: 'migraine, rested' } })} />);
-    fireEvent.click(screen.getByText('Log'));
-    expect(flash).toHaveBeenCalledWith('Logged');
-    expect(up).toHaveBeenCalledWith({ logText: '' });
   });
 
-  it('⚠ FLAGGED v4 BEHAVIOUR: the log text and tag are discarded, not stored anywhere', () => {
-    // Pinned deliberately. v4's Log handler is `flash('Logged'); up({logText:''})` and nothing
-    // else — no list, no store, and the tag never reaches the message. The real backend
-    // appends to signal_log.jsonl; Track A makes no network calls, so this drop stands.
-    // If a store is ever added, this test fails and the flag gets revisited on purpose.
+  it('Log sends the text to the friction log and clears the box once it saved', async () => {
     const up = vi.fn();
-    const flash = vi.fn();
-    const apply = vi.fn();
+    const logDay = vi.fn().mockResolvedValue(true);
+    render(<AddScreen ctx={addCtx({ up, logDay, ui: { logText: 'migraine, rested' } })} />);
+    fireEvent.click(screen.getByText('Log'));
+
+    expect(logDay).toHaveBeenCalledWith('migraine, rested', ['day']);
+    await waitFor(() => expect(up).toHaveBeenCalledWith({ logText: '' }));
+  });
+
+  it('the Friction tag is sent as "issue" — the tag the triage passes filter on', async () => {
+    // The server keeps only "day"/"issue" and silently substitutes ["day"] for anything else,
+    // so a broken mapping here would not error — it would quietly file every friction entry as
+    // a day entry, and the loss would only surface at the next triage.
+    const logDay = vi.fn().mockResolvedValue(true);
     render(
-      <AddScreen ctx={addCtx({ up, flash, apply, ui: { logText: 'a friction', logTag: 'Friction' } })} />,
+      <AddScreen ctx={addCtx({ logDay, ui: { logText: 'a friction', logTag: 'Friction' } })} />,
     );
     fireEvent.click(screen.getByText('Log'));
 
-    expect(apply).not.toHaveBeenCalled();
-    expect(flash).toHaveBeenCalledWith('Logged'); // NOT 'Logged · Friction'
-    expect(up.mock.calls).toEqual([[{ logText: '' }]]); // the only write is the clear
+    expect(logDay).toHaveBeenCalledWith('a friction', ['issue']);
+  });
+
+  it('a failed write leaves her text on screen instead of clearing it', async () => {
+    // The defect this replaced flashed "Logged" and cleared the box unconditionally, so a
+    // dropped entry was indistinguishable from a saved one. Losing her words is the worse half.
+    const up = vi.fn();
+    const logDay = vi.fn().mockResolvedValue(false);
+    render(<AddScreen ctx={addCtx({ up, logDay, ui: { logText: 'the thing that broke' } })} />);
+    fireEvent.click(screen.getByText('Log'));
+
+    await waitFor(() => expect(logDay).toHaveBeenCalled());
+    expect(up).not.toHaveBeenCalled();
   });
 });
 

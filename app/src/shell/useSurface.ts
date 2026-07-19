@@ -193,6 +193,7 @@ export function useSurface({ T, name, setTheme, wide, source }: SurfaceOptions):
     apply: st.apply,
     openDetail: (id: string) => st.up({ detail: id, returnFrom: 'add' }),
     flash: (msg: string) => st.apply({ graph: st.graph, toast: msg, ui: null, node: null }),
+    logDay: st.logDay,
   };
 
   /**
