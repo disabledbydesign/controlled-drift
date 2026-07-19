@@ -16,6 +16,11 @@ Anytype Key.md
 # Runtime data the system writes at use time (not source).
 scripts/data/
 
+# Friction snapshots — PNGs of June's real screen (task names, medical/financial detail).
+# Already covered by scripts/data/ above; named explicitly so the reason is on the record and
+# a later narrowing of that rule cannot silently start committing her screenshots. (2026-07-19)
+scripts/data/shots/
+
 # Session-local / personal artifacts (June: ignore, 2026-07-12)
 .gsdot-log.md
 .claude/
