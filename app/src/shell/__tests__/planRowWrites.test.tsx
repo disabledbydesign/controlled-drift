@@ -81,8 +81,10 @@ async function mount() {
 }
 
 /** The ids of the rendered plan, in order — what she is actually looking at. */
-function shownOrder(plan: { blocks: { items: { id?: string }[] }[] }): (string | undefined)[] {
-  return plan.blocks.flatMap((b) => b.items.map((it) => it.id));
+function shownOrder(plan: { blocks: { items: unknown[] }[] }): (string | undefined)[] {
+  return plan.blocks.flatMap((b) =>
+    b.items.map((it) => (it as { id?: string }).id),
+  );
 }
 
 describe('moving a row — the screen must follow the write', () => {
