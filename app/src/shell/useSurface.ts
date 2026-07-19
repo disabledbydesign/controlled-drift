@@ -136,6 +136,8 @@ export function useSurface({ T, name, setTheme, wide, source }: SurfaceOptions):
     periods: st.periods,
     ui: st.ui,
     up: st.up,
+    // ⚠ DEAD PLUMBING — nothing produces a `PeriodResult`; the period write goes through
+    // `saveFocusPeriod`. See the note on `AppState.applyPeriods`.
     applyPeriods: st.applyPeriods,
     authorFocus: st.authorFocus,
     saveFocusPeriod: st.saveFocusPeriod,

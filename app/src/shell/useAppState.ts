@@ -450,6 +450,11 @@ export interface AppState {
    * Apply a PERIOD mutation (Task 9). Third seam of the same shape as `apply`/`applyPlan`,
    * for the same reason: focus periods are neither graph nodes nor plan entries. See
    * `model/periods.ts`.
+   *
+   * ⚠ DEAD PLUMBING. Nothing produces a `PeriodResult` any more — the focus-period write goes
+   * to the server through `saveFocusPeriod`. Wiring a period change to this seam would
+   * reintroduce the local-only write that lost every field on reload; the type will not stop
+   * you. Kept only because removing the plumbing was judged out of scope.
    */
   applyPeriods: (result: PeriodResult) => void;
   /**
@@ -473,13 +478,6 @@ export interface AppState {
    */
   logDay: (text: string, tags: string[]) => Promise<boolean>;
   /**
-   * Write a focus period — `commit` for a new one, `update` for an edit in place.
-   *
-   * Returns whether it LANDED, so the caller only closes the editor on a real write. `false`
-   * covers both a refusal (a field still empty) and a failure; each has already reported itself
-   * in its own register, and neither should discard what she typed.
-   */
-  /**
    * Hand her words to the structure step and get back the form she checks.
    *
    * `null` means no form was produced — busy, failed, or nothing understood. Each has already
@@ -487,6 +485,17 @@ export interface AppState {
    * fabrication this replaced.
    */
   authorFocus: (text: string) => Promise<FocusForm | null>;
+  /**
+   * Write a focus period — `commit` for a new one, `update` for an edit in place.
+   *
+   * Returns whether it LANDED, so the caller only closes the editor on a real write. `false`
+   * covers both a refusal (a field still empty) and a failure; each has already reported itself
+   * in its own register, and neither should discard what she typed.
+   *
+   * ⚠ `true` also covers a period that saved while an as-needed task she named did NOT come back
+   * on. It landed, so the editor closes — and the partial failure has already reported itself
+   * loudly, naming what stayed off.
+   */
   saveFocusPeriod: (
     view: 'edit' | 'author',
     editId: string | null,
@@ -1058,6 +1067,7 @@ export function useAppState(source: DataSource = 'live'): AppState {
     [succeed],
   );
 
+  // ⚠ DEAD PLUMBING — nothing produces a `PeriodResult`. See the note on `AppState.applyPeriods`.
   const applyPeriods = useCallback(
     (result: PeriodResult) => {
       setPeriods(result.periods);
@@ -1084,12 +1094,20 @@ export function useAppState(source: DataSource = 'live'): AppState {
    * The server sends ready-to-read labels (`missing_required` → `['start date','end date']`), so
    * this joins them and says what to do. No metaphor, no error register, no blame — the period
    * is not broken, it is unfinished.
+   *
+   * ⚠ The labels arrive bare ('end date'), and reading them out bare produced "needs start date
+   * and end date" — machine output, at the one moment the sentence most needs to sound like a
+   * person saying what is left. Each label gets its article here rather than on the server,
+   * because the article belongs to this sentence, not to the label.
    */
+  const article = (label: string): string => ('aeiou'.includes(label[0]?.toLowerCase() ?? '') ? 'an' : 'a');
+
   const missingSentence = (missing: string[]): string => {
+    const withArticles = missing.map((m) => `${article(m)} ${m}`);
     const names =
-      missing.length > 1
-        ? missing.slice(0, -1).join(', ') + ' and ' + missing[missing.length - 1]
-        : (missing[0] ?? 'a required field');
+      withArticles.length > 1
+        ? withArticles.slice(0, -1).join(', ') + ' and ' + withArticles[withArticles.length - 1]
+        : (withArticles[0] ?? 'a required field');
     return `That focus period needs ${names} before it can be saved. Nothing else you typed was lost.`;
   };
 
@@ -1174,6 +1192,8 @@ export function useAppState(source: DataSource = 'live'): AppState {
           notify('Nothing came back for that. Your words are still here — try saying it again.');
           return null;
         }
+        // The sentence she typed, kept for the commit that follows. See `authoredRawRef`.
+        authoredRawRef.current = typeof res.data.raw_text === 'string' ? res.data.raw_text : body;
         return formFromFields(fields);
       } finally {
         generatingRef.current = null;
@@ -1182,6 +1202,23 @@ export function useAppState(source: DataSource = 'live'): AppState {
     },
     [live, fail, notify],
   );
+
+  /**
+   * THE ONE SENTENCE SHE ACTUALLY TYPED, held between authoring and the commit that follows.
+   *
+   * ⚠ WHY THIS EXISTS. `raw_text` is not metadata: both write routes hand it to
+   * `signal_log.log_signal(...)`, and `signal_log.jsonl` is documented and read as JUNE'S OWN
+   * TYPED WORDS. `saveFocusPeriod` used to send `form.intent` — so changing only a workday end
+   * time on an existing period wrote a "correction" signal whose text was the period's
+   * pre-existing intent sentence, attributed to her, which she did not say on that action.
+   * Commit `1522ad5` removed a machine-written record from that same log for the same reason.
+   *
+   * Set only by `authorFocus` (preferring the server's own record of what it received), read only
+   * on the author path, and cleared once committed — so it can never be re-attributed to a later
+   * action she did not type into. The per-field edit path has no sentence of hers at all and
+   * sends none.
+   */
+  const authoredRawRef = useRef<string>('');
 
   /**
    * THE FOCUS PERIOD WRITE — `POST /api/focus/commit` for a new one, `POST /api/focus/update`
@@ -1207,12 +1244,22 @@ export function useAppState(source: DataSource = 'live'): AppState {
         fail('Not connected to the server — that focus period was NOT saved.');
         return false;
       }
+      // An edit route with nothing to edit cannot be carried out. Falling through to `commit`
+      // here would create a SECOND period while she believed she was changing the one in front
+      // of her — proceeding as if a failed step had succeeded, which the house rule forbids.
+      // Unreachable today (every edit route sets the id); it says so rather than assuming.
+      if (view === 'edit' && !editId) {
+        fail('That focus period has no id on it, so the change was NOT saved.');
+        return false;
+      }
+
       const fields = fieldsFromForm(form);
-      // Her own words are the raw text both routes record alongside the structured fields.
-      const raw = form.intent || '';
+      // ⚠ ONLY WORDS SHE TYPED. See `authoredRawRef` — sending the form's intent here wrote her
+      // own pre-existing sentence into her own-words log as something she had just said.
+      const raw = view === 'edit' ? '' : authoredRawRef.current;
       const res =
-        view === 'edit' && editId
-          ? await updateFocus(editId, fields, raw)
+        view === 'edit'
+          ? await updateFocus(editId!, fields, raw)
           : await commitFocus(fields, raw);
 
       if (res.kind === 'needs') {
@@ -1234,7 +1281,36 @@ export function useAppState(source: DataSource = 'live'): AppState {
         fail(`That focus period was saved, but the list could not be re-read. ${after.error}`);
         return true;
       }
+
+      /**
+       * ⚠ THE PERIOD SAVED AND PART OF IT DID NOT — both facts, in one sentence.
+       *
+       * The server reactivates the as-needed tasks she named AFTER the period is written and
+       * proved, and deliberately does not roll the period back if that step goes wrong; it
+       * reports what could not be turned back on alongside the success rather than dropping it.
+       * Saying only "Focus period saved" here would put a success message over a partly
+       * discarded instruction — she asked for the dishes back and they would stay off with
+       * nothing anywhere saying so.
+       *
+       * It goes through `fail`, not `succeed`: `fail` is what reaches `errorLog`, and a task that
+       * silently stayed off has to leave a trace. The sentence leads with the save so she is
+       * never told her period was lost when it was not, and the return value stays `true` —
+       * the period IS written, so the editor closes rather than inviting a duplicate write.
+       */
+      const stillOff = [
+        ...res.unresolved,
+        ...res.notReactivated.map((f) => (f.id ? `${f.id} (${f.error})` : f.error)),
+      ];
+      if (stillOff.length > 0) {
+        const saved = view === 'edit' ? 'That focus period was updated' : 'That focus period was saved';
+        const what = stillOff.length > 1 ? 'these did not' : 'this did not';
+        fail(`${saved}, but you asked for something to start again and ${what}: ${stillOff.join(', ')}.`);
+        return true;
+      }
+
       succeed(view === 'edit' ? 'Focus period updated' : 'Focus period saved', null);
+      // Committed — her sentence is on the record now and must not be attached to a later action.
+      authoredRawRef.current = '';
       return true;
     },
     [live, fail, succeed, notify],
