@@ -138,11 +138,26 @@ undo, and the answer is that it is a race. The fix is to poll until the marker a
 established pattern for Anytype's async deletes) — not made here, because `task_actions.py` is
 outside this change and the repo rule is to change only what was asked.
 
-NOT built here, and why: `clear-field` (`POST /api/object/{id}/clear-field`, contract §4). It must
-REMOVE a property rather than set it empty, because key-presence IS the tri-state (spec §4:
-absent = inherit, present-but-empty = explicitly none). Whether the live Anytype PATCH can remove
-a property value is unverified, and verifying it means writing to June's real space. Left out
-rather than shipped on a guess.
+`clear-field` (`POST /api/object/{id}/clear-field`, contract §4) IS built here now — see
+`clear_field` below. It must REMOVE a property rather than set it empty, because key-presence IS
+the tri-state (spec §4: absent = inherit, present-but-empty = explicitly none). This docstring
+previously recorded that removal was UNVERIFIED and refused to ship on a guess. It has now been
+verified live (2026-07-18) against scratch objects created and archived inside the probe, and the
+answer is FORMAT-DEPENDENT — which is why one blanket implementation would have been wrong:
+
+    field      format         explicit-empty?   removable?
+    access     multi_select   NO  (writing []   YES — writing [] IS the removal; the property
+                              deletes it)            comes back ABSENT, identical to never-set
+    affective  text           YES ('' reads     NO verified path — '' persists as PRESENT-empty,
+                              back as present)       which is explicit-none, not removal
+    blockMin   number         NO (0 is a real   NO verified path
+                              value)
+
+So the spec §4 tri-state is fully representable for `affective` and NOT representable for
+`access`: for a multi_select, "set here, deliberately none" and "unset, inherit" are the same
+bytes. That is a property of the storage, not a shortcut taken here — the same honest limit
+`resolve.py` already records for checkboxes ("A checkbox therefore has no tri-state"). The UI
+must not offer a state the store cannot hold; `clear_field` refuses rather than pretending.
 """
 import sys, os
 import datetime as dt
@@ -523,6 +538,59 @@ def set_vals(object_id, vals):
     for key in vals:
         _log(object_id, _type_name(before), _property_for(level, key),
              before_vals.get(key), intended[key])
+    return {"ok": True, "object": node_for(object_id)}
+
+
+#: Which inheritable fields can actually be REMOVED so the object inherits again, by the
+#: storage format of their property. Verified live 2026-07-18 (see module docstring): writing an
+#: empty list to a multi_select deletes the property outright, while a text property keeps `''`
+#: as a present-but-empty value and a number has no empty at all. Keyed by format rather than by
+#: field name so a fourth inheritable field gets the right answer without a second table to
+#: forget — but a format NOT listed here is refused, never guessed.
+_REMOVABLE_BY_FORMAT = {"multi_select": []}
+
+
+def clear_field(object_id, val_key):
+    """Remove one field so the object inherits it from its nearest ancestor again (contract §4).
+
+    This is NOT `set_vals(id, {key: ''})`. Key-presence IS the tri-state: a property REMOVED
+    inherits, a property present-but-empty is an intentional "none". Writing `''` here would
+    silently collapse those two into one and break inheritance across the subtree — the exact
+    failure `api_tree._vals` exists to prevent.
+
+    Refuses, rather than half-working, for a format with no verified removal path. A refusal is
+    honest and recoverable; a write that reports success while the value stays put is neither.
+    """
+    before = _get_object(object_id)
+    level = _write_level(before)
+    prop_name = _property_for(level, val_key)
+
+    prop = g.find_property(prop_name)
+    if prop is None:
+        raise WriteRefused(f"property {prop_name!r} is not in the live space")
+    fmt = prop.get("format")
+    if fmt not in _REMOVABLE_BY_FORMAT:
+        raise WriteRefused(
+            f"{prop_name!r} cannot be cleared back to inheriting — a {fmt} property has no "
+            f"verified way to remove its value in Anytype, only to overwrite it")
+
+    before_vals = api_tree._vals(before, level)
+    if val_key not in before_vals:
+        # Already inheriting. Not an error and not a write — saying so beats a no-op that
+        # reports success and leaves her unsure whether anything happened.
+        return {"ok": True, "object": node_for(object_id), "already_inheriting": True}
+
+    gsdo_objects.update(object_id, properties={prop_name: _REMOVABLE_BY_FORMAT[fmt]})
+
+    # Read back and prove the key is GONE. `_verify` proves presence; this is its mirror image,
+    # and it is the half that actually matters here — a clear that silently did nothing would
+    # otherwise report success while the field kept inheriting-blocking its old value.
+    after = _get_object(object_id)
+    if val_key in api_tree._vals(after, level):
+        raise RuntimeError(f"api_write: {val_key!r} did not clear on {object_id!r} "
+                           f"(still reads back {api_tree._vals(after, level)[val_key]!r})")
+
+    _log(object_id, _type_name(before), prop_name, before_vals.get(val_key), None)
     return {"ok": True, "object": node_for(object_id)}
 
 

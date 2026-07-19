@@ -591,13 +591,28 @@ def test_move_bad_body_is_400(live_server):
     assert status5 == 400
 
 
-def test_move_unknown_id_is_404_and_not_later_is_400(live_server):
+def test_move_earlier_is_accepted_and_reflowed(live_server):
+    base, _ = live_server
+    _seed_clock_plan()
+    # June asked to move things earlier as well as later; the route must not refuse it.
+    status, data = _post(base, "/api/task/move", {"id": "T4", "target_block": 0, "position": 0})
+    assert status == 200 and data["ok"] is True
+    ids = [i["id"] for i in data["plan"]["blocks"][0]["items"]]
+    assert ids == ["T4", "T1"]
+    times = {i["id"]: i["time"] for i in data["plan"]["blocks"][0]["items"]}
+    assert times == {"T4": "09:00 – 10:00", "T1": "10:00 – 11:30"}   # re-flowed, never blanked
+
+
+def test_move_unknown_id_is_404_and_refused_move_is_400(live_server):
     base, _ = live_server
     _seed_clock_plan()
     status, _b = _post(base, "/api/task/move", {"id": "NOPE", "target_block": 1})
     assert status == 404
-    status2, _b2 = _post(base, "/api/task/move", {"id": "T4", "target_block": 0})
-    assert status2 == 400
+    # Out of range and no-op destinations still fail loudly with a readable body — never a 200.
+    status2, b2 = _post(base, "/api/task/move", {"id": "T4", "target_block": 9})
+    assert status2 == 400 and b2["error"]
+    status3, b3 = _post(base, "/api/task/move", {"id": "T4", "target_block": 1, "position": 0})
+    assert status3 == 400 and "already in that spot" in b3["error"]
 
 
 def test_project_summaries_route(live_server, monkeypatch):

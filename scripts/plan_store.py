@@ -435,26 +435,32 @@ def _write_plan(plan):
     os.replace(tmp, path)
 
 
-def move_item_later(task_id, target_block_index, position=None):
-    """Move one scheduled task LATER in the cached clock-shape plan and re-flow the times.
+def move_item(task_id, target_block_index, position=None):
+    """Move one scheduled task to ANY spot in the cached clock-shape plan — earlier or later —
+    and re-flow the times.
+
+    Direction is not constrained: June asked to be able to move things earlier as well as
+    later, so the destination may be an earlier block, a later block, or an earlier/later spot
+    within the item's own block. (The original later-only rule came from the one-way "push it
+    back" gesture the first overlay offered; it was never a property of the data.)
 
     `position` is the item's FINAL index in the destination block's item list (the tap-target
-    the overlay showed); None appends to the end of the destination block. A move within the
-    SAME block needs a position strictly greater than the item's current index; any other
-    destination must be a strictly later block. Both affected blocks are re-flowed so every
-    item shows a real recomputed time.
+    the overlay showed). None means "append": the end of a different block, or the last spot of
+    its own block. Both affected blocks are re-flowed from their existing durations, so every
+    item shows a real recomputed time whichever way the item travelled.
 
     Returns the updated plan dict. Raises:
       LookupError — no cached plan; no clock-shape blocks (fragmented days reorder via
-                    move_priority_item_later instead); or no scheduled item with task_id.
-      ValueError  — block/position out of range, or the destination is not strictly later.
+                    move_priority_item instead); or no scheduled item with task_id.
+      ValueError  — block/position out of range, or the destination is where the item already
+                    is (a no-op is reported, never silently swallowed).
     """
     plan = load_plan()
     if plan is None:
         raise LookupError("no cached plan to move within")
     blocks = plan.get("blocks")
     if not blocks:
-        raise LookupError("plan has no time-blocks — use move_priority_item_later for a "
+        raise LookupError("plan has no time-blocks — use move_priority_item for a "
                           "fragmented (priority-shape) day")
     if not (0 <= target_block_index < len(blocks)):
         raise ValueError(f"target block {target_block_index} out of range (0..{len(blocks) - 1})")
@@ -469,15 +475,18 @@ def move_item_later(task_id, target_block_index, position=None):
             break
     if src_index is None:
         raise LookupError(f"no scheduled item with id {task_id!r} to move")
-    if target_block_index < src_index:
-        raise ValueError("can only move a task later")
 
     # Validate the landing spot BEFORE mutating anything.
     if target_block_index == src_index:
         n = len(blocks[src_index]["items"])
-        # Same block: the final index must be strictly later than where it is now.
-        if position is None or not (src_pos < position <= n - 1):
-            raise ValueError("a move within its own part of the day must land at a later spot")
+        # Same block: the item is popped and re-inserted, so the final index runs 0..n-1.
+        if position is None:
+            position = n - 1                  # append (the block-end tap-target)
+        elif not (0 <= position <= n - 1):
+            raise ValueError(f"position {position} out of range for that part of the day "
+                             f"(0..{n - 1})")
+        if position == src_pos:
+            raise ValueError("that task is already in that spot — nothing to move")
     else:
         n = len(blocks[target_block_index].get("items", []))
         if position is None:
@@ -498,27 +507,31 @@ def move_item_later(task_id, target_block_index, position=None):
     return plan
 
 
-def move_priority_item_later(task_id, position):
-    """Move one item LATER in a fragmented-day (priority-shape) plan. `position` is the item's
-    FINAL index in the flat list (the tap-target the overlay showed). Pure position change —
-    priority items carry no clock times, so there is nothing to re-flow. Same honesty rule as
-    move_item_later: a day-of adjustment to the cache; the next generation replaces it.
-    Preserves generated_at/source.
+def move_priority_item(task_id, position):
+    """Move one item UP OR DOWN the ranked list of a fragmented-day (priority-shape) plan.
+    `position` is the item's FINAL index in the flat list (the tap-target the overlay showed);
+    it may be above or below where the item sits now. Pure position change — priority items
+    carry no clock times, so there is nothing to re-flow. Same honesty rule as move_item: a
+    day-of adjustment to the cache; the next generation replaces it. Preserves
+    generated_at/source.
 
     Raises LookupError (no cached plan / no priority list / id absent) and ValueError
-    (position not strictly later, or out of range)."""
+    (position out of range, or already the item's current spot)."""
     plan = load_plan()
     if plan is None:
         raise LookupError("no cached plan to move within")
     items = plan.get("items")
     if not items:
         raise LookupError("plan has no priority list to reorder (a clock-shape day moves via "
-                          "move_item_later)")
+                          "move_item)")
     src_pos = next((i for i, it in enumerate(items) if it.get("id") == task_id), None)
     if src_pos is None:
         raise LookupError(f"no item with id {task_id!r} to move")
-    if not (src_pos < position <= len(items) - 1):
-        raise ValueError("can only move a task to a later spot in the list")
+    if not (0 <= position <= len(items) - 1):
+        raise ValueError(f"position {position} out of range for the list "
+                         f"(0..{len(items) - 1})")
+    if position == src_pos:
+        raise ValueError("that task is already in that spot — nothing to move")
     item = items.pop(src_pos)
     items.insert(position, item)   # after the pop, inserting at `position` = final index
     _write_plan(plan)

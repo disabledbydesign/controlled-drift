@@ -898,6 +898,17 @@ class Handler(BaseHTTPRequestHandler):
                     return
                 self._run_write(lambda: api_write.move_object(oid, parent))
                 return
+            if suffix == "clear-field":
+                # Contract §4. REMOVES the property so the object inherits again — deliberately
+                # not `PATCH {vals:{k:''}}`, which would set an explicit empty and stop the
+                # ancestor walk. `clear_field` refuses for a format with no verified removal
+                # path, and that refusal reaches her as a 400 sentence rather than a fake success.
+                key = (body.get("field") or "").strip()
+                if not key:
+                    self._send(400, {"ok": False, "error": "clear-field needs a field"})
+                    return
+                self._run_write(lambda: api_write.clear_field(oid, key))
+                return
             if suffix == "type":
                 # Spec §5 — reclassify without losing entered data. In place, so the id (and
                 # every reference to it) survives. An unknown/missing target is a WriteRefused
@@ -1118,8 +1129,9 @@ class Handler(BaseHTTPRequestHandler):
             return
 
         if self.path == "/api/task/move":
-            # Tap-to-place, deterministic: relocate one task LATER in the CACHED plan at the
-            # tapped position, clock times re-flowed automatically from existing durations. No
+            # Tap-to-place, deterministic: relocate one task in the CACHED plan at the tapped
+            # position — EARLIER or later, June's ask — with clock times re-flowed
+            # automatically from existing durations in both affected blocks. No
             # LLM, no reorder call, no Anytype write (contrast /api/negotiate, which regenerates).
             # The move lives ONLY in the cache; the next generation rebuilds from Anytype and
             # it's gone. The overlay copy says so — no false promise of persistence.
@@ -1142,10 +1154,10 @@ class Handler(BaseHTTPRequestHandler):
                 return
             try:
                 if target is not None:
-                    plan = plan_store.move_item_later(task_id, target, position=position)
+                    plan = plan_store.move_item(task_id, target, position=position)
                 else:
-                    plan = plan_store.move_priority_item_later(task_id, position)
-            except ValueError as e:      # not later / out of range
+                    plan = plan_store.move_priority_item(task_id, position)
+            except ValueError as e:      # out of range / already there
                 self._send(400, {"error": str(e)})
                 return
             except LookupError as e:     # no cache / wrong shape / id not found
