@@ -223,11 +223,21 @@ export function useSurface({ T, name, setTheme, wide, source }: SurfaceOptions):
   };
 
   /**
-   * Settings reads the UI bag for the backend choice and the plan-content toggle, and takes
-   * the THEME from the single `useTheme()` in `App.tsx`, passed down as props. That one call
-   * site is what keeps one theme for the whole surface.
+   * Settings reads the UI bag for the backend choice and the plan-content toggle, takes the real
+   * backend LIST from the server (`st.backendOptions` — never hardcoded, see `SettingsScreen`),
+   * writes through `st.saveSettings` rather than the plain `up` (a Settings change must reach
+   * `POST /api/settings`, not just the in-memory bag), and takes the THEME from the single
+   * `useTheme()` in `App.tsx`, passed down as props. That one call site is what keeps one theme
+   * for the whole surface.
    */
-  const settingsCtx: SettingsCtx = { T, name, setTheme, ui: st.ui, up: st.up };
+  const settingsCtx: SettingsCtx = {
+    T,
+    name,
+    setTheme,
+    ui: st.ui,
+    options: st.backendOptions,
+    save: st.saveSettings,
+  };
 
   return { st, tab, goTab, detailCtx, panelCtx, focusCtx, todayCtx, settingsCtx, addCtx };
 }

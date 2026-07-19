@@ -311,8 +311,39 @@ function sleep(ms: number): Promise<void> {
   return new Promise((resolve) => setTimeout(resolve, ms));
 }
 
-/** v4's three backend option ids (v4:1161-1163). */
-export type BackendId = 'claude' | 'local' | 'api';
+/**
+ * The backend ids the SERVER accepts (`scripts/server.py` `VALID_BACKENDS`).
+ *
+ * ⚠ CORRECTED 2026-07-19 (Task 10). v4's three (`claude | local | api`, v4:1161-1163) do not
+ * match: `api` does not exist on the server and would 400 on contact, and `mistral` — June's
+ * decided production default (`backend-model-comparison` memory) — was missing entirely. Because
+ * `POST /api/settings` was never wired at all before this task, choosing either failure produced
+ * no visible error.
+ */
+export type BackendId = 'mistral' | 'openrouter' | 'claude' | 'local';
+
+/**
+ * One backend Settings can offer, and how it actually resolves.
+ *
+ * `label`, `mechanism` and `model` are read from the server's `GET /api/settings` — computed by
+ * `plan_generate.backend_descriptor`, never hand-written here — because a hardcoded description
+ * can drift from what the backend actually does, and June chooses between these based on real
+ * differences (speed, where the request goes, whether it trains on what she sends).
+ */
+export interface BackendOption {
+  id: BackendId;
+  label: string;
+  mechanism: string;
+  /** `null` for `claude`: the CLI's own default model is not pinned, so the server has none to report. */
+  model: string | null;
+}
+
+/** The shape `GET /api/settings` answers — read here, never inferred from the client side. */
+interface SettingsResponse {
+  backend?: string;
+  options?: { id: string; label: string; mechanism: string; model: string | null }[];
+  include_hobby_block?: boolean;
+}
 
 /** One "added this session" row — v4's `{id,text,project}` (v4:1140). */
 export interface ReceiptEntry {
@@ -473,6 +504,18 @@ export interface AppState {
    */
   chunkBlock: (id: string, done: boolean) => Promise<void>;
   /**
+   * The real backend list — read from `GET /api/settings` on hydration, never hardcoded. Empty
+   * until hydration answers, or if it fails; see the hydration effect for why there is no
+   * fixture-style fallback list here.
+   */
+  backendOptions: BackendOption[];
+  /**
+   * Write a Settings change — `POST /api/settings`. Optimistic like `chunkBlock`: the radio dot
+   * or switch moves immediately, and a refusal puts it back. `hobby` is translated to the
+   * server's `include_hobby_block` key here, nowhere else.
+   */
+  saveSettings: (patch: Partial<Pick<UiState, 'backend' | 'hobby'>>) => void;
+  /**
    * Ask the server for a new plan, and do not claim anything until it has one.
    *
    * `label` is the June-facing name of the control that started it, so the surface can show
@@ -600,6 +643,13 @@ export function useAppState(source: DataSource = 'live'): AppState {
    * first thing rendered when a live read is on its way.
    */
   const [liveSchema, setLiveSchema] = useState<Schema | null>(null);
+  /**
+   * The real backend list, from `GET /api/settings`. Empty until hydration answers — never a
+   * hardcoded fallback list, for the same reason `periods`' live-read failure leaves `[]` rather
+   * than showing invented content: an offered choice that does not match what the server holds
+   * is worse than an empty picker, because she would never learn a selection did nothing.
+   */
+  const [backendOptions, setBackendOptions] = useState<BackendOption[]>([]);
 
   /** Raise a SUCCESS signal. The three `apply*` seams all land here so the shape is identical. */
   const succeed = useCallback((msg: string, nodeId: string | null) => {
@@ -923,11 +973,12 @@ export function useAppState(source: DataSource = 'live'): AppState {
     let cancelled = false;
 
     void (async () => {
-      const [schemaRes, treeRes, planRes, periodsRes] = await Promise.all([
+      const [schemaRes, treeRes, planRes, periodsRes, settingsRes] = await Promise.all([
         apiGet<unknown>('/api/schema'),
         apiGet<TreeResponse>('/api/tree'),
         apiGet<LivePlan>('/api/plan'),
         apiGet<PeriodsResponse>('/api/periods'),
+        apiGet<SettingsResponse>('/api/settings'),
       ]);
       if (cancelled) return;
 
@@ -971,6 +1022,24 @@ export function useAppState(source: DataSource = 'live'): AppState {
         setPeriods([]);
         fail(`Could not read your focus periods — none are shown. ${periodsRes.error}`, {
           kind: 'periods_read',
+        });
+      }
+
+      if (settingsRes.ok) {
+        setBackendOptions((settingsRes.data.options ?? []) as BackendOption[]);
+        setUi((prev) => ({
+          ...prev,
+          ...(settingsRes.data.backend ? { backend: settingsRes.data.backend as BackendId } : null),
+          ...(typeof settingsRes.data.include_hobby_block === 'boolean'
+            ? { hobby: settingsRes.data.include_hobby_block }
+            : null),
+        }));
+      } else {
+        // Same rule as the tree and the periods: NO FIXTURE FALLBACK. Offering the old hardcoded
+        // three here would let her pick one that either 400s (`api`, gone from the server) or
+        // silently is not her production backend — an empty list plus a loud failure is honest.
+        fail(`Could not read your settings — no backend choices are shown. ${settingsRes.error}`, {
+          kind: 'settings_read',
         });
       }
     })();
@@ -1267,6 +1336,58 @@ export function useAppState(source: DataSource = 'live'): AppState {
       // depending on `ui.chunked` staying alive.
       if (res.data.plan && !res.data.plan.empty) setPlan(planFromLive(res.data.plan));
       succeed(done ? 'Done' : 'Reopened', null);
+    },
+    [live, fail, succeed],
+  );
+
+  /**
+   * Settings (Task 10) — `POST /api/settings`, wiring the backend radio and the hobby switch.
+   *
+   * ⚠ THE KEY TRANSLATION. The client's `hobby` and the server's `include_hobby_block` are the
+   * same value under two different names — `SettingsScreen` and `UiState` never learn the
+   * server's name; the mapping happens once, here.
+   *
+   * Same optimistic-then-confirm shape as `chunkBlock`, for the same reason: a radio dot or a
+   * switch that waits on a round trip before moving reads as broken. The snapshot for rollback is
+   * taken from `setUi`'s own `prev`, not from a `ui.backend`/`ui.hobby` closure — a closure over
+   * the outer `ui` would go stale if she taps twice before the first request settles, and the
+   * second rollback would restore the FIRST tap's value instead of what was on screen before it.
+   */
+  const saveSettings = useCallback(
+    (patch: Partial<Pick<UiState, 'backend' | 'hobby'>>): void => {
+      let before: Pick<UiState, 'backend' | 'hobby'> | null = null;
+      setUi((prev) => {
+        before = { backend: prev.backend, hobby: prev.hobby };
+        return { ...prev, ...patch };
+      });
+      const revert = () => {
+        const snapshot = before;
+        if (snapshot) setUi((prev) => ({ ...prev, ...snapshot }));
+      };
+
+      if (!live) {
+        revert();
+        fail('Not connected to the server — that choice was NOT saved.');
+        return;
+      }
+
+      const body: Record<string, unknown> = {};
+      if (patch.backend !== undefined) body.backend = patch.backend;
+      if (patch.hobby !== undefined) body.include_hobby_block = patch.hobby;
+
+      void (async () => {
+        const res = await apiSend<{ backend?: string; include_hobby_block?: boolean }>(
+          'POST',
+          '/api/settings',
+          body,
+        );
+        if (!res.ok) {
+          revert();
+          fail(`That choice was NOT saved. ${res.error}`);
+          return;
+        }
+        succeed('Saved', null);
+      })();
     },
     [live, fail, succeed],
   );
@@ -1572,6 +1693,8 @@ export function useAppState(source: DataSource = 'live'): AppState {
     authorFocus,
     saveFocusPeriod,
     chunkBlock,
+    backendOptions,
+    saveSettings,
     regenerate,
     generating,
     dismissToast,

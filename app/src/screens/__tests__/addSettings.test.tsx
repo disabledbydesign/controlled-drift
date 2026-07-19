@@ -29,6 +29,7 @@ import type { AddCtx, AddUi } from '../AddScreen.tsx';
 import type { CreatedItem, WeedEntry } from '../../api/capture.ts';
 import { SettingsScreen } from '../SettingsScreen.tsx';
 import type { SettingsCtx, SettingsUi } from '../SettingsScreen.tsx';
+import type { BackendOption } from '../../shell/useAppState.ts';
 
 afterEach(cleanup);
 
@@ -325,6 +326,19 @@ describe('AddScreen — log', () => {
 
 const BASE_SETTINGS_UI: SettingsUi = { backend: 'claude', hobby: true };
 
+/**
+ * The real `GET /api/settings` option list — `mistral | openrouter | claude | local`, verbatim
+ * from `curl -s localhost:5050/api/settings` (2026-07-19). NOT v4's hardcoded three
+ * (`claude | local | api`): `api` does not exist on the server, and `mistral` — June's decided
+ * production default — was missing from v4's list entirely.
+ */
+const BASE_BACKEND_OPTIONS: BackendOption[] = [
+  { id: 'mistral', label: 'Mistral', mechanism: 'Mistral API (direct)', model: 'mistral-large-latest' },
+  { id: 'openrouter', label: 'OpenRouter', mechanism: 'OpenRouter API', model: 'anthropic/claude-sonnet-4' },
+  { id: 'claude', label: 'Claude', mechanism: 'claude -p CLI (your subscription)', model: null },
+  { id: 'local', label: 'Local', mechanism: 'on-device (MLX)', model: 'mlx-community/Qwen2.5-7B-Instruct-4bit' },
+];
+
 function settingsCtx(
   over: Omit<Partial<SettingsCtx>, 'ui'> & { ui?: Partial<SettingsUi> } = {},
 ): SettingsCtx {
@@ -333,7 +347,8 @@ function settingsCtx(
     name: over.name ?? 'celestial',
     setTheme: over.setTheme ?? vi.fn(),
     ui: { ...BASE_SETTINGS_UI, ...over.ui },
-    up: over.up ?? vi.fn(),
+    options: over.options ?? BASE_BACKEND_OPTIONS,
+    save: over.save ?? vi.fn(),
   };
 }
 
@@ -376,25 +391,49 @@ describe('SettingsScreen', () => {
     expect(dotOf('Celestial')).toContain('border-radius: 2px');
   });
 
-  it('the backend picker writes the bag and shows the current choice as selected', () => {
-    const up = vi.fn();
-    render(<SettingsScreen ctx={settingsCtx({ up })} />);
-    expect(screen.getByText('Claude subscription')).toBeTruthy();
-    expect(screen.getByText('Local model')).toBeTruthy();
-    expect(screen.getByText('Open-source API')).toBeTruthy();
+  it('renders exactly the options `ctx.options` was given — the server list, not a hardcoded one', () => {
+    // A hardcoded three (`claude | local | api`) would neither show 'OpenRouter' nor offer
+    // 'mistral' at all — this is the assertion a reversion to that old list fails.
+    render(<SettingsScreen ctx={settingsCtx()} />);
+    expect(screen.getByText('Mistral')).toBeTruthy();
+    expect(screen.getByText('OpenRouter')).toBeTruthy();
+    expect(screen.getByText('Claude')).toBeTruthy();
+    expect(screen.getByText('Local')).toBeTruthy();
+    expect(screen.queryByText('Open-source API')).toBeNull();
+  });
 
-    fireEvent.click(screen.getByText('Local model'));
-    expect(up).toHaveBeenCalledWith({ backend: 'local' });
+  it('shows the real routing mechanism and model per option, not a hand-written description', () => {
+    render(<SettingsScreen ctx={settingsCtx()} />);
+    expect(screen.getByText('Mistral API (direct) · mistral-large-latest')).toBeTruthy();
+    expect(screen.getByText('OpenRouter API · anthropic/claude-sonnet-4')).toBeTruthy();
+    // claude's `model` is null — the line falls back to the mechanism alone, no dangling "· null".
+    expect(screen.getByText('claude -p CLI (your subscription)')).toBeTruthy();
+    expect(screen.getByText('on-device (MLX) · mlx-community/Qwen2.5-7B-Instruct-4bit')).toBeTruthy();
+  });
+
+  it('an empty option list (a failed settings read) renders no backend rows at all', () => {
+    render(<SettingsScreen ctx={settingsCtx({ options: [] })} />);
+    expect(screen.queryByText('Mistral')).toBeNull();
+    expect(screen.queryByText('Claude')).toBeNull();
+  });
+
+  it('the backend picker saves the id the server sent, and shows the current choice as selected', () => {
+    const save = vi.fn();
+    render(<SettingsScreen ctx={settingsCtx({ save, ui: { backend: 'claude' } })} />);
+
+    fireEvent.click(screen.getByText('Local'));
+    // The value sent is the option's own `id` — not a client-invented one.
+    expect(save).toHaveBeenCalledWith({ backend: 'local' });
   });
 
   it('the plan-content toggle reflects and flips `hobby`', () => {
-    const up = vi.fn();
-    const { rerender } = render(<SettingsScreen ctx={settingsCtx({ up })} />);
+    const save = vi.fn();
+    const { rerender } = render(<SettingsScreen ctx={settingsCtx({ save })} />);
     fireEvent.click(screen.getByText('Include creative / hobby work'));
-    expect(up).toHaveBeenCalledWith({ hobby: false });
+    expect(save).toHaveBeenCalledWith({ hobby: false });
 
-    rerender(<SettingsScreen ctx={settingsCtx({ up, ui: { hobby: false } })} />);
+    rerender(<SettingsScreen ctx={settingsCtx({ save, ui: { hobby: false } })} />);
     fireEvent.click(screen.getByText('Include creative / hobby work'));
-    expect(up).toHaveBeenLastCalledWith({ hobby: true });
+    expect(save).toHaveBeenLastCalledWith({ hobby: true });
   });
 });

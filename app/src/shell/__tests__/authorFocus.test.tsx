@@ -46,6 +46,9 @@ function hydrate(opts: { status?: unknown; result?: unknown } = {}) {
     if (path === '/api/schema') return { ok: true, data: { relations: {}, types: {} } };
     if (path === '/api/plan') return { ok: true, data: { empty: true } };
     if (path === '/api/periods') return { ok: true, data: { periods: [] } };
+    // Task 10 added this read; answered here so a failed read's toast doesn't sit in state and
+    // get mistaken for this feature's own signal.
+    if (path === '/api/settings') return { ok: true, data: { backend: 'mistral', options: [], include_hobby_block: false } };
     if (path === '/api/focus/status') {
       return { ok: true, data: opts.status ?? { state: 'idle', result_ready: true } };
     }

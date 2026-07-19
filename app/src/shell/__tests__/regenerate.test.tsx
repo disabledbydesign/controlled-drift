@@ -65,6 +65,9 @@ function hydrate() {
     if (path === '/api/schema') return { ok: true, data: { relations: {}, types: {} } };
     if (path === '/api/plan') return { ok: true, data: { empty: true } };
     if (path === '/api/periods') return { ok: true, data: { periods: [] } };
+    // Same reason as `/api/schema` above (Task 10 added this read): a failed settings read
+    // raises its own failure signal that would sit in `toast` and be mistaken for this feature's.
+    if (path === '/api/settings') return { ok: true, data: { backend: 'mistral', options: [], include_hobby_block: false } };
     return { ok: false, error: 'not part of this test' };
   });
 }

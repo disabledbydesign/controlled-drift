@@ -83,6 +83,9 @@ function hydrate(plan: unknown = livePlan(false)) {
     if (path === '/api/schema') return { ok: true, data: { relations: {}, types: {} } };
     if (path === '/api/plan') return { ok: true, data: plan };
     if (path === '/api/periods') return { ok: true, data: { periods: [] } };
+    // Not this test's concern (Task 10 added the read) — answered so it doesn't raise a
+    // spurious failure toast that these tests' own assertions would then trip over.
+    if (path === '/api/settings') return { ok: true, data: { backend: 'mistral', options: [], include_hobby_block: false } };
     return { ok: false, error: 'not part of this test' };
   });
 }

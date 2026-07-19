@@ -1,7 +1,7 @@
 import { alpha, themes } from '@tokens';
 import type { Theme, ThemeName } from '@tokens';
 import { bevel, glow, Switch } from '../components/atoms/index.ts';
-import type { BackendId } from '../shell/useAppState.ts';
+import type { BackendId, BackendOption } from '../shell/useAppState.ts';
 
 /**
  * Settings — v4 `settingsPanel()` (1152) and `themeSection()` (1144).
@@ -18,6 +18,14 @@ import type { BackendId } from '../shell/useAppState.ts';
  *
  * Persistence is `useTheme`'s existing `localStorage` effect on `cd_theme` — nothing is added
  * here for it, which is why the choice survives a reload.
+ *
+ * ── the backend list is READ, never hardcoded (Task 10) ─────────────────────
+ * v4's three static rows (`claude | local | api`) do not match what `scripts/server.py` accepts
+ * (`mistral | openrouter | claude | local`) — `api` does not exist there and `mistral`, June's
+ * decided production default, was missing. Neither control reached the server at all before this
+ * task, so a wrong option produced no visible error. `ctx.options` is `GET /api/settings`'s own
+ * list (`plan_generate.backend_descriptor`, computed server-side) — this screen renders it, it
+ * does not invent it.
  */
 
 /** The slice of the UI bag Settings reads. `UiState` satisfies it structurally. */
@@ -31,7 +39,10 @@ export interface SettingsCtx {
   name: ThemeName;
   setTheme: (n: ThemeName) => void;
   ui: SettingsUi;
-  up: (patch: Partial<SettingsUi>) => void;
+  /** The real backend list from the server. Empty until it has loaded (or if the read failed). */
+  options: BackendOption[];
+  /** `POST /api/settings` — writes `backend` or `hobby` (translated to `include_hobby_block`). */
+  save: (patch: Partial<SettingsUi>) => void;
 }
 
 export function SettingsScreen({ ctx }: { ctx: SettingsCtx }) {
@@ -40,13 +51,14 @@ export function SettingsScreen({ ctx }: { ctx: SettingsCtx }) {
   const be = ui.backend;
   const hobby = ui.hobby;
 
-  /** v4:1153 — one radio row per backend. */
-  const opt = (id: BackendId, name: string, detail: string) => {
-    const on = be === id;
+  /** One radio row per backend option the server actually offers. */
+  const opt = (o: BackendOption) => {
+    const on = be === o.id;
+    const detail = o.model ? `${o.mechanism} · ${o.model}` : o.mechanism;
     return (
       <button
-        key={id}
-        onClick={() => ctx.up({ backend: id })}
+        key={o.id}
+        onClick={() => ctx.save({ backend: o.id })}
         style={{
           display: 'flex',
           alignItems: 'flex-start',
@@ -84,7 +96,7 @@ export function SettingsScreen({ ctx }: { ctx: SettingsCtx }) {
           ) : null}
         </span>
         <div>
-          <div style={{ fontSize: '13px', color: on ? C.text : C.dim }}>{name}</div>
+          <div style={{ fontSize: '13px', color: on ? C.text : C.dim }}>{o.label}</div>
           <div
             style={{
               fontSize: '11px',
@@ -107,15 +119,13 @@ export function SettingsScreen({ ctx }: { ctx: SettingsCtx }) {
 
       <div style={{ padding: '13px 14px' }}>
         <div style={EYEBROW(C.dimmer)}>which model writes your plans</div>
-        {opt('claude', 'Claude subscription', 'anthropic · your login — default')}
-        {opt('local', 'Local model', 'ollama/mlx · offline, billing-proof')}
-        {opt('api', 'Open-source API', 'openrouter · hosted backup')}
+        {ctx.options.map(opt)}
       </div>
 
       <div style={{ padding: '13px 14px', borderTop: '1px solid ' + C.border }}>
         <div style={EYEBROW(C.dimmer)}>what your daily plan includes</div>
         <button
-          onClick={() => ctx.up({ hobby: !hobby })}
+          onClick={() => ctx.save({ hobby: !hobby })}
           style={{
             display: 'flex',
             alignItems: 'center',
