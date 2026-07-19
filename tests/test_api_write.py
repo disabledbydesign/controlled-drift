@@ -490,3 +490,25 @@ def test_converting_a_recurring_away_and_back_keeps_her_cadence_not_the_default(
     api_write.convert_type("rec-1", "Recurring")
     stored = api_write._stored_values(api_write._get_object("rec-1"))
     assert stored.get(api_write.INTERVAL_UNIT_PROP) == "month"
+
+
+def test_a_cadence_default_that_does_not_persist_is_reported_not_reported_as_success(space):
+    """Cross-family review gate, 2026-07-18. The `as_needed` gap-filler was written and never
+    proven. It cannot be covered by the no-field-was-dropped loop, because that loop walks the
+    fields the object held BEFORE and the whole point of the default is that this one was absent.
+
+    So a silently-swallowed interval write left `convert_type` returning `{"ok": True}` for a
+    Recurring that `datetime_seam` will never surface — the exact outcome the default exists to
+    prevent, now arriving with a success message on it. Here Anytype accepts the write and drops
+    that one property; the conversion must fail loudly rather than report success.
+    """
+    real_apply = space._apply
+
+    def drop_the_interval(oid, props):
+        real_apply(oid, [p for p in props
+                         if p.get("key") != fake_space.prop_meta(
+                             api_write.INTERVAL_UNIT_PROP)["key"]])
+
+    space._apply = drop_the_interval
+    with pytest.raises(RuntimeError, match="Interval unit"):
+        api_write.convert_type("task-1", "Recurring")

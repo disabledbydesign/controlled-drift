@@ -748,6 +748,17 @@ def convert_type(object_id, target):
 
     rewritten = set(expected_links) | {WORKSTREAM_PROP}
     kept_after = _stored_values(final)
+
+    # The cadence default gets its own read-back, because the no-field-was-dropped loop below
+    # cannot cover it: that loop walks `kept_before`, and the whole point of the default is that
+    # the field was ABSENT before. Without this check a silently-failed interval write reports
+    # success and leaves exactly the permanently-invisible recurring the default exists to prevent.
+    if props.get(INTERVAL_UNIT_PROP) == AS_NEEDED and not kept_after.get(INTERVAL_UNIT_PROP):
+        raise RuntimeError(
+            f"api_write: {INTERVAL_UNIT_PROP!r} did not persist on {object_id!r} "
+            f"(wrote {AS_NEEDED!r}, read back {kept_after.get(INTERVAL_UNIT_PROP)!r}) — a "
+            f"Recurring with no interval unit can never surface in her plan, so this is a "
+            f"failed convert, not a partial one")
     for name, was in kept_before.items():
         if name in rewritten:
             continue

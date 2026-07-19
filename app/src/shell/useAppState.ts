@@ -417,6 +417,15 @@ function emptyPlan(): Plan {
   return { date: '', generated: '', shape: 'schedule', woven: '', blocks: [] };
 }
 
+/**
+ * The writes that change exactly one node and nothing about the shape of the forest — so a
+ * failure can be undone by putting that one node back, leaving every other edit alone.
+ *
+ * `move`, `create` and `archive` are deliberately absent: undoing those means re-parenting,
+ * removing, or re-inserting at a remembered position, which the snapshot path still handles.
+ */
+const PER_NODE_OPS = new Set(['patchVals', 'patchTitle', 'complete', 'recurringActive', 'unsupported']);
+
 export function useAppState(source: DataSource = 'live'): AppState {
   const live = source === 'live';
   const [graph, setGraph] = useState<Graph>(live ? emptyGraph : initialGraph);
@@ -475,10 +484,17 @@ export function useAppState(source: DataSource = 'live'): AppState {
   /**
    * The graph as it is RIGHT NOW, for the async write path.
    *
-   * A write resolves hundreds of milliseconds after `apply` returned, by which time `graph`
-   * captured in that closure is stale — she may have edited two more fields. Rolling back to a
-   * captured graph would silently discard those. The ref always holds the current value, so a
-   * rollback edits the live graph rather than replacing it.
+   * A write resolves hundreds of milliseconds after `apply` returned, by which time the `graph`
+   * captured in that closure is stale — she may have edited two more fields since. The ref
+   * always holds the current value, which is what lets a rollback edit the live graph instead of
+   * replacing it wholesale.
+   *
+   * ⚠ Corrected 2026-07-18 (cross-family review gate). This comment previously claimed the
+   * rollback already worked that way. It did not — `rollback` called `setGraph(before)` with a
+   * whole-graph snapshot, so any edit she made while a write was in flight was wiped from the
+   * screen when that write failed, while its own write succeeded on the server. The comment
+   * describing the safe behaviour was the reason nobody looked. See `revertOne` below for what
+   * the code now actually does, and which cases it still does not cover.
    */
   const graphRef = useRef(graph);
   graphRef.current = graph;
@@ -517,11 +533,36 @@ export function useAppState(source: DataSource = 'live'): AppState {
    * UNDONE visibly, which is what the rollback and the persistent failure bar do together.
    */
   const performWrite = useCallback(
-    async (intent: WriteIntent, before: Graph) => {
-      const rollback = (msg: string, id: string | null) => {
-        setGraph(before);
+    async (intent: WriteIntent, before: Graph, beforeNode: ModelNode | null) => {
+      /**
+       * Undo one failed write.
+       *
+       * Two paths, because the two kinds of write fail differently:
+       *
+       * · A FIELD write touched exactly one node, so only that node is put back — into the graph
+       *   as it is NOW, not as it was when the write started. Anything she changed in the
+       *   meantime survives. This is the case the 600ms title debounce widens, and the one that
+       *   happens most, so it is the one that must not lose her work.
+       *
+       * · A STRUCTURAL write (move, create, archive) reshapes the forest, and undoing it means
+       *   re-parenting, removing or re-inserting at a remembered position. Reverting those
+       *   against a graph that has since changed is a genuinely harder problem than it looks, so
+       *   they still restore the snapshot. The exposure is real but much smaller: none of them
+       *   is debounced, each is one deliberate action rather than a keystroke burst, so the
+       *   window is a single round trip rather than 600ms plus one.
+       *
+       * NOT a general undo stack, and deliberately not — this only ever reverts the one write
+       * that just failed.
+       */
+      const revertOne = (msg: string, id: string | null) => {
+        if (beforeNode && id) {
+          setGraph((cur) => updateNode(cur, id, () => beforeNode).graph);
+        } else {
+          setGraph(before);
+        }
         fail(msg, { nodeId: id, before: intent });
       };
+      const rollback = revertOne;
 
       if (intent.op === 'unsupported') {
         // Never a silent success. The optimistic change is reverted and she is told which
@@ -651,6 +692,16 @@ export function useAppState(source: DataSource = 'live'): AppState {
   const apply = useCallback(
     (result: MutationResult) => {
       const before = graphRef.current;
+      // The node as it was, for the precise revert. Captured BEFORE the optimistic change is
+      // applied, and only for the writes that touch exactly one node — `move`, `create` and
+      // `archive` reshape the forest, so putting one node back would not undo them. `node()`
+      // returns null for an id that is not in the graph (a `create`'s tempId), which lands on
+      // the snapshot path on its own without a second condition to keep in sync.
+      // `updateNode` with an identity function is a lookup that returns the node and the SAME
+      // graph back — so this reads the node without building a whole index on every write.
+      const beforeNode = PER_NODE_OPS.has(result.write?.op ?? '')
+        ? updateNode(before, (result.write as { id?: string } | undefined)?.id ?? '', (n) => n).node
+        : null;
       setGraph(result.graph);
       graphRef.current = result.graph;
       if (result.ui) setUi((prev) => ({ ...prev, ...result.ui }));
@@ -672,12 +723,12 @@ export function useAppState(source: DataSource = 'live'): AppState {
           intent.id,
           setTimeout(() => {
             titleTimers.current.delete(intent.id);
-            void performWrite(intent, before);
+            void performWrite(intent, before, beforeNode);
           }, 600),
         );
         return;
       }
-      void performWrite(intent, before);
+      void performWrite(intent, before, beforeNode);
     },
     [live, performWrite, succeed],
   );
