@@ -125,17 +125,36 @@ class _Rng:
         return self.s / 0x7FFFFFFF
 
 
-# The macOS icon grid: the art sits inside the 1024 canvas with a transparent margin and is
-# masked to the rounded "squircle", so the Dock shows it rounded like every other icon instead
-# of a hard square. Apple's own icons use ~824px art; third-party icons tend to fill a touch
-# more, so 896 (GRID_PAD 64) sits at the same visual size as neighbours like Steam/Notes.
-GRID_PAD = 64
+# The macOS icon grid: the art sits inside the 1024 canvas with a small transparent margin and
+# is masked to the Apple "squircle" so the Dock shows it rounded like every other icon instead
+# of a hard square. GRID_PAD 36 → 952px art (~93%), the visual size of Dock neighbours.
+GRID_PAD = 36
+
+
+def _apple_squircle_mask(size, n=5.0):
+    """The macOS icon shape — a superellipse (continuous corners), NOT a circular-arc rounded
+    rect. `n≈5` matches Apple's squircle far better than `rounded_rectangle`, whose corners read
+    as visibly rounder/off. Sampled as a polygon at 4× and downscaled for a clean antialiased edge."""
+    ss = 4
+    s = size * ss
+    a = s / 2.0
+    pts = []
+    steps = 720
+    for i in range(steps):
+        t = 2 * math.pi * i / steps
+        ct, stt = math.cos(t), math.sin(t)
+        x = a + a * math.copysign(abs(ct) ** (2.0 / n), ct)
+        y = a + a * math.copysign(abs(stt) ** (2.0 / n), stt)
+        pts.append((x, y))
+    m = Image.new("L", (s, s), 0)
+    ImageDraw.Draw(m).polygon(pts, fill=255)
+    return m.resize((size, size), Image.LANCZOS)
 
 
 def _fit_macos_grid(raw):
     art = S - 2 * GRID_PAD
     face = raw.convert("RGBA").resize((art, art), Image.LANCZOS)
-    face.putalpha(_squircle_mask(art, round(art * 0.2237)))  # transparent, rounded corners
+    face.putalpha(_apple_squircle_mask(art))  # transparent, Apple-shaped corners
     canvas = Image.new("RGBA", (S, S), (0, 0, 0, 0))
     canvas.alpha_composite(face, (GRID_PAD, GRID_PAD))
     return canvas
