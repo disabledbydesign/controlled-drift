@@ -13,6 +13,7 @@ places her judgment is actually needed.
 Usage: python3 scripts/semantics_report.py [out.md]
 """
 import os
+import re
 import sys
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
@@ -182,13 +183,45 @@ def render():
     return "\n".join(L) + "\n"
 
 
+#: A line June has written into a generated sheet. She reviews these by ANNOTATING them in place
+#: (`docs/field_semantics_review.md`, committed as "June's annotations on the field-semantics
+#: review"), so the output file is not purely derived — it holds work that exists nowhere else.
+#: Her annotations are BLOCKQUOTE lines (`>> June: keep this`), which is how she marks up a
+#: generated sheet. Matching a bare "June:" would be wrong in both directions: the generated prose
+#: quotes her by name 23 times (so it would false-positive on a fresh, un-annotated sheet), while
+#: her 16 real annotations all begin `>>`. An earlier version of this guard matched
+#: `^\s*june\s*:` and silently failed to fire — it destroyed the file a SECOND time.
+_ANNOTATION = re.compile(r"^>>", re.M)
+
+
 def main():
     here = os.path.dirname(os.path.abspath(__file__))
     out = sys.argv[1] if len(sys.argv) > 1 else os.path.join(here, DEFAULT_OUT)
+
+    # ⚠ REFUSE TO CLOBBER HER NOTES (2026-07-19). This script overwrote the review sheet and
+    # destroyed 17 of her 23 annotations; they survived only because they were already committed.
+    # A generator that silently eats hand-written work is the "overwriting work June likes"
+    # failure, and nothing here warned — the run printed a cheerful [ok].
+    if os.path.exists(out) and not os.environ.get("CD_OVERWRITE_ANNOTATED"):
+        with open(out) as f:
+            existing = f.read()
+        notes = len(_ANNOTATION.findall(existing))
+        if notes:
+            print(f"[refused] {os.path.abspath(out)} holds {notes} of June's annotations.",
+                  file=sys.stderr)
+            print("          Regenerating would destroy them, and they exist nowhere else.",
+                  file=sys.stderr)
+            print("          Write elsewhere:  python3 scripts/semantics_report.py <other-path>",
+                  file=sys.stderr)
+            print("          Or, deliberately: CD_OVERWRITE_ANNOTATED=1 python3 scripts/semantics_report.py",
+                  file=sys.stderr)
+            return 1
+
     with open(out, "w") as f:
         f.write(render())
     print(f"[ok] {len(fs.FIELDS)} fields -> {os.path.abspath(out)}")
+    return 0
 
 
 if __name__ == "__main__":
-    main()
+    sys.exit(main())

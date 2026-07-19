@@ -610,7 +610,7 @@ FIELDS = {
 
     "Side": {
         "types": ("Project",),
-        "means": "An orthogonal life-domain marker on a project: Obligation / Wellbeing / Fun-hobby "
+        "means": "An orthogonal life-domain marker on a project: Work / Wellbeing / Fun / hobby "
                  "/ Daily life (Daily life added 2026-07-13, marking the sustainable-daily-life "
                  "subprojects — medical, household, self-care, social).",
         "not_this": "A priority or a ranking. It is applied orthogonally to engagement, never "
@@ -623,11 +623,17 @@ FIELDS = {
             "Descendants inherit from the nearest ancestor that has it set.",
         ],
         "source": "AI_LAYER_SPEC.md §2 selection-reconciliation note (2026-07-11 / 2026-07-13)",
-        "observed": "The rename Obligation → Work (backend spec §12) is DECIDED — June, "
-                    "2026-07-18: \"lets rename to work\" — and is another thread's to apply. Not "
-                    "live as of 2026-07-18, so `Obligation` is still the only writable name. "
-                    "Wellbeing and Obligation are distinguished in the docs but not in any "
-                    "selection code; the difference is currently semantic only.",
+        "observed": "The rename Obligation → Work (backend spec §12, June 2026-07-18: \"lets rename "
+                    "to work\") IS LIVE as of 2026-07-19 — verified by reading the property's tag "
+                    "list off the live space, which returns exactly Work / Daily life / Fun / hobby "
+                    "/ Wellbeing. `Obligation` no longer exists and writing it is a silent no-op, "
+                    "because Anytype drops an unknown tag without erroring. ⚠ This entry itself "
+                    "named `Obligation` as \"the only writable name\" for a day after the rename "
+                    "shipped — an instruction to write a value the space had already dropped. That "
+                    "is the failure BUILD_DOC §3 clause 5 exists to prevent: the semantics a model "
+                    "reads immediately before writing to her real data must move in the same commit "
+                    "as the schema. Wellbeing and Work are distinguished in the docs but not in any "
+                    "selection code; that difference is still semantic only.",
     },
 
     "Block chunk min": {
@@ -1078,7 +1084,7 @@ HINTS = {
     "Relevant docs": "Files or folders the AI should read before working on this.",
     "AI autonomous": "Can the AI do this with minimal oversight?",
     "Done": "The completion checkbox. Rest counts as a real, checkable task.",
-    "Side": "Life domain: Obligation / Wellbeing / Fun-hobby / Daily life. Not a priority.",
+    "Side": "Life domain: Work / Wellbeing / Fun / hobby / Daily life. Not a priority.",
     "Block chunk min": "How many minutes one work chunk on this project should be.",
     "Interval unit": "day / week / month / as_needed.",
     "Interval count": "The N in 'every N days/weeks/months'.",
@@ -1518,11 +1524,12 @@ DOES = {
         "status": "live",
         "written_by": "The capture path, the weeding gate, server.py, focus_period_author.py, and "
                       "the app's detail pane (on Project and sub-project only — not on work "
-                      "streams, goals or tasks). ⚠ A RENAME IS AGREED: June, 2026-07-18, "
-                      "\"lets rename to work\" — Obligation becomes Work per "
-                      "docs/review_reorganize_backend_spec.md §12. Another thread is applying it; "
-                      "until then the live option is still `Obligation`, and only live option "
-                      "names may be written.",
+                      "streams, goals or tasks). The rename June asked for on 2026-07-18 "
+                      "(\"lets rename to work\", docs/review_reorganize_backend_spec.md §12) IS "
+                      "LIVE as of 2026-07-19: the live options are Work / Daily life / Fun / "
+                      "hobby / Wellbeing. `Obligation` is gone — writing it does nothing at all, "
+                      "since an unknown tag is dropped without an error. Only live option names "
+                      "may be written.",
         "read_by": "This is the field with the widest visible consequence, so what it does is "
                    "worth knowing precisely. BACKEND — grain.py:21-40 is the whole rule, and it "
                    "runs on every plan (daily_plan.py, plan_generate.py, "
