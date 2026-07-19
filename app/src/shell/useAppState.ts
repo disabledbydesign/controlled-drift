@@ -1693,10 +1693,25 @@ export function useAppState(source: DataSource = 'live'): AppState {
         delete editOpen[id];
         return { ...prev, editOpen, movePick: prev.movePick === id ? null : prev.movePick };
       });
-      // The removal HAPPENED even when a log write did not. Say the true thing first, then the
-      // caveat — never let the caveat stand in for the outcome.
-      succeed('Taken off today', null);
-      if (res.warning) fail(res.warning, { nodeId: id });
+      /**
+       * The removal HAPPENED even when a log write did not — so the outcome leads, and the
+       * caveat follows it IN THE SAME SIGNAL.
+       *
+       * ⚠ REVIEW FINDING B4, and the comment here used to describe behaviour the code did not
+       * have. `setToast` is a SINGLE SLOT: raising the outcome and then raising the caveat
+       * replaced the first with the second, so the only thing she ever saw was the caveat —
+       * exactly the inversion this comment forbids. Two calls cannot say two things here.
+       *
+       * The durable record is kept separately and deliberately. A partial write that exists only
+       * in a toast she dismissed is not diagnosable afterwards, which is what `errorLog` is for;
+       * but a failure-kind toast would have told her the removal did not happen, and it did.
+       */
+      if (res.warning) {
+        logFailure(res.warning, { objectId: id, before: null });
+        succeed(`Taken off today. ${res.warning}`, null);
+      } else {
+        succeed('Taken off today', null);
+      }
     },
     [rowWriteGuard, fail, succeed],
   );

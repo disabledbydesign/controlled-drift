@@ -24,7 +24,7 @@
 
 import { describe, expect, it } from 'vitest';
 import type { Plan, PlanItem } from '../../../fixtures/index.ts';
-import { moveDestinations } from '../moveTargets.ts';
+import { moveDestinations, moveOptions } from '../moveTargets.ts';
 
 const task = (id: string, title: string): PlanItem =>
   ({ kind: 'task', id, task: title, time: '', durationMin: 30, why: '' }) as PlanItem;
@@ -95,8 +95,8 @@ describe('moveDestinations — a fragmented (priority) day', () => {
       1,
     );
     expect(moveDestinations(withAppt, 'a', titleOf)).toEqual([
-      { key: '0:2', label: 'after Email', target: { block: null, position: 1 } },
-      { key: '0:3', label: 'after Laundry', target: { block: null, position: 2 } },
+      { key: '0:2', label: 'after Email', target: { block: null, position: 1 }, bandIndex: 0, beforeIndex: 3 },
+      { key: '0:3', label: 'after Laundry', target: { block: null, position: 2 }, bandIndex: 0, beforeIndex: 4 },
     ]);
   });
 
@@ -167,5 +167,85 @@ describe('moveDestinations — a clock (schedule) day', () => {
     const keys = moveDestinations(plan, 'a', titleOf).map((d) => d.key);
     expect(keys.length).toBeGreaterThan(1);
     expect(new Set(keys).size).toBe(keys.length);
+  });
+});
+
+/**
+ * ── WHY `moveOptions` EXISTS ALONGSIDE `moveDestinations` ────────────────────
+ * An empty list had exactly one June-facing sentence behind it — "There is nowhere else to put
+ * this today." — and it covered three different truths, one of which was a lie. `moveOptions`
+ * returns the REASON so the surface can say the true one, and so the appointment case can be
+ * withheld rather than offered and 404ed.
+ */
+describe('moveOptions — why a move is not on offer', () => {
+  const plan = priorityPlan([task('a', 'Call the clinic'), task('b', 'Email Sam')]);
+
+  it('reports no refusal, and the destinations, for an ordinary row', () => {
+    const opts = moveOptions(plan, 'a', titleOf);
+    expect(opts.refusal).toBeNull();
+    expect(opts.destinations.length).toBeGreaterThan(0);
+  });
+
+  it('names the row it could not find, rather than claiming there is nowhere to put it', () => {
+    const opts = moveOptions(plan, 'nosuch', titleOf);
+    expect(opts.refusal).toBe('not-found');
+    expect(opts.destinations).toEqual([]);
+  });
+
+  /**
+   * B1, controller-confirmed. `adapt.ts` turns an appointment into `kind:'task'`, so the row
+   * mounts the panel; `offsetOf` then computes its position as −1 and the server 404s the id it
+   * never indexed. The refusal has to come from the geometry, not from a row-kind flag, because
+   * by the time the plan reaches the surface the appointment IS a task row.
+   */
+  it('refuses a folded-in APPOINTMENT, whose position the server never indexed', () => {
+    const withAppt = priorityPlan([task('appt', 'Therapy'), task('a', 'Call'), task('b', 'Email')], 1);
+    const opts = moveOptions(withAppt, 'appt', titleOf);
+    expect(opts.refusal).toBe('appointment');
+    expect(opts.destinations).toEqual([]);
+    // Positively: the same plan DOES offer destinations for the row right after it, so this
+    // cannot pass against a function that refuses everything.
+    expect(moveOptions(withAppt, 'a', titleOf).refusal).toBeNull();
+  });
+
+  it('reports nowhere-to-go only when the row is real and genuinely has no destination', () => {
+    const alone = priorityPlan([task('a', 'The only thing')]);
+    const opts = moveOptions(alone, 'a', titleOf);
+    expect(opts.refusal).toBe('nowhere');
+    expect(opts.destinations).toEqual([]);
+  });
+});
+
+/**
+ * ── THE RENDER ANCHORS (A2) ─────────────────────────────────────────────────
+ * June asked to see WHERE a thing goes rather than read labels for it, so each destination now
+ * also says which band it belongs to and which rendered row it sits before. Those two numbers
+ * are what lets the plan itself draw the "move here" target in the right slot; without them the
+ * list can only be rendered as text.
+ */
+describe('destination render anchors', () => {
+  it('anchors "first in ..." before the first NON-appointment row of its band', () => {
+    const withAppt = priorityPlan([task('appt', 'Therapy'), task('a', 'Call'), task('b', 'Email')], 1);
+    const first = moveOptions(withAppt, 'b', titleOf).destinations.find(
+      (d) => d.label === 'first in the list',
+    );
+    expect(first).toBeDefined();
+    // Rendered index 1 — after Therapy, before Call. Not 0, which would offer a slot above an
+    // appointment the server does not index.
+    expect(first!.bandIndex).toBe(0);
+    expect(first!.beforeIndex).toBe(1);
+  });
+
+  it('anchors "after X" immediately below the rendered row it names', () => {
+    const sched = schedulePlan([
+      { label: 'Morning', items: [task('a', 'One'), task('b', 'Two')] },
+      { label: 'Afternoon', items: [task('c', 'Three'), brk(), task('d', 'Four')] },
+    ]);
+    const after = moveOptions(sched, 'a', titleOf).destinations.find(
+      (d) => d.label === 'after Four',
+    )!;
+    expect(after.bandIndex).toBe(1);
+    // 'Four' is rendered index 2 of Afternoon, so the slot below it is 3.
+    expect(after.beforeIndex).toBe(3);
   });
 });

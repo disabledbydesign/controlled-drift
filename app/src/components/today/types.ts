@@ -12,6 +12,7 @@ import type { Theme } from '@tokens';
 import type { Period, Plan } from '../../fixtures/index.ts';
 import type { ArcStepRef, Graph, GraphIndex, MutationResult, PlanResult } from '../../model/index.ts';
 import type { FocusCtx } from '../focus/types.ts';
+import type { MoveTarget } from '../../api/planRow.ts';
 
 /** v4:63 — `this.PANEL='.16s ease'`. Duplicated for the same one-way-dependency reason. */
 export const PANEL = '.16s ease';
@@ -168,10 +169,12 @@ export interface TodayCtx {
    * Bidirectional: earlier and later both work, and the server re-flows the clock times. The
    * target comes from `moveDestinations`, which owns the index arithmetic.
    *
-   * ⚠ Declared structurally rather than importing `api/planRow`'s `MoveTarget`, following this
-   * file's one-way-dependency rule. If the two drift, the mount point stops compiling.
+   * ⚠ IMPORTED, not redeclared (review finding B6). This was the third structural copy of one
+   * wire contract, and three copies is three chances for an importer to take the wrong one.
+   * The one-way-dependency rule this file states is about VALUES, not types: a type-only import
+   * from `api/planRow` emits nothing and cannot pull the api layer into a component bundle.
    */
-  moveItem: (id: string, target: { block: number | null; position: number }) => void;
+  moveItem: (id: string, target: MoveTarget) => void;
   /**
    * The focus-period context (Task 9). `FocusSlot`'s expanded body is v4's `focusPanel()`
    * (v4:1021), which needs `periods`, `applyPeriods` and the `__focus__` detail route —

@@ -33,13 +33,15 @@
  */
 
 import type { Plan, PlanItem } from '../../fixtures/index.ts';
+import type { MoveTarget } from '../../api/planRow.ts';
 
-/** Where a move lands. `block` is `null` on a fragmented day, which has no blocks. */
-export interface MoveTarget {
-  block: number | null;
-  /** The FINAL index the item lands at, in the server's index space. */
-  position: number;
-}
+/**
+ * ⚠ `MoveTarget` IS NOT REDECLARED HERE (review finding B6). It was declared in three places —
+ * `api/planRow.ts`, this file, and structurally inline in `today/types.ts` — and three copies of
+ * one contract is three chances for an importer to take the wrong one. `api/planRow.ts` owns it,
+ * because that is where the wire format is written; this file and `types.ts` both import it.
+ */
+export type { MoveTarget };
 
 export interface MoveDestination {
   /** Stable across a re-render; used as the React key and nothing else. */
@@ -47,12 +49,42 @@ export interface MoveDestination {
   /** June-facing, literal: "first in the list", "after Email Sam". */
   label: string;
   target: MoveTarget;
+  /** Which band this destination sits in, as RENDERED. */
+  bandIndex: number;
+  /**
+   * The RENDERED row index this destination sits immediately above, in its band — so the plan
+   * itself can draw a "move here" target in the slot rather than describing it in a sentence.
+   * This is the rendered index space, NOT `target.position`'s server one; the two differ by the
+   * folded-in appointments and by the item's own removal, which is the whole subject of this file.
+   */
+  beforeIndex: number;
+}
+
+/**
+ * Why a move is not on offer. One sentence used to cover all three, and one of the three made
+ * that sentence untrue (review finding B5).
+ *
+ *   `not-found`   — the id is not in the plan at all. The honest words are "I could not find
+ *                   this row", not "there is nowhere to put it".
+ *   `appointment` — the row is a folded-in appointment. `planFromLive` renders appointments as
+ *                   ordinary task rows, but the server keeps them in their own key and never
+ *                   indexes them, so every destination offered for one can only 404 (B1).
+ *   `nowhere`     — a real, movable row with genuinely no other position to take.
+ */
+export type MoveRefusal = 'not-found' | 'appointment' | 'nowhere';
+
+export interface MoveOptions {
+  destinations: MoveDestination[];
+  /** `null` when the move IS on offer. */
+  refusal: MoveRefusal | null;
 }
 
 interface Located {
   bandIndex: number;
   /** The item's own position in the SERVER's index space. */
   position: number;
+  /** The item's own index in the RENDERED band, before any offset is taken off. */
+  renderIndex: number;
 }
 
 /** Appointments are folded into the FIRST block only; every later block is unshifted. */
@@ -66,7 +98,7 @@ function locate(plan: Plan, itemId: string): Located | null {
     for (let j = 0; j < items.length; j++) {
       const it = items[j];
       if (it && 'id' in it && it.id === itemId) {
-        return { bandIndex: bi, position: j - offsetOf(plan, bi) };
+        return { bandIndex: bi, position: j - offsetOf(plan, bi), renderIndex: j };
       }
     }
   }
@@ -98,13 +130,20 @@ export function moveDestinations(
     const offset = offsetOf(plan, bi);
     const sameBlock = bi === from.bandIndex;
     const targetBlock = priority ? null : bi;
-    const add = (position: number, label: string, key: string) => {
+    const add = (position: number, label: string, key: string, beforeIndex: number) => {
       // The no-op. Only possible within the item's own block, and a 400 if sent.
       if (sameBlock && position === from.position) return;
-      out.push({ key, label, target: { block: targetBlock, position } });
+      out.push({ key, label, target: { block: targetBlock, position }, bandIndex: bi, beforeIndex });
     };
 
-    add(0, priority ? 'first in the list' : 'first in ' + (block.label || 'this block'), bi + ':first');
+    // The first slot sits below any folded-in appointments, never above them: an appointment is
+    // a fixed-time anchor and the server does not index it, so a slot above one is not a position.
+    add(
+      0,
+      priority ? 'first in the list' : 'first in ' + (block.label || 'this block'),
+      bi + ':first',
+      offset,
+    );
 
     block.items.forEach((it, j) => {
       // An appointment carries no index the server would accept; a break has no name to offer.
@@ -115,9 +154,39 @@ export function moveDestinations(
       const anchor = j - offset;
       // Its own block lifts the item out first, so a later anchor is the final index itself.
       const position = sameBlock && anchor > from.position ? anchor : anchor + 1;
-      add(position, 'after ' + titleOf(it), bi + ':' + j);
+      add(position, 'after ' + titleOf(it), bi + ':' + j, j + 1);
     });
   });
 
   return out;
+}
+
+/**
+ * Is this row a folded-in appointment? Derived from GEOMETRY, not from a row-kind flag, because
+ * `api/adapt.planFromLive` has already turned appointments into `kind:'task'` rows by the time
+ * anything on this surface sees them — the only surviving trace is that they occupy the first
+ * `plan.apptCount` rendered slots of band 0.
+ */
+function isAppointmentRow(plan: Plan, at: Located): boolean {
+  return at.bandIndex === 0 && at.renderIndex < (plan.apptCount ?? 0);
+}
+
+/**
+ * The move offer for one row — the destinations, or the reason there are none.
+ *
+ * Prefer this over `moveDestinations` at any call site that shows June something. An empty list
+ * on its own cannot tell "there is nowhere to put this" from "I could not find this row" from
+ * "this is an appointment and the server would refuse it", and the surface said the first of the
+ * three for all of them.
+ */
+export function moveOptions(
+  plan: Plan,
+  itemId: string,
+  titleOf: (item: PlanItem) => string,
+): MoveOptions {
+  const from = locate(plan, itemId);
+  if (!from) return { destinations: [], refusal: 'not-found' };
+  if (isAppointmentRow(plan, from)) return { destinations: [], refusal: 'appointment' };
+  const destinations = moveDestinations(plan, itemId, titleOf);
+  return { destinations, refusal: destinations.length ? null : 'nowhere' };
 }
