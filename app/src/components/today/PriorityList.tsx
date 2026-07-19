@@ -1,6 +1,12 @@
-import { isDone, nearestProject, node, toggleDone, workItems } from '../../model/index.ts';
-import { TaskCheck } from '../atoms/index.ts';
-import type { TodayCtx } from './types.ts';
+import {
+  isDone,
+  nearestProject,
+  node,
+  toggleDone,
+  workItems,
+} from "../../model/index.ts";
+import { TaskCheck } from "../atoms/index.ts";
+import type { TodayCtx } from "./types.ts";
 
 export interface PriorityListProps {
   ctx: TodayCtx;
@@ -35,7 +41,9 @@ export function PriorityList({ ctx }: PriorityListProps) {
   const present = new Set(items.map((it) => it.id));
 
   const stored = ctx.ui.priOrder;
-  const order = stored ? stored.filter((id) => present.has(id)) : items.map((it) => it.id);
+  const order = stored
+    ? stored.filter((id) => present.has(id))
+    : items.map((it) => it.id);
   for (const it of items) {
     if (order.indexOf(it.id) < 0) order.push(it.id);
   }
@@ -52,7 +60,14 @@ export function PriorityList({ ctx }: PriorityListProps) {
 
   return (
     <div>
-      <div style={{ fontSize: '11px', color: C.dimmer, padding: '6px 14px 8px', lineHeight: 1.45 }}>
+      <div
+        style={{
+          fontSize: "11px",
+          color: C.dimmer,
+          padding: "6px 14px 8px",
+          lineHeight: 1.45,
+        }}
+      >
         No clock times — a ranked to-do list to pull from.
       </div>
       {order.map((id, i) => {
@@ -64,34 +79,35 @@ export function PriorityList({ ctx }: PriorityListProps) {
           <div
             key={id}
             style={{
-              display: 'flex',
-              alignItems: 'center',
-              gap: '9px',
-              padding: '9px 14px',
-              borderBottom: '1px solid ' + C.hair,
+              display: "flex",
+              alignItems: "center",
+              gap: "9px",
+              padding: "9px 14px",
+              borderBottom: "1px solid " + C.hair,
             }}
           >
             <span
               style={{
-                fontSize: '11px',
+                fontSize: "11px",
                 color: C.dimmer,
-                width: '16px',
-                flex: '0 0 auto',
-                fontVariantNumeric: 'tabular-nums',
+                width: "16px",
+                flex: "0 0 auto",
+                fontVariantNumeric: "tabular-nums",
               }}
             >
-              {i + 1 + '.'}
+              {i + 1 + "."}
             </span>
             <button
               onClick={() => ctx.apply(toggleDone(ctx.graph, id))}
               aria-label="mark done"
+              aria-pressed={done}
               style={{
-                flex: '0 0 auto',
-                border: 'none',
-                background: 'none',
-                cursor: 'pointer',
+                flex: "0 0 auto",
+                border: "none",
+                background: "none",
+                cursor: "pointer",
                 padding: 0,
-                display: 'flex',
+                display: "flex",
               }}
             >
               <TaskCheck T={ctx.T} done={done} col={C.rose} size={15} />
@@ -100,10 +116,10 @@ export function PriorityList({ ctx }: PriorityListProps) {
               style={{
                 flex: 1,
                 minWidth: 0,
-                fontSize: '13px',
+                fontSize: "13px",
                 color: done ? C.dimmer : C.text,
                 lineHeight: 1.35,
-                textDecoration: done ? 'line-through' : 'none',
+                textDecoration: done ? "line-through" : "none",
               }}
             >
               {proj ? (
@@ -114,31 +130,36 @@ export function PriorityList({ ctx }: PriorityListProps) {
                   }}
                   style={{
                     color: C.dim,
-                    textDecoration: 'underline',
+                    textDecoration: "underline",
                     textDecorationColor: C.roseBorder,
-                    textUnderlineOffset: '2px',
+                    textUnderlineOffset: "2px",
                   }}
                 >
-                  {proj.title + ' · '}
+                  {proj.title + " · "}
                 </span>
               ) : null}
               {n.title}
             </span>
             <div
-              style={{ display: 'flex', flexDirection: 'column', gap: '2px', flex: '0 0 auto' }}
+              style={{
+                display: "flex",
+                flexDirection: "column",
+                gap: "2px",
+                flex: "0 0 auto",
+              }}
             >
               <button
                 onClick={() => move(i, -1)}
                 aria-label="move up"
                 style={{
-                  background: 'none',
-                  border: '1px solid ' + C.border,
-                  borderRadius: '5px',
+                  background: "none",
+                  border: "1px solid " + C.border,
+                  borderRadius: "5px",
                   color: i === 0 ? C.dimmer : C.dim,
-                  fontSize: '9px',
-                  cursor: i === 0 ? 'default' : 'pointer',
-                  padding: '2px 6px',
-                  fontFamily: 'inherit',
+                  fontSize: "9px",
+                  cursor: i === 0 ? "default" : "pointer",
+                  padding: "2px 6px",
+                  fontFamily: "inherit",
                 }}
               >
                 ▲
@@ -147,14 +168,14 @@ export function PriorityList({ ctx }: PriorityListProps) {
                 onClick={() => move(i, 1)}
                 aria-label="move down"
                 style={{
-                  background: 'none',
-                  border: '1px solid ' + C.border,
-                  borderRadius: '5px',
+                  background: "none",
+                  border: "1px solid " + C.border,
+                  borderRadius: "5px",
                   color: i === order.length - 1 ? C.dimmer : C.dim,
-                  fontSize: '9px',
-                  cursor: i === order.length - 1 ? 'default' : 'pointer',
-                  padding: '2px 6px',
-                  fontFamily: 'inherit',
+                  fontSize: "9px",
+                  cursor: i === order.length - 1 ? "default" : "pointer",
+                  padding: "2px 6px",
+                  fontFamily: "inherit",
                 }}
               >
                 ▼

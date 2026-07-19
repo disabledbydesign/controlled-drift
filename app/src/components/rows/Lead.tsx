@@ -1,9 +1,9 @@
-import type { Theme } from '@tokens';
-import { Switch, TaskCheck } from '../atoms/index.ts';
-import { toggleActive, toggleDone } from '../../model/index.ts';
-import type { ModelNode } from '../../model/index.ts';
-import { D } from './types.ts';
-import type { RowCtx } from './types.ts';
+import type { Theme } from "@tokens";
+import { Switch, TaskCheck } from "../atoms/index.ts";
+import { toggleActive, toggleDone } from "../../model/index.ts";
+import type { ModelNode } from "../../model/index.ts";
+import { D } from "./types.ts";
+import type { RowCtx } from "./types.ts";
 
 /**
  * v4 `recSwitch(n)` (~394) — the leading control on a RECURRING row.
@@ -22,34 +22,41 @@ import type { RowCtx } from './types.ts';
 function RecSwitch({ T, n }: { T: Theme; n: ModelNode }) {
   const C = T.c;
   const act = !n.vals.paused;
-  const asNeeded = n.vals.unit === 'as_needed';
+  const asNeeded = n.vals.unit === "as_needed";
   const col = asNeeded ? C.teal : C.orange;
 
   if (asNeeded) {
     return (
-      <span style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '3px' }}>
+      <span
+        style={{
+          display: "flex",
+          flexDirection: "column",
+          alignItems: "center",
+          gap: "3px",
+        }}
+      >
         <span
           style={{
-            width: '10px',
-            height: '10px',
-            borderRadius: '50%',
-            background: act ? col : 'transparent',
-            border: '1.5px solid ' + (act ? col : C.dimmer),
+            width: "10px",
+            height: "10px",
+            borderRadius: "50%",
+            background: act ? col : "transparent",
+            border: "1.5px solid " + (act ? col : C.dimmer),
             color: col,
-            boxShadow: act ? '0 0 0 3px ' + col + '22, 0 0 9px ' + col : 'none',
-            animation: act ? 'openpulse 1.8s ease-in-out infinite' : 'none',
+            boxShadow: act ? "0 0 0 3px " + col + "22, 0 0 9px " + col : "none",
+            animation: act ? "openpulse 1.8s ease-in-out infinite" : "none",
           }}
         />
         <span
           style={{
-            fontSize: '7px',
+            fontSize: "7px",
             fontWeight: 800,
-            letterSpacing: '.06em',
+            letterSpacing: ".06em",
             fontFamily: T.mono,
             color: act ? col : C.dimmer,
           }}
         >
-          {act ? 'OPEN' : 'OFF'}
+          {act ? "OPEN" : "OFF"}
         </span>
       </span>
     );
@@ -96,17 +103,17 @@ export function Lead({ ctx, n, expandable, open, onExpand }: LeadProps) {
         }}
         aria-label="expand"
         style={{
-          width: '24px',
+          width: "24px",
           minHeight: D.leadH,
-          flex: '0 0 auto',
-          border: 'none',
-          background: 'none',
+          flex: "0 0 auto",
+          border: "none",
+          background: "none",
           color: C.dim,
-          cursor: 'pointer',
+          cursor: "pointer",
           padding: 0,
-          display: 'flex',
-          alignItems: 'center',
-          justifyContent: 'center',
+          display: "flex",
+          alignItems: "center",
+          justifyContent: "center",
         }}
       >
         <svg
@@ -114,7 +121,10 @@ export function Lead({ ctx, n, expandable, open, onExpand }: LeadProps) {
           height={15}
           viewBox="0 0 24 24"
           fill="none"
-          style={{ transform: open ? 'rotate(90deg)' : 'none', transition: 'transform .15s' }}
+          style={{
+            transform: open ? "rotate(90deg)" : "none",
+            transition: "transform .15s",
+          }}
         >
           <path
             d="M9 6l6 6-6 6"
@@ -128,8 +138,8 @@ export function Lead({ ctx, n, expandable, open, onExpand }: LeadProps) {
     );
   }
 
-  if (n.level === 'TASK') {
-    const done = !!n.vals.done || n.vals.status === 'Done';
+  if (n.level === "TASK") {
+    const done = !!n.vals.done || n.vals.status === "Done";
     return (
       <button
         onClick={(e) => {
@@ -137,17 +147,18 @@ export function Lead({ ctx, n, expandable, open, onExpand }: LeadProps) {
           ctx.apply(toggleDone(ctx.graph, n.id));
         }}
         aria-label="mark done"
+        aria-pressed={done}
         style={{
-          width: '24px',
+          width: "24px",
           minHeight: D.leadH,
-          flex: '0 0 auto',
-          border: 'none',
-          background: 'none',
-          cursor: 'pointer',
+          flex: "0 0 auto",
+          border: "none",
+          background: "none",
+          cursor: "pointer",
           padding: 0,
-          display: 'flex',
-          alignItems: 'center',
-          justifyContent: 'center',
+          display: "flex",
+          alignItems: "center",
+          justifyContent: "center",
         }}
       >
         <TaskCheck T={T} done={done} col={C.green} size={19} />
@@ -155,36 +166,36 @@ export function Lead({ ctx, n, expandable, open, onExpand }: LeadProps) {
     );
   }
 
-  if (n.level === 'RECURRING') {
+  if (n.level === "RECURRING") {
     const act = !n.vals.paused;
-    const asNeeded = n.vals.unit === 'as_needed';
+    const asNeeded = n.vals.unit === "as_needed";
     return (
       <button
         onClick={(e) => {
           e.stopPropagation();
           ctx.apply(toggleActive(ctx.graph, n.id));
         }}
-        aria-label={act ? 'pause in plan' : 'activate in plan'}
+        aria-label={act ? "pause in plan" : "activate in plan"}
         title={
           act
             ? asNeeded
-              ? 'Open — tap to close'
-              : 'In plan — tap to pause'
+              ? "Open — tap to close"
+              : "In plan — tap to pause"
             : asNeeded
-              ? 'Closed — tap to open'
-              : 'Paused — tap to add to plan'
+              ? "Closed — tap to open"
+              : "Paused — tap to add to plan"
         }
         style={{
-          width: '40px',
+          width: "40px",
           minHeight: D.leadH,
-          flex: '0 0 auto',
-          border: 'none',
-          background: 'none',
-          cursor: 'pointer',
+          flex: "0 0 auto",
+          border: "none",
+          background: "none",
+          cursor: "pointer",
           padding: 0,
-          display: 'flex',
-          alignItems: 'center',
-          justifyContent: 'center',
+          display: "flex",
+          alignItems: "center",
+          justifyContent: "center",
         }}
       >
         <RecSwitch T={T} n={n} />
@@ -192,5 +203,5 @@ export function Lead({ ctx, n, expandable, open, onExpand }: LeadProps) {
     );
   }
 
-  return <span style={{ width: '24px', flex: '0 0 auto' }} />;
+  return <span style={{ width: "24px", flex: "0 0 auto" }} />;
 }

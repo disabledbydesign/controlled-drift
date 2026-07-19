@@ -1,8 +1,8 @@
-import type { PlanBlockItem } from '../../fixtures/index.ts';
-import { EditChip, TaskCheck } from '../atoms/index.ts';
-import { ArcStep } from './ArcStep.tsx';
-import type { TodayCtx } from './types.ts';
-import { toggleKey } from './util.ts';
+import type { PlanBlockItem } from "../../fixtures/index.ts";
+import { EditChip, TaskCheck } from "../atoms/index.ts";
+import { ArcStep } from "./ArcStep.tsx";
+import type { TodayCtx } from "./types.ts";
+import { toggleKey } from "./util.ts";
 
 export interface WorkBlockProps {
   ctx: TodayCtx;
@@ -39,7 +39,13 @@ export interface WorkBlockProps {
  *    whole mockup, zero hits. Nothing to remove; recorded so the absence is not read as a
  *    missed delta.
  */
-export function WorkBlock({ ctx, item, entryKey, bandIndex, itemIndex }: WorkBlockProps) {
+export function WorkBlock({
+  ctx,
+  item,
+  entryKey,
+  bandIndex,
+  itemIndex,
+}: WorkBlockProps) {
   const C = ctx.T.c;
   const arc = item.arc || [];
   const expandable = arc.length >= 1;
@@ -47,45 +53,50 @@ export function WorkBlock({ ctx, item, entryKey, bandIndex, itemIndex }: WorkBlo
   const open = !!ctx.ui.blocksOpen[entryKey];
 
   return (
-    <div style={{ marginBottom: '8px' }}>
+    <div style={{ marginBottom: "8px" }}>
       <div
-        onClick={expandable ? () => ctx.up({ blocksOpen: toggleKey(ctx.ui.blocksOpen, entryKey) }) : undefined}
+        onClick={
+          expandable
+            ? () =>
+                ctx.up({ blocksOpen: toggleKey(ctx.ui.blocksOpen, entryKey) })
+            : undefined
+        }
         style={{
-          display: 'flex',
-          alignItems: 'flex-start',
-          gap: '7px',
-          cursor: expandable ? 'pointer' : 'default',
+          display: "flex",
+          alignItems: "flex-start",
+          gap: "7px",
+          cursor: expandable ? "pointer" : "default",
         }}
       >
         <button
           onClick={(e) => {
             e.stopPropagation();
             ctx.up({ chunked: toggleKey(ctx.ui.chunked, entryKey) });
-            ctx.flash(chunked ? 'Reopened' : 'Done');
+            ctx.flash(chunked ? "Reopened" : "Done");
           }}
           aria-label="mark done"
-          title="mark done"
+          aria-pressed={chunked}
           style={{
-            flex: '0 0 auto',
-            border: 'none',
-            background: 'none',
-            cursor: 'pointer',
+            flex: "0 0 auto",
+            border: "none",
+            background: "none",
+            cursor: "pointer",
             padding: 0,
-            position: 'relative',
-            top: '2px',
-            display: 'flex',
+            position: "relative",
+            top: "2px",
+            display: "flex",
           }}
         >
           <TaskCheck T={ctx.T} done={chunked} col={C.gold} size={15} />
         </button>
         <span
           style={{
-            width: '56px',
-            flex: '0 0 auto',
-            fontSize: '10px',
+            width: "56px",
+            flex: "0 0 auto",
+            fontSize: "10px",
             color: C.dimmer,
             lineHeight: 1.3,
-            fontVariantNumeric: 'tabular-nums',
+            fontVariantNumeric: "tabular-nums",
           }}
         >
           {item.time}
@@ -94,11 +105,11 @@ export function WorkBlock({ ctx, item, entryKey, bandIndex, itemIndex }: WorkBlo
           style={{
             flex: 1,
             minWidth: 0,
-            fontSize: '13px',
+            fontSize: "13px",
             fontWeight: 600,
             color: C.gold,
             lineHeight: 1.35,
-            textDecoration: chunked ? 'line-through' : 'none',
+            textDecoration: chunked ? "line-through" : "none",
             opacity: chunked ? 0.55 : 1,
           }}
         >
@@ -107,10 +118,16 @@ export function WorkBlock({ ctx, item, entryKey, bandIndex, itemIndex }: WorkBlo
         <EditChip T={ctx.T} onClick={() => ctx.openDetail(item.id)} />
       </div>
       {open ? (
-        <div style={{ paddingLeft: '62px', paddingTop: '5px', paddingRight: '8px' }}>
+        <div
+          style={{
+            paddingLeft: "62px",
+            paddingTop: "5px",
+            paddingRight: "8px",
+          }}
+        >
           {arc.map((s, i) => (
             <ArcStep
-              key={entryKey + '-a' + i}
+              key={entryKey + "-a" + i}
               ctx={ctx}
               step={s}
               bandIndex={bandIndex}

@@ -1,5 +1,5 @@
-import type { Theme } from '@tokens';
-import { TaskCheck } from './TaskCheck';
+import type { Theme } from "@tokens";
+import { TaskCheck } from "./TaskCheck";
 
 export interface RoundCheckProps {
   T: Theme;
@@ -25,15 +25,16 @@ export function RoundCheck({ T, done, onClick }: RoundCheckProps) {
         onClick();
       }}
       aria-label="mark done"
+      aria-pressed={done}
       style={{
-        flex: '0 0 auto',
-        border: 'none',
-        background: 'none',
-        cursor: 'pointer',
+        flex: "0 0 auto",
+        border: "none",
+        background: "none",
+        cursor: "pointer",
         padding: 0,
-        position: 'relative',
-        top: '2px',
-        display: 'flex',
+        position: "relative",
+        top: "2px",
+        display: "flex",
       }}
     >
       <TaskCheck T={T} done={done} col={T.c.rose} size={15} />

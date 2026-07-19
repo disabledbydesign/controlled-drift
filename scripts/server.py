@@ -426,6 +426,48 @@ APP_MIME = {
 }
 
 
+# --- what June reads when a write fails -------------------------------------
+#
+# BUILD_DOC §9.6: if a human is the audience, the format is human. The failure bar is the one
+# place an error reaches June directly, and the raw exception text is not fit for it — it carries
+# Anytype ids and Python dict reprs, which are the "routing numbers" she has said she cannot use.
+#
+# The detail is not discarded; it is the first thing wanted when debugging. It goes to the server
+# log in full. Only the sentence crosses to the screen.
+#
+# One rule at the boundary rather than a fix per raise site: every raise anywhere is covered,
+# including ones not written yet, and there is a single place to change the wording.
+
+#: Machine tails to cut. A message is a sentence up to the first of these.
+_MACHINE_MARK = (": {", " {'", ' {"', ": [", "\n")
+
+_HUMAN = {
+    "LookupError": "Anytype could not find that item. It may have been deleted or archived.",
+    "TimeoutError": "Anytype did not answer in time. It may be busy or closed.",
+    "ConnectionError": "Could not reach Anytype. Check that the app is open.",
+}
+
+
+def _client_error(e):
+    """A sentence for the bar. Logs the full exception, returns only what June should read."""
+    kind = type(e).__name__
+    full = f"{kind}: {e}"
+    print(f"[error] {full}", file=sys.stderr, flush=True)
+
+    # A refusal is written FOR her — those messages are already sentences and say what to do.
+    if isinstance(e, (api_write.WriteRefused, api_write.DuplicateName, ValueError)):
+        text = str(e)
+    else:
+        text = _HUMAN.get(kind, "") or str(e)
+
+    for mark in _MACHINE_MARK:
+        i = text.find(mark)
+        if i > 0:
+            text = text[:i]
+    text = text.strip().rstrip(":").strip()
+    return text or "Something went wrong saving that. The server log has the detail."
+
+
 class Handler(BaseHTTPRequestHandler):
     # --- small response helpers ---------------------------------------------
 
@@ -478,15 +520,15 @@ class Handler(BaseHTTPRequestHandler):
         try:
             self._send(200, fn())
         except api_write.DuplicateName as e:
-            self._send(409, {"ok": False, "error": str(e), "existing_id": e.existing_id})
+            self._send(409, {"ok": False, "error": _client_error(e), "existing_id": e.existing_id})
         except api_write.WriteRefused as e:
-            self._send(400, {"ok": False, "error": str(e)})
+            self._send(400, {"ok": False, "error": _client_error(e)})
         except LookupError as e:
-            self._send(404, {"ok": False, "error": str(e)})
+            self._send(404, {"ok": False, "error": _client_error(e)})
         except ValueError as e:            # field_semantics guard #3, option/property resolution
-            self._send(400, {"ok": False, "error": str(e)})
+            self._send(400, {"ok": False, "error": _client_error(e)})
         except Exception as e:
-            self._send(500, {"ok": False, "error": str(e)})
+            self._send(500, {"ok": False, "error": _client_error(e)})
 
     # --- GET ----------------------------------------------------------------
 

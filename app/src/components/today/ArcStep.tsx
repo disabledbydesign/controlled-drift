@@ -1,8 +1,8 @@
-import { alpha } from '@tokens';
-import type { PlanArcStep } from '../../fixtures/index.ts';
-import { toggleArcStep } from '../../model/index.ts';
-import { TaskCheck } from '../atoms/index.ts';
-import type { TodayCtx } from './types.ts';
+import { alpha } from "@tokens";
+import type { PlanArcStep } from "../../fixtures/index.ts";
+import { toggleArcStep } from "../../model/index.ts";
+import { TaskCheck } from "../atoms/index.ts";
+import type { TodayCtx } from "./types.ts";
 
 export interface ArcStepProps {
   ctx: TodayCtx;
@@ -31,26 +31,32 @@ export interface ArcStepProps {
  * The state change itself — including spec §14's "here" advance — lives in the pure
  * `toggleArcStep` in `model/plan.ts`, not in this component.
  */
-export function ArcStep({ ctx, step, bandIndex, itemIndex, stepIndex }: ArcStepProps) {
+export function ArcStep({
+  ctx,
+  step,
+  bandIndex,
+  itemIndex,
+  stepIndex,
+}: ArcStepProps) {
   const C = ctx.T.c;
-  const here = step.state === 'here';
-  const done = step.state === 'done';
+  const here = step.state === "here";
+  const done = step.state === "done";
 
   return (
     <div
       onClick={(e) => e.stopPropagation()}
       style={{
-        display: 'flex',
-        alignItems: 'center',
-        gap: '9px',
-        padding: '3px 6px',
+        display: "flex",
+        alignItems: "center",
+        gap: "9px",
+        padding: "3px 6px",
         borderRadius: ctx.T.r.ctl,
-        fontSize: '12.5px',
+        fontSize: "12.5px",
         lineHeight: 1.4,
         ...(here
           ? {
               background: `linear-gradient(90deg,${alpha(C.rose, 0.141)},${alpha(C.rose, 0.016)} 70%)`,
-              boxShadow: 'inset 2px 0 0 ' + C.rose,
+              boxShadow: "inset 2px 0 0 " + C.rose,
             }
           : {}),
       }}
@@ -58,16 +64,19 @@ export function ArcStep({ ctx, step, bandIndex, itemIndex, stepIndex }: ArcStepP
       <button
         onClick={(e) => {
           e.stopPropagation();
-          ctx.applyPlan(toggleArcStep(ctx.plan, bandIndex, itemIndex, stepIndex));
+          ctx.applyPlan(
+            toggleArcStep(ctx.plan, bandIndex, itemIndex, stepIndex),
+          );
         }}
         aria-label="mark done"
+        aria-pressed={done}
         style={{
-          flex: '0 0 auto',
-          border: 'none',
-          background: 'none',
-          cursor: 'pointer',
+          flex: "0 0 auto",
+          border: "none",
+          background: "none",
+          cursor: "pointer",
           padding: 0,
-          display: 'flex',
+          display: "flex",
         }}
       >
         <TaskCheck T={ctx.T} done={done} col={C.rose} size={14} />
@@ -75,7 +84,7 @@ export function ArcStep({ ctx, step, bandIndex, itemIndex, stepIndex }: ArcStepP
       <span
         style={{
           color: done ? C.dimmer : here ? C.rose : C.dim,
-          textDecoration: done ? 'line-through' : 'none',
+          textDecoration: done ? "line-through" : "none",
           fontWeight: here ? 500 : 400,
           ...(here ? { textShadow: `0 0 11px ${alpha(C.rose, 0.451)}` } : {}),
         }}
