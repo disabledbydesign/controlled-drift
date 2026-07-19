@@ -8,7 +8,7 @@ import {
   seedStrategies,
 } from '../fixtures/index.ts';
 import type { Period, Plan, Schema } from '../fixtures/index.ts';
-import { applySchema, index, updateNode } from '../model/index.ts';
+import { applySchema, index, toggleArcStep, updateNode } from '../model/index.ts';
 import {
   getCaptureSession,
   getStatus,
@@ -37,6 +37,7 @@ import {
 import { graphFromTree, periodsFromLive, planFromLive, schemaFromResponse } from '../api/adapt.ts';
 import type { LivePlan, PeriodsResponse, TreeResponse } from '../api/adapt.ts';
 import type {
+  ArcStepRef,
   DerivedSchema,
   FocusForm,
   Graph,
@@ -469,8 +470,28 @@ export interface AppState {
    * Apply a PLAN mutation (Task 7). The plan is not part of the graph — it references graph
    * nodes by id — so it gets its own seam rather than being forced through `apply`. Same
    * shape: new value in, toast raised the same way. See `model/plan.ts`.
+   *
+   * ⚠ THIS SEAM DOES NOT WRITE, AND IT IS NOW DEAD PLUMBING. `PlanResult` is `{plan, toast}`:
+   * there is no `write` on it and no network call is reachable through here. Its one and only
+   * caller was `components/today/ArcStep.tsx`, which is why tapping a step raised "Nice — one
+   * down" and saved nothing (2026-07-19). That call site now goes to `completeArcStep`.
+   *
+   * It is marked rather than silently extended on purpose. Giving `PlanResult` a `write` field
+   * would have made every future caller of this seam LOOK like it persists, which is exactly
+   * the shape that let a dozen controls claim saves they never performed. If you wire a new
+   * plan control, give it its own writer beside `completeArcStep` — do not route it through
+   * here, and do not add a `write` to `PlanResult` to make this one work.
    */
   applyPlan: (result: PlanResult) => void;
+  /**
+   * Check off (or reopen) ONE STEP inside a work block's arc — `POST /api/complete` /
+   * `/api/uncomplete` with the STEP's own Anytype task id.
+   *
+   * ⚠ A separate entry point from `chunkBlock` because the two mean different things to the
+   * server and to June: a block check records a chunk of work and never finishes the project,
+   * while a step check completes a real task. See the note on the implementation.
+   */
+  completeArcStep: (ref: ArcStepRef, done: boolean) => Promise<void>;
   /**
    * Apply a PERIOD mutation (Task 9). Third seam of the same shape as `apply`/`applyPlan`,
    * for the same reason: focus periods are neither graph nodes nor plan entries. See
@@ -766,6 +787,10 @@ export function useAppState(source: DataSource = 'live'): AppState {
    */
   const graphRef = useRef(graph);
   graphRef.current = graph;
+
+  /** The plan as it is RIGHT NOW, for the same reason as `graphRef` — see `completeArcStep`. */
+  const planRef = useRef(plan);
+  planRef.current = plan;
 
   /** Per-object debounce timers for the title field, which fires per keystroke. */
   const titleTimers = useRef(new Map<string, ReturnType<typeof setTimeout>>());
@@ -1466,6 +1491,92 @@ export function useAppState(source: DataSource = 'live'): AppState {
   );
 
   /**
+   * THE ARC STEP CHECK — `chunkBlock` one level deeper, and a DIFFERENT kind of write.
+   *
+   * It used to be `applyPlan(toggleArcStep(...))`. `PlanResult` is `{plan, toast}` — it has no
+   * `write`, so no network call was reachable through that path at all. June tapped a step, read
+   * "Nice — one down", and it was gone on reload.
+   *
+   * ⚠ A STEP IS NOT A BLOCK, AND THE DIFFERENCE IS THE WHOLE POINT. The block header's check
+   * means "I did a chunk today" and must never finish the project underneath it. An arc step
+   * carries a REAL Anytype task id (verified on her live plan 2026-07-19 — every step of all
+   * three arc-carrying items, including "Cancel food stamps"), so checking it completes THAT
+   * TASK and nothing else. `complete_task_row` (`server.py:163`) dispatches as-needed →
+   * recurring → `is_block_item` → real task; a step id is none of the first three, so it lands
+   * on `task_actions.complete_task` and the parent project is never touched. Sending the
+   * BLOCK's id here instead would be the right-looking wrong write: a logged work chunk in
+   * place of her finished task.
+   *
+   * ⚠ THE ID IS WHAT TRAVELS; THE ADDRESS ONLY LOCATES THE PIXELS. `toggleArcStep` addresses a
+   * step as `plan.blocks[b].items[i].arc[s]`, and a regeneration reassigns those slots — which
+   * is why `chunkBlock` moved its state off slot keys. Nothing slot-keyed is persisted here
+   * either: the address is used once, synchronously, to compute the optimistic redraw, and the
+   * server write is keyed by `ref.id` alone.
+   *
+   * ⚠ ROLLBACK RESTORES THE WHOLE PLAN, NOT THE TAPPED STEP. `toggleArcStep` is not its own
+   * inverse: checking the current step also promotes the next `ahead` step to `here`, and
+   * re-toggling does not demote it. Re-toggling as an undo would leave the wrong step
+   * highlighted as the one she is on.
+   *
+   * Effect order follows `chunkBlock` exactly: the box checks immediately, and the success
+   * signal waits for `res.ok`, because that is the only moment anything is known to be saved.
+   */
+  const completeArcStep = useCallback(
+    async (ref: ArcStepRef, done: boolean): Promise<void> => {
+      if (!ref.id) {
+        // A step with no id cannot be addressed on the server. Toggling it locally anyway would
+        // look exactly like a save, which is the failure this whole seam exists to end.
+        fail('That step has no id on it, so it was NOT saved.');
+        return;
+      }
+      // Read through a ref, not the closure, for the reason `graphRef` records: a callback held
+      // by a rendered row can outlive the render it closed over, and a stale plan here would
+      // resolve the address against a document that is no longer on screen. It also keeps this
+      // callback's identity stable across every plan change.
+      const before = planRef.current;
+      const next = toggleArcStep(before, ref.bandIndex, ref.itemIndex, ref.stepIndex);
+      // ⚠ `toggleArcStep` answers an address that resolves to nothing with a SILENT no-op — the
+      // same plan object back, no toast. Left alone that is a checkbox that is tapped and does
+      // nothing, forever. Identity comparison is exact here because the function returns the
+      // input reference unchanged on a miss.
+      if (next.plan === before) {
+        fail('Could not find that step in today’s plan, so it was NOT saved.', { nodeId: ref.id });
+        return;
+      }
+      setPlan(next.plan);
+
+      if (!live) {
+        setPlan(before);
+        fail('Not connected to the server — that step was NOT saved.', { nodeId: ref.id });
+        return;
+      }
+
+      const res = await apiSend<{
+        completed?: Record<string, unknown>;
+        uncompleted?: Record<string, unknown>;
+        plan?: LivePlan;
+      }>('POST', done ? '/api/complete' : '/api/uncomplete', { id: ref.id });
+
+      if (!res.ok) {
+        setPlan(before);
+        fail(
+          `Could not ${done ? 'check that step off' : 'reopen that step'} — it is NOT saved. ${res.error}`,
+          { nodeId: ref.id },
+        );
+        return;
+      }
+      // The response carries today's rewritten plan cache. `plan_store._mark_arc_step` flips the
+      // step's state there using the same rule as `toggleArcStep`, so adopting the server's
+      // answer confirms the optimistic redraw rather than undoing it — and THAT is what makes
+      // the check survive a reload.
+      if (res.data.plan && !res.data.plan.empty) setPlan(planFromLive(res.data.plan));
+      // The pure function's own wording, so the surface and the model cannot drift apart.
+      if (next.toast) succeed(next.toast, null);
+    },
+    [live, fail, succeed],
+  );
+
+  /**
    * ── THE THREE PER-ROW PLAN WRITES ────────────────────────────────────────────
    *
    * All three take the same shape, and it is NOT `chunkBlock`'s. There is no optimistic step
@@ -1905,6 +2016,7 @@ export function useAppState(source: DataSource = 'live'): AppState {
     authorFocus,
     saveFocusPeriod,
     chunkBlock,
+    completeArcStep,
     notTodayRow,
     setRowDuration,
     moveRow,

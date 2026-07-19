@@ -1,6 +1,5 @@
 import { alpha } from "@tokens";
 import type { PlanArcStep } from "../../fixtures/index.ts";
-import { toggleArcStep } from "../../model/index.ts";
 import { TaskCheck } from "../atoms/index.ts";
 import type { TodayCtx } from "./types.ts";
 
@@ -29,7 +28,10 @@ export interface ArcStepProps {
  * calls at the same values (0x24=.141, 0x04=.016, 0x73=.451).
  *
  * The state change itself — including spec §14's "here" advance — lives in the pure
- * `toggleArcStep` in `model/plan.ts`, not in this component.
+ * `toggleArcStep` in `model/plan.ts`, not in this component. It is applied by the shell's
+ * `completeArcStep`, which redraws the plan AND writes the step's completion to the server.
+ * This component called `ctx.applyPlan(toggleArcStep(...))` directly until 2026-07-19; that
+ * seam has no `write` on it, so every step June ever checked off was lost on reload.
  */
 export function ArcStep({
   ctx,
@@ -64,8 +66,12 @@ export function ArcStep({
       <button
         onClick={(e) => {
           e.stopPropagation();
-          ctx.applyPlan(
-            toggleArcStep(ctx.plan, bandIndex, itemIndex, stepIndex),
+          // ⚠ THE STEP'S OWN TASK ID, not the block's. This completes a real Anytype task; the
+          // block header's check one level up records a chunk of work and must never finish the
+          // project. Sending the wrong one of the two is a write that looks right and is not.
+          ctx.completeStep(
+            { id: step.id ?? "", bandIndex, itemIndex, stepIndex },
+            !done,
           );
         }}
         aria-label="mark done"

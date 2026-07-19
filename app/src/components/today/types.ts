@@ -10,7 +10,7 @@
 
 import type { Theme } from '@tokens';
 import type { Period, Plan } from '../../fixtures/index.ts';
-import type { Graph, GraphIndex, MutationResult, PlanResult } from '../../model/index.ts';
+import type { ArcStepRef, Graph, GraphIndex, MutationResult, PlanResult } from '../../model/index.ts';
 import type { FocusCtx } from '../focus/types.ts';
 
 /** v4:63 — `this.PANEL='.16s ease'`. Duplicated for the same one-way-dependency reason. */
@@ -75,8 +75,23 @@ export interface TodayCtx {
   up: (patch: Partial<TodayUi>) => void;
   /** Graph mutations (checking a task off) — v4's mutate-then-`bump()`. */
   apply: (result: MutationResult) => void;
-  /** Plan mutations (advancing an arc step). See `model/plan.ts` on why this is separate. */
+  /**
+   * Plan mutations. See `model/plan.ts` on why this is separate from `apply`.
+   *
+   * ⚠ LOCAL ONLY — nothing reachable through here writes to the server, and it currently has no
+   * caller. The arc step check used to come this way, which is why it saved nothing. Wire a new
+   * plan control to its own shell writer (`completeStep` is the model), not to this.
+   */
   applyPlan: (result: PlanResult) => void;
+  /**
+   * Check off (or reopen) one STEP inside a work block's arc, in BOTH views.
+   *
+   * ⚠ Not the same control as `chunk`, one level up. A step carries a real Anytype task id and
+   * completing it completes that task; a block check only records a chunk of work. Fire-and-
+   * forget from here for the same reason as `chunk`: the shell raises the success signal only
+   * once the write is confirmed, and reports a failure itself.
+   */
+  completeStep: (ref: ArcStepRef, done: boolean) => void;
   /** v4's `flash(msg)` — a toast with no state change behind it. */
   flash: (msg: string) => void;
   /**

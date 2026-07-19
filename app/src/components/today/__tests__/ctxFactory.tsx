@@ -60,6 +60,9 @@ export function ctxWith(
    */
   const regenerate = vi.fn(async () => true);
   const chunk = vi.fn();
+  /** The arc STEP check — a different writer from `chunk`, and spied separately so the two
+   * cannot be confused for each other in an assertion. */
+  const completeStep = vi.fn();
   const openDetail = vi.fn();
   const goTab = vi.fn();
   // The three per-row plan writes. Spies rather than no-ops so a control wired to nothing is
@@ -82,6 +85,7 @@ export function ctxWith(
     flash,
     regenerate,
     chunk,
+    completeStep,
     generating,
     openDetail,
     goTab,
@@ -98,6 +102,7 @@ export function ctxWith(
     flash,
     regenerate,
     chunk,
+    completeStep,
     openDetail,
     goTab,
     notToday,

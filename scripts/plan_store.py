@@ -153,10 +153,60 @@ def _iter_items(plan):
         yield item
 
 
+def _mark_arc_step(plan, task_id, done):
+    """Flip the state of the ARC STEP carrying this task id, wherever it is nested.
+
+    A work block's `arc` holds the project's own tasks as ordered steps, each with a REAL
+    Anytype task id (grain.project_arc). `_iter_items` walks blocks[].items[], items[] and
+    appointments[] — it does NOT descend into an item's `arc`, so before this a step checkoff
+    wrote to Anytype and the cache never changed: reopening showed the step un-checked again.
+    That is the same mark-done-doesn't-stick bug `_iter_items`' docstring already records twice
+    (fragmented days, then appointments), arriving a third time by a third route.
+
+    The state values MIRROR `model/plan.ts`'s `toggleArcStep` exactly, so the plan the server
+    hands back and the plan the surface drew optimistically are the same plan — otherwise
+    adopting the server's answer would visibly undo her tap:
+
+        done=True  -> "done", and the step immediately after it is promoted "ahead" -> "here"
+        done=False -> "ahead"
+
+    Only an "ahead" step is promoted. The live plan really does carry several "here" steps at
+    once (plan_generate._mark_here), and re-deriving the whole arc here would fight that.
+
+    Returns True if anything changed.
+    """
+    changed = False
+    for item in _iter_items(plan):
+        arc = item.get("arc")
+        if not isinstance(arc, list):
+            continue
+        for i, step in enumerate(arc):
+            if not isinstance(step, dict) or step.get("id") != task_id:
+                continue
+            if not done:
+                if step.get("state") != "ahead":
+                    step["state"] = "ahead"
+                    changed = True
+                continue
+            was_here = step.get("state") == "here"
+            if step.get("state") != "done":
+                step["state"] = "done"
+                changed = True
+            # The advance: only when the checked step was the current one, and only if the
+            # next step is still waiting.
+            nxt = arc[i + 1] if i + 1 < len(arc) else None
+            if was_here and isinstance(nxt, dict) and nxt.get("state") == "ahead":
+                nxt["state"] = "here"
+                changed = True
+    return changed
+
+
 def mark_item_done(task_id):
     """Flip done=true on every cached plan item carrying this Anytype task id, so reopening
     the overlay shows it checked WITHOUT a regeneration (closing a task must not cost an LLM
     call). Returns the updated plan, or None if there's no cache / no matching item.
+
+    Also marks a nested ARC STEP with this id — see `_mark_arc_step`.
 
     Preserves generated_at + source deliberately — a checkoff is not a new generation, and
     re-stamping would make a mark-done masquerade as a fresh morning plan.
@@ -169,6 +219,8 @@ def mark_item_done(task_id):
         if item.get("id") == task_id:
             item["done"] = True
             changed = True
+    if _mark_arc_step(plan, task_id, True):
+        changed = True
     if changed:
         path = _plan_path()
         tmp = path + ".tmp"
@@ -223,7 +275,9 @@ def is_as_needed_item(task_id):
 def mark_item_undone(task_id):
     """Undo a checkoff in the cache (the mis-tap fix): set done=False on every cached plan
     item with this task id, so reopening the overlay shows it un-checked again. Mirror of
-    mark_item_done; preserves generated_at (a toggle is not a regeneration)."""
+    mark_item_done; preserves generated_at (a toggle is not a regeneration).
+
+    Also reopens a nested ARC STEP with this id — see `_mark_arc_step`."""
     plan = load_plan()
     if plan is None:
         return None
@@ -232,6 +286,8 @@ def mark_item_undone(task_id):
         if item.get("id") == task_id and item.get("done"):
             item["done"] = False
             changed = True
+    if _mark_arc_step(plan, task_id, False):
+        changed = True
     if changed:
         path = _plan_path()
         tmp = path + ".tmp"

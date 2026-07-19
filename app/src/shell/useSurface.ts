@@ -182,6 +182,9 @@ export function useSurface({ T, name, setTheme, wide, source }: SurfaceOptions):
     // The work-block check. `void` for the same reason as `regenerate`: every outcome reports
     // itself through `succeed`/`fail` inside `chunkBlock`, so the row has nothing to await.
     chunk: (id, done) => void st.chunkBlock(id, done),
+    // The arc STEP check, one level inside a block. Same fire-and-forget reasoning as `chunk`,
+    // and deliberately a different writer: a step completes a real task, a block records a chunk.
+    completeStep: (ref, done) => void st.completeArcStep(ref, done),
     // The action row's generation controls. The ROW's handlers are still fire-and-forget —
     // every outcome reports itself through `succeed`/`fail` inside `regenerate`. The promise is
     // passed through undiluted for the ONE caller that needs the answer: the ask box, which holds

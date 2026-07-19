@@ -257,7 +257,18 @@ describe('spec §14 — the arc "here" advance', () => {
     expect(arcOf(before)[1]!.state).toBe('here');
   });
 
-  it('renders the arc only when the block is expanded, and checking routes through applyPlan', () => {
+  /**
+   * ⚠ REWRITTEN 2026-07-19. This test used to assert that checking a step "routes through
+   * applyPlan", and it passed — against a control that saved nothing. `applyPlan` sets local
+   * state and raises a toast; `PlanResult` has no `write`, so no request was reachable from it.
+   * June checked steps off, read "Nice — one down", and lost them on reload.
+   *
+   * The arc's own state machine is still exercised — by the four pure `toggleArcStep` tests
+   * directly above, which is where that logic lives. What this one holds is the WIRING: the
+   * step's checkbox reaches the writer that talks to the server, carrying the step's own id.
+   * `shell/__tests__/completeArcStep.test.tsx` covers what that writer then does.
+   */
+  it('renders the arc only when the block is expanded, and checking sends the step to the server writer', () => {
     const closed = ctxWith();
     render(<TodayPanel ctx={closed.ctx} />);
     expect(screen.queryByText('Draft the rebuttal paragraph')).toBeNull();
@@ -269,10 +280,13 @@ describe('spec §14 — the arc "here" advance', () => {
     expect(step).toBeTruthy();
     // The step's own checkbox is the sibling button inside the arc row.
     fireEvent.click(step.parentElement!.querySelector('button')!);
-    expect(open.applyPlan).toHaveBeenCalledTimes(1);
-    const arc = open.applyPlan.mock.calls[0]![0].plan.blocks[0].items[0].arc;
-    expect(arc[1].state).toBe('done');
-    expect(arc[2].state).toBe('here');
+    expect(open.completeStep).toHaveBeenCalledTimes(1);
+    expect(open.completeStep).toHaveBeenCalledWith(
+      { id: 'l3pdzq', bandIndex: 0, itemIndex: 0, stepIndex: 1 },
+      true,
+    );
+    // The seam that cannot write is not the one it went to.
+    expect(open.applyPlan).not.toHaveBeenCalled();
   });
 });
 

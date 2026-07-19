@@ -131,6 +131,23 @@ export function planItemDone(item: object | undefined, n: ModelNode | undefined)
 }
 
 /**
+ * One arc step, named two ways at once: WHERE it sits and WHAT it is.
+ *
+ * The address (`bandIndex`/`itemIndex`/`stepIndex`) is what `toggleArcStep` needs to redraw the
+ * plan. The `id` is the step's real Anytype task id, and it is what the SERVER needs — the two
+ * are not interchangeable, and a slot address is only valid for the plan generation it was read
+ * from. Carrying both together is what keeps a write keyed by id while the redraw stays keyed
+ * by position. See `completeArcStep` in `shell/useAppState.ts`.
+ */
+export interface ArcStepRef {
+  /** The step's own Anytype task id. Empty when the plan row carries none. */
+  id: string;
+  bandIndex: number;
+  itemIndex: number;
+  stepIndex: number;
+}
+
+/**
  * v4 `arcStep`'s `toggle` (1099), extracted as a pure function.
  *
  * v4:
