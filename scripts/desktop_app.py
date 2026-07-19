@@ -197,15 +197,24 @@ ICNS = next(
 
 
 def _set_dock_icon():
-    """Point the RUNNING process's dock icon at our icns. The .app bundle sets the Finder icon,
-    but this python process is launched from outside the bundle, so its live dock icon would be
-    the generic python one unless we set it here. Best-effort — never block launch on it."""
+    """Point the RUNNING process's dock icon at our icns. Required because the bundle execs an
+    external python, so the live process registers as `org.python.python` — without this the Dock
+    would show the python rocket, not our icon.
+
+    ⚠️ Load the icns EAGERLY. `initWithContentsOfFile_` reads every representation up front;
+    `initByReferencingFile_` is LAZY and can leave the Dock holding a single low-res rep, so the
+    icon's edge visibly softens when the launch bounce re-renders it (the 'edge drops on the first
+    hop' bug). We also stamp the logical size to 1024 so the Dock scales from the sharpest rep.
+    Best-effort — never block launch on it."""
     try:
         from AppKit import NSApplication, NSImage  # pyobjc, a pywebview dependency
+        from Foundation import NSMakeSize
 
         if os.path.exists(ICNS):
-            img = NSImage.alloc().initByReferencingFile_(ICNS)
-            NSApplication.sharedApplication().setApplicationIconImage_(img)
+            img = NSImage.alloc().initWithContentsOfFile_(ICNS)
+            if img is not None:
+                img.setSize_(NSMakeSize(1024, 1024))
+                NSApplication.sharedApplication().setApplicationIconImage_(img)
     except Exception as exc:
         sys.stderr.write(f"[desktop] could not set dock icon: {exc}\n")
 
@@ -225,7 +234,8 @@ def main():
         frameless=False,  # real native title bar — draggable, has the close button
     )
     api.window = window
-    # Set the dock icon once the window (and thus NSApplication) exists.
+    # The process runs as org.python.python, so set our icon once the window (and NSApplication)
+    # exists — else the Dock shows the python rocket. Loaded eagerly to keep the edge crisp.
     window.events.shown += _set_dock_icon
     if selftest:
         threading.Thread(target=_selftest, args=(api,), daemon=True).start()
