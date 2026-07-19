@@ -25,6 +25,8 @@ export const BASE_UI: TodayUi = {
   blocksOpen: {},
   priOrder: null,
   ask: '',
+  editOpen: {},
+  movePick: null,
 };
 
 export function freshGraph(): Graph {
@@ -60,6 +62,11 @@ export function ctxWith(
   const chunk = vi.fn();
   const openDetail = vi.fn();
   const goTab = vi.fn();
+  // The three per-row plan writes. Spies rather than no-ops so a control wired to nothing is
+  // distinguishable from one wired correctly — the whole point of the row-action tests.
+  const notToday = vi.fn();
+  const setDuration = vi.fn();
+  const moveItem = vi.fn();
   const ctx: TodayCtx = {
     T: themes.celestial,
     graph,
@@ -78,6 +85,23 @@ export function ctxWith(
     generating,
     openDetail,
     goTab,
+    notToday,
+    setDuration,
+    moveItem,
   };
-  return { ctx, up, apply, applyPlan, flash, regenerate, chunk, openDetail, goTab };
+  return {
+    ctx,
+    plan,
+    up,
+    apply,
+    applyPlan,
+    flash,
+    regenerate,
+    chunk,
+    openDetail,
+    goTab,
+    notToday,
+    setDuration,
+    moveItem,
+  };
 }

@@ -27,6 +27,13 @@ import {
   startAuthor,
   updateFocus,
 } from '../api/focus.ts';
+// Aliased on import: the shell's own intents keep the `...Row` names declared on `AppState`, so
+// the endpoint function and the state callback that wraps it stay distinguishable at every use.
+import {
+  moveItem as moveItemApi,
+  notToday as notTodayApi,
+  setDuration as setDurationApi,
+} from '../api/planRow.ts';
 import { graphFromTree, periodsFromLive, planFromLive, schemaFromResponse } from '../api/adapt.ts';
 import type { LivePlan, PeriodsResponse, TreeResponse } from '../api/adapt.ts';
 import type {
@@ -214,6 +221,22 @@ export interface UiState {
   priOrder: string[] | null;
   /** Free-text "tell me what you need" box under Today's action row. v4's `st.ask`. */
   ask: string;
+  /**
+   * Which plan rows have their action panel open ("not today" / duration / move), keyed by ITEM
+   * ID — v4's `st.editOpen`, which v4 declares (v4:79) and never reads.
+   *
+   * Keyed by id and not by slot for the reason `chunked` and `blocksOpen` already are: a
+   * regenerated plan reassigns slots, so a positional key reattaches to the wrong row.
+   */
+  editOpen: Readonly<Record<string, true>>;
+  /**
+   * The plan row whose move-destination list is showing, or null. The Map picker's `moveFor`
+   * applied to Today, and likewise an id rather than an index.
+   *
+   * A single nullable field rather than a set, deliberately: only one row picks a destination at
+   * a time, and this shape cannot represent two even by accident.
+   */
+  movePick: string | null;
 
   // ── Add / Log tab + Settings (Task 8) ───────────────────────────────────────
   // None of these six appear in v4's initial bag (v4:79). Every one is written only via
@@ -385,6 +408,8 @@ const INITIAL_UI: UiState = {
   heldOpen: {},
   chunked: {},
   blocksOpen: {},
+  editOpen: {},
+  movePick: null,
   priOrder: null,
   ask: '',
   addText: '',
@@ -512,6 +537,30 @@ export interface AppState {
    * done state.
    */
   chunkBlock: (id: string, done: boolean) => Promise<void>;
+  /**
+   * Take one plan row off TODAY'S list — `POST /api/task/not-today`.
+   *
+   * ⚠ CACHE-ONLY BY DESIGN. No Anytype write, no status change, no reschedule: the item returns
+   * tomorrow with the status it had, and an 8h window keeps it off a same-day regenerate. That
+   * is what June asked for — it holds for the day and does not leak into future days. Do not
+   * turn this into a durable field.
+   */
+  notTodayRow: (id: string, kind: 'task' | 'block') => Promise<void>;
+  /**
+   * Set a row's length — `POST /api/duration`.
+   *
+   * ⚠ The server dispatches on whether the row is a block: a block sets the durable per-project
+   * CHUNK LENGTH, a task sets its own duration. The distinction is June's and the LABEL carries
+   * it; nothing here decides the kind.
+   */
+  setRowDuration: (id: string, minutes: number) => Promise<void>;
+  /**
+   * Move one row to another position in today's plan — `POST /api/task/move`. Bidirectional.
+   *
+   * ⚠ The move lives ONLY in the plan cache. The next generation rebuilds from Anytype and it is
+   * gone, so nothing may tell her it persisted.
+   */
+  moveRow: (id: string, target: { block: number | null; position: number }) => Promise<void>;
   /**
    * The real backend list — read from `GET /api/settings` on hydration, never hardcoded. Empty
    * until hydration answers, or if it fails; see the hydration effect for why there is no
@@ -1417,6 +1466,93 @@ export function useAppState(source: DataSource = 'live'): AppState {
   );
 
   /**
+   * ── THE THREE PER-ROW PLAN WRITES ────────────────────────────────────────────
+   *
+   * All three take the same shape, and it is NOT `chunkBlock`'s. There is no optimistic step
+   * here: what changes on screen IS the rewritten plan the server sends back, so there is
+   * nothing to show early and nothing to roll back. The row does not move until the write is
+   * known to have landed — which for a control that rearranges her day is the honest order.
+   *
+   * Each closes the panel it was invoked from on success, so the surface returns to rest without
+   * a second tap; a FAILURE leaves it open, because she may well want to try again.
+   */
+  const rowWriteGuard = useCallback(
+    (id: string, whatFailed: string): boolean => {
+      if (!id) {
+        fail(`That row has no id on it, so ${whatFailed} was NOT saved.`);
+        return false;
+      }
+      if (!live) {
+        fail(`Not connected to the server — ${whatFailed} was NOT saved.`);
+        return false;
+      }
+      return true;
+    },
+    [live, fail],
+  );
+
+  const notTodayRow = useCallback(
+    async (id: string, kind: 'task' | 'block'): Promise<void> => {
+      if (!rowWriteGuard(id, 'that')) return;
+      const res = await notTodayApi(id, kind);
+      if (res.kind === 'failed') {
+        fail(`That is still on today's list — it was NOT removed. ${res.error}`, { nodeId: id });
+        return;
+      }
+      if (res.plan) setPlan(planFromLive(res.plan));
+      setUi((prev) => {
+        const editOpen = { ...prev.editOpen };
+        delete editOpen[id];
+        return { ...prev, editOpen, movePick: prev.movePick === id ? null : prev.movePick };
+      });
+      // The removal HAPPENED even when a log write did not. Say the true thing first, then the
+      // caveat — never let the caveat stand in for the outcome.
+      succeed('Taken off today', null);
+      if (res.warning) fail(res.warning, { nodeId: id });
+    },
+    [rowWriteGuard, fail, succeed],
+  );
+
+  const setRowDuration = useCallback(
+    async (id: string, minutes: number): Promise<void> => {
+      if (!rowWriteGuard(id, 'that length')) return;
+      const res = await setDurationApi(id, minutes);
+      if (res.kind === 'failed') {
+        fail(`That length was NOT saved. ${res.error}`, { nodeId: id });
+        return;
+      }
+      if (res.plan) setPlan(planFromLive(res.plan));
+      setUi((prev) => {
+        const editOpen = { ...prev.editOpen };
+        delete editOpen[id];
+        return { ...prev, editOpen };
+      });
+      // The minutes the SERVER confirmed, not the ones that were asked for.
+      succeed(`Set to ${res.minutes} minutes`, null);
+    },
+    [rowWriteGuard, fail, succeed],
+  );
+
+  const moveRow = useCallback(
+    async (id: string, target: { block: number | null; position: number }): Promise<void> => {
+      if (!rowWriteGuard(id, 'that move')) return;
+      const res = await moveItemApi(id, target);
+      if (res.kind === 'failed') {
+        fail(`That did not move — it is where it was. ${res.error}`, { nodeId: id });
+        return;
+      }
+      if (res.plan) setPlan(planFromLive(res.plan));
+      setUi((prev) => {
+        const editOpen = { ...prev.editOpen };
+        delete editOpen[id];
+        return { ...prev, editOpen, movePick: null };
+      });
+      succeed('Moved', null);
+    },
+    [rowWriteGuard, fail, succeed],
+  );
+
+  /**
    * Settings (Task 10) — `POST /api/settings`, wiring the backend radio and the hobby switch.
    *
    * ⚠ THE KEY TRANSLATION. The client's `hobby` and the server's `include_hobby_block` are the
@@ -1769,6 +1905,9 @@ export function useAppState(source: DataSource = 'live'): AppState {
     authorFocus,
     saveFocusPeriod,
     chunkBlock,
+    notTodayRow,
+    setRowDuration,
+    moveRow,
     backendOptions,
     saveSettings,
     regenerate,

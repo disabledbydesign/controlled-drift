@@ -5,8 +5,10 @@ import {
   planItemDone,
   toggleDone,
 } from "../../model/index.ts";
+import type { PlanItem } from "../../fixtures/index.ts";
 import { TaskCheck } from "../atoms/index.ts";
 import { ArcStep } from "./ArcStep.tsx";
+import { RowActions } from "./RowActions.tsx";
 import type { TodayCtx } from "./types.ts";
 import { toggleKey } from "./util.ts";
 
@@ -62,6 +64,15 @@ export interface PriorityListProps {
  * and `nearestProject` resolves to "IOP and recovery", so the plain-row path would render
  * "IOP and recovery · Work on IOP and recovery". The phrasing names the thread on its own.
  */
+/**
+ * A task row's own duration, or 0 when it is unset or the row is not a task. Only `PlanTaskItem`
+ * carries `durationMin`; reading it off a block would report a chunk length as a duration, which
+ * is the one distinction the length control exists to keep straight.
+ */
+function durationOf(item: PlanItem | undefined): number {
+  return item && item.kind === 'task' ? item.durationMin : 0;
+}
+
 export function PriorityList({ ctx, reasonShown = false }: PriorityListProps) {
   const C = ctx.T.c;
   // Each item arrives with the band/item address `toggleArcStep` and the `blocksOpen` /
@@ -260,6 +271,11 @@ export function PriorityList({ ctx, reasonShown = false }: PriorityListProps) {
                 </span>
                 {reorder(i)}
               </div>
+              {/* A block: the removal drops every row of the project, and the length is a chunk
+                  length, not a duration. */}
+              <div style={{ padding: "0 14px 6px 39px" }}>
+                <RowActions ctx={ctx} id={item.id} kind="block" durationMin={item.chunkMin} />
+              </div>
               {open && expandable ? (
                 <div
                   style={{
@@ -288,14 +304,15 @@ export function PriorityList({ ctx, reasonShown = false }: PriorityListProps) {
         const done = planItemDone(itemById.get(id), n);
         const proj = nearestProject(ctx.idx, id);
         return (
+          // The hairline moves to an OUTER wrapper so the action panel opens INSIDE the row's
+          // rule rather than below it. The flex line itself is unchanged.
+          <div key={id} style={{ borderBottom: "1px solid " + C.hair }}>
           <div
-            key={id}
             style={{
               display: "flex",
               alignItems: "center",
               gap: "9px",
               padding: "9px 14px",
-              borderBottom: "1px solid " + C.hair,
             }}
           >
             {numberGutter(i)}
@@ -343,6 +360,15 @@ export function PriorityList({ ctx, reasonShown = false }: PriorityListProps) {
               {n.title}
             </span>
             {reorder(i)}
+          </div>
+            <div style={{ padding: "0 14px 6px 39px" }}>
+              <RowActions
+                ctx={ctx}
+                id={id}
+                kind="task"
+                durationMin={durationOf(itemById.get(id))}
+              />
+            </div>
           </div>
         );
       })}

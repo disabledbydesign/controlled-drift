@@ -37,6 +37,29 @@ export interface TodayUi {
   priOrder: string[] | null;
   /** The "tell me what you need" box — v4's `st.ask`. */
   ask: string;
+  /**
+   * Which rows have their action panel open, KEYED BY ITEM ID — v4's declared `st.editOpen`.
+   *
+   * ⚠ v4 declares `editOpen: new Set()` in its Today state and never reads it anywhere (grepped:
+   * one occurrence, the declaration). So the mockup ANTICIPATED a per-row reveal on Today and
+   * left it unbuilt — the name is v4's, the rendering is not a transcription of it. What the
+   * treatment IS derived from is the old overlay, which put all three of these controls behind
+   * one per-row reveal for a recorded reason: June found separate always-visible chips "messy"
+   * (`docs/overlay_daily.html`, `editChipHtml` ~2113).
+   *
+   * Keyed by id, not by slot, for the reason `chunked` and `blocksOpen` already are: a
+   * regenerated plan reassigns slots, so a positional key reattaches to the wrong row.
+   */
+  editOpen: Readonly<Record<string, true>>;
+  /**
+   * The item whose move-destination list is showing, or null — the Map picker's `moveFor`, which
+   * is likewise a node id rather than an index.
+   *
+   * One at a time, deliberately: the old overlay collapsed every other affordance during
+   * placement ("one thing at a time"), and a single nullable field cannot represent two open
+   * pickers even by accident.
+   */
+  movePick: string | null;
 }
 
 /** What v4's Today methods had implicitly as `this`. */
@@ -101,6 +124,39 @@ export interface TodayCtx {
   openDetail: (id: string) => void;
   /** v4's `up({appTab:'map'})` / `up({appTab:'add'})`. Same reasoning as `openDetail`. */
   goTab: (tab: 'map' | 'add') => void;
+  /**
+   * Take this row off TODAY'S list — `POST /api/task/not-today`.
+   *
+   * `kind` is what the server dispatches on: `'block'` takes the id as a PROJECT id and drops
+   * every row of that block, `'task'` drops the one row.
+   *
+   * ⚠ CACHE-ONLY BY DESIGN, and it must stay that way. No Anytype write, no status change, no
+   * reschedule: the item returns tomorrow with the status it had, and stays off a same-day
+   * regenerate for an 8h window. June asked for exactly that — it holds for the day and does not
+   * leak into future days. Do not "fix" this into a durable field.
+   */
+  notToday: (id: string, kind: 'task' | 'block') => void;
+  /**
+   * Set how long this takes — `POST /api/duration`.
+   *
+   * ⚠ ONE endpoint, TWO meanings, dispatched SERVER-side on whether the row is a block:
+   *   - a BLOCK is a per-project CHUNK LENGTH — "how long I work on this in a sitting"
+   *   - a TASK is that task's own duration — "how long this specific thing takes"
+   * The difference is June's and is not cosmetic, so the CALLER must label it correctly; the old
+   * overlay's chip read "set chunk length" on a block and "set duration" on a task for this
+   * reason. Nothing here may collapse the two into one word.
+   */
+  setDuration: (id: string, minutes: number) => void;
+  /**
+   * Move this row to another position in today's plan — `POST /api/task/move`.
+   *
+   * Bidirectional: earlier and later both work, and the server re-flows the clock times. The
+   * target comes from `moveDestinations`, which owns the index arithmetic.
+   *
+   * ⚠ Declared structurally rather than importing `api/planRow`'s `MoveTarget`, following this
+   * file's one-way-dependency rule. If the two drift, the mount point stops compiling.
+   */
+  moveItem: (id: string, target: { block: number | null; position: number }) => void;
   /**
    * The focus-period context (Task 9). `FocusSlot`'s expanded body is v4's `focusPanel()`
    * (v4:1021), which needs `periods`, `applyPeriods` and the `__focus__` detail route —

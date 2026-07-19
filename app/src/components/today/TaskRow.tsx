@@ -1,6 +1,7 @@
 import type { PlanTaskItem } from '../../fixtures/index.ts';
 import { nearestProject, node, planItemDone, toggleDone } from '../../model/index.ts';
 import { EditChip, RoundCheck } from '../atoms/index.ts';
+import { RowActions } from './RowActions.tsx';
 import type { TodayCtx } from './types.ts';
 import { toggleKey } from './util.ts';
 
@@ -113,6 +114,12 @@ export function TaskRow({ ctx, item, entryKey, showProj }: TaskRowProps) {
           ) : null}
         </span>
         <EditChip T={ctx.T} onClick={() => ctx.openDetail(item.id)} />
+      </div>
+      {/* "not today" / duration / move. Kept OUT of the flex row above: that row is a single
+          baseline-aligned line, and the panel opens to a second one. `EditChip` stays what it
+          is — the way into the object editor — so the panel brings its own affordance. */}
+      <div style={{ paddingLeft: '22px' }}>
+        <RowActions ctx={ctx} id={item.id} kind="task" durationMin={item.durationMin} />
       </div>
       {held.length && heldOpen ? (
         <div style={{ paddingLeft: '78px', marginTop: '3px' }}>

@@ -190,6 +190,12 @@ export function useSurface({ T, name, setTheme, wide, source }: SurfaceOptions):
     generating: st.generating,
     openDetail: (id: string) => st.up({ detail: id, returnFrom: 'today' }),
     goTab: (t) => goTab(t),
+    // The three per-row plan writes. Fire-and-forget for the same reason as `chunk`: each one
+    // reports every outcome through `succeed`/`fail` itself, so the row has nothing to await and
+    // no second place to get the reporting wrong.
+    notToday: (id, kind) => void st.notTodayRow(id, kind),
+    setDuration: (id, minutes) => void st.setRowDuration(id, minutes),
+    moveItem: (id, target) => void st.moveRow(id, target),
   };
 
   /**
