@@ -4,6 +4,10 @@ import { AppShell } from './AppShell.tsx';
 import { DeskShell } from './DeskShell.tsx';
 import { useSurface } from './useSurface.ts';
 import { isNative } from './native.ts';
+import { present } from './signals.ts';
+import { AnnotateOverlay } from '../friction/AnnotateOverlay.tsx';
+import { useFrictionCapture } from '../friction/useFrictionCapture.ts';
+import { CHROME_ATTR } from '../friction/capture.ts';
 import type { DataSource } from './useAppState.ts';
 
 /**
@@ -102,5 +106,96 @@ export function Surface({ T, name, setTheme, source }: SurfaceProps) {
   const wideByViewport = useIsDesktop();
   const wide = isNative() || wideByViewport;
   const surface = useSurface({ T, name, setTheme, wide, source });
-  return wide ? <DeskShell T={T} surface={surface} /> : <AppShell T={T} surface={surface} />;
+
+  /**
+   * ── the friction capture, mounted ONCE above the fork ──────────────────────
+   *
+   * Same reason `useSurface` is called here rather than inside either shell: this is the only
+   * place that is on every screen in BOTH shells. Mounted inside `AppShell` and `DeskShell`
+   * separately it would be two implementations drifting apart, and an in-progress capture — her
+   * half-written sentence and whatever she drew on the picture — would be thrown away by a
+   * window resize across 900px, because crossing the breakpoint unmounts one shell and mounts
+   * the other. That is exactly the bug the state placement documented above exists to prevent,
+   * and the capture must not reintroduce it.
+   */
+  const capture = useFrictionCapture();
+
+  /**
+   * A failure or notice bar is `position:fixed`, `bottom:22px`, `calc(100% - 28px)` wide and
+   * centred (`SignalBar.tsx`), so at the native Today window's 392px it runs under the quiet
+   * button — and its DISMISS control is at its right end, directly beneath. That bar is the one
+   * signal that deliberately never fades, so covering the only way to dismiss it would be worse
+   * than briefly losing a button. The button comes back the moment the bar goes, and the long
+   * press and Cmd/Ctrl-Shift-F still reach the capture meanwhile.
+   */
+  const barShowing = surface.st.toast !== null && present(surface.st.toast).mode === 'bar';
+
+  return (
+    <>
+      {wide ? <DeskShell T={T} surface={surface} /> : <AppShell T={T} surface={surface} />}
+
+      {/* The quiet always-there way in — "this whole screen is wrong", and the guaranteed path
+          when a gesture misfires. Marked as capture chrome so `snapshot()`'s filter drops it;
+          without that every picture would have this button burned into its corner. */}
+      {!capture.state.open && !capture.state.busy && !barShowing ? (
+        <button
+          type="button"
+          {...{ [CHROME_ATTR]: '' }}
+          aria-label="Log what is wrong here"
+          title="Log what is wrong here (press and hold, or Cmd-Shift-F)"
+          onClick={() => capture.begin(null, 'button')}
+          style={{
+            position: 'fixed',
+            right: 12,
+            bottom: 12,
+            // Above the signal bars (60) and the picker page (45) so it is never buried, and
+            // below the overlay itself (9999), which replaces it rather than sitting under it.
+            zIndex: 9998,
+            width: 34,
+            height: 34,
+            borderRadius: 17,
+            border: `1px solid ${T.c.border}`,
+            background: T.c.surface,
+            color: T.c.dim,
+            font: 'inherit',
+            fontSize: 15,
+            lineHeight: '1',
+            cursor: 'pointer',
+            opacity: 0.55,
+          }}
+        >
+          !
+        </button>
+      ) : null}
+
+      {capture.state.open ? (
+        <AnnotateOverlay
+          T={T}
+          shot={capture.state.shot}
+          target={capture.state.target}
+          onCancel={capture.close}
+          // `surface.tab` and `surface.st.ui.detail` are the SAME two values `DeskShell` reads for
+          // its native window resize (`DeskShell.tsx:167`) — the app has no other record of where
+          // she is. `ui.detail` is an object id, or the `'__focus__'` sentinel when the focus
+          // editor is open; both are stored verbatim and never interpreted, like the raw text.
+          //
+          // The answer is returned undiluted, and CLOSING IS NOT DECIDED HERE. `logDay` resolves
+          // false having already said what did not happen, and `AnnotateOverlay.send` closes only
+          // on a true — so her comment and her drawing survive a failed send. Closing here as well
+          // would put that decision in two places, and the overlay's copy is the one that also
+          // has to keep her text.
+          onSend={(text, shot, marks, size) =>
+            surface.st.logDay(text, ['issue'], {
+              shot,
+              view: { tab: surface.tab, detailId: surface.st.ui.detail },
+              target: capture.state.target,
+              via: capture.state.via,
+              marks,
+              size,
+            })
+          }
+        />
+      ) : null}
+    </>
+  );
 }
