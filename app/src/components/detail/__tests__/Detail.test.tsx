@@ -199,6 +199,25 @@ describe('the two states of an inheritable field — inherited, or set here', ()
     expect(write?.node?.vals.access).toBe('Involves-leaving-house');
   });
 
+  /**
+   * Raised by the cross-family review: open the editor, pick nothing, back out. Nothing was ever
+   * stored, so there is nothing to clear — and firing a clear anyway would send a write for a
+   * field she never changed, against an object that was only ever inheriting.
+   */
+  it('opening the editor and backing out writes nothing at all', () => {
+    const { container, apply } = open('r-kitchen');
+    const b = block(container, 'Access conditions');
+
+    fireEvent.click(within(b).getByRole('button', { name: 'Custom' }));
+    fireEvent.click(within(block(container, 'Access conditions')).getByRole('button', { name: 'Inherit' }));
+
+    expect(apply).not.toHaveBeenCalled();
+    // Positively: it is back to the inheriting presentation, not stranded mid-edit.
+    expect(block(container, 'Access conditions').textContent).toContain(
+      'Nothing to inherit from a parent yet',
+    );
+  });
+
   it('Inherit deletes the key; Custom copies the inherited value down', () => {
     const { container, apply } = open(TASK_UNDER_CRAFTS);
     const b = block(container, 'Access conditions');
