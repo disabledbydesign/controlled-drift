@@ -84,7 +84,7 @@ const NAV = '.26s cubic-bezier(.4,0,.2,1)';
  *   conversion is real and lives in the header dropdown (`HeaderTypeBadge`).
  */
 export function Detail({ ctx, id, closing, onClose }: DetailProps) {
-  const { T, graph, idx, schema, ui, up, apply, flash, wide } = ctx;
+  const { T, graph, idx, schema, ui, up, apply, finishedEditing, wide } = ctx;
   const C = T.c;
 
   // v4:476 `askDelete` — a two-tap confirm that disarms itself after a timeout. Local rather
@@ -320,7 +320,11 @@ export function Detail({ ctx, id, closing, onClose }: DetailProps) {
             rows={1}
             aria-label="Title"
             onChange={(e) => apply(setTitle(graph, id, e.target.value))}
-            onBlur={() => flash('Saved')}
+            // ⚠ NOT `flash('Saved')`. The title write is DEBOUNCED 600ms, so that claim could
+            // land before the request was even sent — and the unmount used to cancel the pending
+            // timer, so closing the editor here discarded a write she had been told had saved.
+            // `finishedEditing` flushes the pending write and speaks only once the server answers.
+            onBlur={() => void finishedEditing(id)}
             style={{
               flex: 1,
               minWidth: 0,
@@ -395,9 +399,10 @@ export function Detail({ ctx, id, closing, onClose }: DetailProps) {
               placeholder="—"
               aria-label={label}
               onChange={(e) => apply(setVal(graph, id, vk, e.target.value))}
-              onBlur={() => {
-                if (v) flash('Saved');
-              }}
+              // Same seam as the title. The `if (v)` guard is gone with it: "did she type
+              // anything" was standing in for "was anything written", and `finishedEditing`
+              // answers the real question by staying silent when there was no write.
+              onBlur={() => void finishedEditing(id)}
               // v4: three keys get 3 rows, everything else 2. `directive` is in that list and
               // stays in it — it is the Strategy instruction field, relabelled but not moved.
               rows={vk === 'context' || vk === 'description' || vk === 'directive' ? 3 : 2}

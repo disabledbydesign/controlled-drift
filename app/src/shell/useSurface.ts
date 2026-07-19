@@ -86,10 +86,13 @@ export function useSurface({ T, name, setTheme, wide, source }: SurfaceOptions):
       : null;
 
   /**
-   * v4's `detail()` context. `flash` is v4's `flash(msg)` with no model change behind it —
-   * the title and note textareas already wrote per keystroke, so the blur has nothing left to
-   * persist and the toast is the only effect. Routing it through `apply` with the CURRENT
-   * graph reuses the one toast seam without a second state field.
+   * v4's `detail()` context.
+   *
+   * ⚠ `flash` is v4's `flash(msg)` with no model change behind it, and the claim that used to
+   * sit beside it here — "the blur has nothing left to persist" — was FALSE for the title. That
+   * write is on a 600ms debounce, so blur could arrive before the request. Blur now goes to
+   * `finishedEditing`, which flushes the pending write and speaks only once the server answers.
+   * `flash` remains for messages with genuinely nothing behind them.
    */
   const detailCtx: DetailCtx = {
     T,
@@ -100,6 +103,7 @@ export function useSurface({ T, name, setTheme, wide, source }: SurfaceOptions):
     up: st.up,
     apply: st.apply,
     flash: (msg: string) => st.apply({ graph: st.graph, toast: msg, ui: null, node: null }),
+    finishedEditing: (id: string) => st.finishedEditing(id),
     // v4:587 — the desktop detail pane closes with a bordered "✕ Close" pill, the phone with
     // a "‹ Back" text button.
     wide,

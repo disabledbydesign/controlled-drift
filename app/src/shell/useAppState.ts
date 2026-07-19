@@ -493,6 +493,14 @@ export interface AppState {
    */
   completeArcStep: (ref: ArcStepRef, done: boolean) => Promise<void>;
   /**
+   * She has finished editing a field on this object — the object editor's `onBlur`.
+   *
+   * Flushes any pending debounced write for it, waits for the server, and raises "Saved" ONLY
+   * if the write was confirmed. Says nothing when nothing was written, and nothing when the
+   * write failed (that has already reported itself). See the implementation.
+   */
+  finishedEditing: (id: string) => Promise<void>;
+  /**
    * Apply a PERIOD mutation (Task 9). Third seam of the same shape as `apply`/`applyPlan`,
    * for the same reason: focus periods are neither graph nodes nor plan entries. See
    * `model/periods.ts`.
@@ -792,14 +800,32 @@ export function useAppState(source: DataSource = 'live'): AppState {
   const planRef = useRef(plan);
   planRef.current = plan;
 
-  /** Per-object debounce timers for the title field, which fires per keystroke. */
-  const titleTimers = useRef(new Map<string, ReturnType<typeof setTimeout>>());
+/**
+   * Per-object debounce timers for the title field, which fires per keystroke.
+   *
+   * ⚠ EACH ENTRY CARRIES ITS OWN `flush`, not just a handle. A handle can only be CANCELLED, and
+   * cancelling is what the unmount cleanup used to do: `clearTimeout(t)` on every pending timer
+   * without firing it, so closing the app within 600ms of the last keystroke silently discarded a
+   * write June had already been told had saved. `flush` runs the write NOW and clears the timer,
+   * which is what both the unmount and `finishedEditing` actually need.
+   */
+  const titleTimers = useRef(new Map<string, { timer: ReturnType<typeof setTimeout>; flush: () => void }>());
   useEffect(() => {
     const timers = titleTimers.current;
     return () => {
-      for (const t of timers.values()) clearTimeout(t);
+      // FIRE the pending writes, do not drop them. Her words outrank a tidy teardown.
+      for (const t of [...timers.values()]) t.flush();
     };
   }, []);
+
+  /**
+   * The most recent field write per object, as the promise that says whether it was CONFIRMED.
+   *
+   * This is what lets blur wait for an answer instead of guessing one. An entry is CONSUMED when
+   * it is read, so a second blur with no edit in between claims nothing — the old unconditional
+   * `flash('Saved')` said "Saved" for merely tabbing through an untouched field.
+   */
+  const fieldWrites = useRef(new Map<string, Promise<boolean>>());
 
   /**
    * Put the SERVER's object into the graph, replacing whatever the optimistic mutation guessed.
@@ -825,8 +851,17 @@ export function useAppState(source: DataSource = 'live'): AppState {
    * surface feel like a form rather than a list. The cost of optimism is that a failure must be
    * UNDONE visibly, which is what the rollback and the persistent failure bar do together.
    */
+  /**
+   * Send one write, and say WHETHER THE SERVER CONFIRMED IT.
+   *
+   * ⚠ The boolean is the point, not a convenience. Every `false` here has already reverted the
+   * optimistic change and told her what did not save, so no caller needs to report a failure —
+   * but a caller that wants to CONFIRM a save has no other honest source for the answer.
+   * `finishedEditing` is that caller: the editor used to say "Saved" on blur with nothing behind
+   * it, because there was nothing to ask.
+   */
   const performWrite = useCallback(
-    async (intent: WriteIntent, before: Graph, beforeNode: ModelNode | null) => {
+    async (intent: WriteIntent, before: Graph, beforeNode: ModelNode | null): Promise<boolean> => {
       /**
        * Undo one failed write.
        *
@@ -864,7 +899,7 @@ export function useAppState(source: DataSource = 'live'): AppState {
           `Could not ${intent.what} — this surface cannot save that yet, so nothing changed.`,
           intent.id,
         );
-        return;
+        return false;
       }
 
       if (intent.op === 'complete') {
@@ -879,7 +914,7 @@ export function useAppState(source: DataSource = 'live'): AppState {
             `Could not ${intent.done ? 'check off' : 'reopen'} that — it is NOT saved. ${res.error}`,
             intent.id,
           );
-          return;
+          return false;
         }
         // ⚠ `/api/complete` does NOT answer the contract's `{ok, object}` envelope — it returns
         // `{completed: {...partial}, plan}` (contract §4 lists it as CHANGE, unbuilt). So the
@@ -903,7 +938,7 @@ export function useAppState(source: DataSource = 'live'): AppState {
         // The check-off also re-writes today's plan cache, and the response carries it. An
         // `{empty:true}` body means the id was not in today's plan — not a plan to render.
         if (res.data.plan && !res.data.plan.empty) setPlan(planFromLive(res.data.plan));
-        return;
+        return true;
       }
 
       if (intent.op === 'recurringActive') {
@@ -914,13 +949,13 @@ export function useAppState(source: DataSource = 'live'): AppState {
         );
         if (!res.ok) {
           rollback(`Could not change whether that is in the plan — it is NOT saved. ${res.error}`, intent.id);
-          return;
+          return false;
         }
         if (res.data.object) acceptServerNode(res.data.object);
         // A saved write whose read-back could not be assembled is reported, not swallowed —
         // the toggle itself was already proven inside `set_recurring_active`.
         else if (res.data.warning) fail(res.data.warning, { nodeId: intent.id, kind: 'read_back' });
-        return;
+        return true;
       }
 
       if (intent.op === 'clearField') {
@@ -935,19 +970,19 @@ export function useAppState(source: DataSource = 'live'): AppState {
         );
         if (!res.ok) {
           rollback(`Could not go back to inheriting ${intent.field} — it is NOT saved. ${res.error}`, intent.id);
-          return;
+          return false;
         }
         if (res.data.object) acceptServerNode(res.data.object);
-        return;
+        return true;
       }
 
       if (intent.op === 'archive') {
         const res = await apiSend<{ archived?: boolean }>('DELETE', `/api/object/${intent.id}`);
         if (!res.ok) {
           rollback(`Could not delete that — it is still there. ${res.error}`, intent.id);
-          return;
+          return false;
         }
-        return; // nothing to accept: the object is gone, and the optimistic removal was right
+        return true; // nothing to accept: the object is gone, and the optimistic removal was right
       }
 
       if (intent.op === 'create') {
@@ -958,7 +993,7 @@ export function useAppState(source: DataSource = 'live'): AppState {
         });
         if (!res.ok) {
           rollback(`Could not create that — nothing was saved. ${res.error}`, intent.tempId);
-          return;
+          return false;
         }
         if (res.data.object) {
           // THE TEMP ID IS REPLACED BY THE REAL ONE (contract §4). The detail pane was opened on
@@ -969,7 +1004,7 @@ export function useAppState(source: DataSource = 'live'): AppState {
             prev.detail === intent.tempId ? { ...prev, detail: res.data.object!.id } : prev,
           );
         }
-        return;
+        return true;
       }
 
       const path = `/api/object/${intent.id}`;
@@ -993,9 +1028,10 @@ export function useAppState(source: DataSource = 'live'): AppState {
               ? 'move that'
               : `save ${Object.keys(intent.vals).join(', ')}`;
         rollback(`Could not ${what} — it is NOT saved. ${res.error}`, intent.id);
-        return;
+        return false;
       }
       if (res.data.object) acceptServerNode(res.data.object);
+      return true;
     },
     [acceptServerNode, fail],
   );
@@ -1029,19 +1065,60 @@ export function useAppState(source: DataSource = 'live'): AppState {
         // this). The LAST title wins, and the rollback target is the graph as it was before the
         // first keystroke of the burst — which is why `before` is captured out here.
         const prev = titleTimers.current.get(intent.id);
-        if (prev) clearTimeout(prev);
-        titleTimers.current.set(
-          intent.id,
-          setTimeout(() => {
-            titleTimers.current.delete(intent.id);
-            void performWrite(intent, before, beforeNode);
-          }, 600),
-        );
+        if (prev) clearTimeout(prev.timer);
+        // The write, as a thunk that can be run by the timer OR pulled forward. It records its
+        // own promise in `fieldWrites` so a blur arriving later can ask how it went.
+        const run = () => {
+          titleTimers.current.delete(intent.id);
+          fieldWrites.current.set(intent.id, performWrite(intent, before, beforeNode));
+        };
+        titleTimers.current.set(intent.id, {
+          timer: setTimeout(run, 600),
+          flush: () => {
+            const held = titleTimers.current.get(intent.id);
+            if (held) clearTimeout(held.timer);
+            run();
+          },
+        });
         return;
       }
-      void performWrite(intent, before, beforeNode);
+      // Not debounced, but still recorded: a note field writes per keystroke, and blur must be
+      // able to wait on the LAST of those rather than announce a save over one still in flight.
+      const p = performWrite(intent, before, beforeNode);
+      if (intent.op === 'patchVals') fieldWrites.current.set(intent.id, p);
+      else void p;
     },
     [live, performWrite, succeed],
+  );
+
+  /**
+   * SHE HAS LEFT A FIELD — flush whatever is pending, then say "Saved" ONLY if it saved.
+   *
+   * ⚠ This replaces `onBlur={() => flash('Saved')}` in the object editor, which was wrong twice
+   * over. The title write is on a 600ms debounce, so that claim could precede the REQUEST, not
+   * merely the response; and it was unconditional, so it also fired for a field she merely
+   * tabbed through. `DetailCtx.flash`'s own doc-comment asserted there was "nothing left to
+   * write", which is how it survived review.
+   *
+   * ⚠ WHY THE CONFIRMATION IS RAISED HERE AND NOT BY EVERY SUCCESSFUL WRITE. `succeed` sets a
+   * TOAST, and `patchVals` fires per keystroke — confirming inside `performWrite` would flicker
+   * "Saved" on every character she typed. Blur is the right moment to speak. The defect was that
+   * blur was not waiting for anything.
+   *
+   * Silence is correct when nothing was written. A failure has already reported itself through
+   * `performWrite`'s rollback, so this must not speak again — she would get two messages about
+   * one event, the second contradicting the first.
+   */
+  const finishedEditing = useCallback(
+    async (id: string): Promise<void> => {
+      titleTimers.current.get(id)?.flush();
+      const pending = fieldWrites.current.get(id);
+      if (!pending) return;
+      // CONSUMED, so a second blur with no edit in between describes nothing and says nothing.
+      fieldWrites.current.delete(id);
+      if (await pending) succeed('Saved', id);
+    },
+    [succeed],
   );
 
   /**
@@ -2017,6 +2094,7 @@ export function useAppState(source: DataSource = 'live'): AppState {
     saveFocusPeriod,
     chunkBlock,
     completeArcStep,
+    finishedEditing,
     notTodayRow,
     setRowDuration,
     moveRow,

@@ -34,12 +34,15 @@ interface Harness {
   apply: ReturnType<typeof vi.fn>;
   up: ReturnType<typeof vi.fn>;
   flash: ReturnType<typeof vi.fn>;
+  finishedEditing: ReturnType<typeof vi.fn>;
 }
 
 function harness(graph: Graph, over: Partial<DetailCtx> = {}): Harness {
   const apply = vi.fn();
   const up = vi.fn();
   const flash = vi.fn();
+  /** Blur's real destination: flush the pending write, then speak only if the server confirmed. */
+  const finishedEditing = vi.fn(async () => {});
   const ctx: DetailCtx = {
     T: themes.celestial,
     graph,
@@ -49,9 +52,10 @@ function harness(graph: Graph, over: Partial<DetailCtx> = {}): Harness {
     up,
     apply,
     flash,
+    finishedEditing,
     ...over,
   };
-  return { ctx, apply, up, flash };
+  return { ctx, apply, up, flash, finishedEditing };
 }
 
 function open(id: string, over: Partial<DetailCtx> = {}) {
@@ -415,14 +419,32 @@ describe('the header', () => {
     expect(within(container).getByRole('button', { name: 'close' })).toBeTruthy();
   });
 
-  it('the title writes per keystroke and flashes only on blur', () => {
-    const { container, apply, flash } = open(TASK_UNDER_CRAFTS);
+  /**
+   * ⚠ REWRITTEN 2026-07-19. This asserted `flash('Saved')` on blur, and it passed — against a
+   * claim that could precede the request entirely. The title write is on a 600ms debounce, so
+   * blur-time "Saved" was describing a write that had not been sent yet, and closing the editor
+   * inside that window discarded it. Blur now hands the object to `finishedEditing`, which
+   * flushes the debounce, waits for the server, and speaks only if it confirmed.
+   */
+  it('the title writes per keystroke and asks for confirmation on blur', () => {
+    const { container, apply, flash, finishedEditing } = open(TASK_UNDER_CRAFTS);
     const title = within(container).getByLabelText('Title');
     fireEvent.change(title, { target: { value: 'Sell the case' } });
     expect((apply.mock.calls[0]?.[0] as MutationResult).node?.title).toBe('Sell the case');
-    expect(flash).not.toHaveBeenCalled();
+    expect(finishedEditing).not.toHaveBeenCalled();
     fireEvent.blur(title);
-    expect(flash).toHaveBeenCalledWith('Saved');
+    expect(finishedEditing).toHaveBeenCalledWith(TASK_UNDER_CRAFTS);
+    // The seam that claims a save with nothing behind it is not the one blur goes to.
+    expect(flash).not.toHaveBeenCalledWith('Saved');
+  });
+
+  it('a note field asks for the same confirmation on blur', () => {
+    const { container, finishedEditing, flash } = open(TASK_UNDER_CRAFTS);
+    const note = within(container).getByLabelText('Context');
+    fireEvent.change(note, { target: { value: 'ring them in the morning' } });
+    fireEvent.blur(note);
+    expect(finishedEditing).toHaveBeenCalledWith(TASK_UNDER_CRAFTS);
+    expect(flash).not.toHaveBeenCalledWith('Saved');
   });
 });
 

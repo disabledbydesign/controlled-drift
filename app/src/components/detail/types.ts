@@ -51,12 +51,28 @@ export interface DetailCtx {
   /** v4's mutate-then-`bump()`; here, the one seam mutations go through. */
   apply: (result: MutationResult) => void;
   /**
-   * v4's `flash(msg)` with NO model mutation behind it. Used at exactly two sites in
-   * `detail()`: the title textarea's `onBlur` (587) and each note textarea's `onBlur` (596).
-   * Both fire after `setTitle`/`setVal` have already run per keystroke, so there is nothing
-   * left to write — the flash is the only effect.
+   * v4's `flash(msg)` with NO model mutation behind it — a message with genuinely nothing
+   * behind it.
+   *
+   * ⚠ It used to serve the title and note textareas' `onBlur` as `flash('Saved')`, on the
+   * reasoning that `setTitle`/`setVal` had already run per keystroke so "there is nothing left
+   * to write". That was wrong: the title write is DEBOUNCED 600ms, so the claim could precede
+   * the request entirely, and closing the editor inside that window discarded it. Those two
+   * sites now call `finishedEditing`.
+   *
+   * ⚠ Those were its only two call sites, so this now has NO caller. Left in place and marked
+   * rather than deleted, so that the next person reaching for a "just say Saved" affordance
+   * reads why it is empty first. A message about a WRITE belongs on `finishedEditing`; this is
+   * only for messages with nothing to save behind them.
    */
   flash: (msg: string) => void;
+  /**
+   * She has finished editing a field on this object — both textareas' `onBlur`.
+   *
+   * Flushes the pending debounced write, waits for the server, and says "Saved" only if it
+   * saved. Says nothing if she wrote nothing, and nothing on a failure (which reports itself).
+   */
+  finishedEditing: (id: string) => Promise<void>;
   /**
    * v4's `this._wide` — true only inside `deskApp()` (v4:730). It swaps the phone's
    * "‹ Back" affordance for `paneCloseBtn()`. The desktop shell is Task 10, so nothing in
