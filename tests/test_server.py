@@ -80,8 +80,9 @@ def _post(base, path, body):
 # --- GET routes -------------------------------------------------------------
 
 def test_get_overlay_html(live_server):
+    # The overlay moved to /old/ when the new surface took `/` (2026-07-18).
     base, _ = live_server
-    status, body = _get(base, "/")
+    status, body = _get(base, "/old/")
     assert status == 200 and "<!DOCTYPE html>" in body
 
 
@@ -184,7 +185,14 @@ def test_get_tree_failure_is_a_visible_500_not_a_partial_tree(live_server, monke
 def app_dist(tmp_path, monkeypatch):
     d = tmp_path / "dist"
     (d / "assets").mkdir(parents=True)
-    (d / "index.html").write_text("<!DOCTYPE html><div id=root></div>")
+    # Reference the assets the way a real Vite build does — absolute, under the `/app/` base.
+    # The stub used to be a bare `<div id=root>` with the asset files present but unreferenced,
+    # which could not model the thing that actually matters once the app is served at `/`: the
+    # root document's scripts are fetched from /app/, so `/` depends on that mount existing.
+    (d / "index.html").write_text(
+        '<!DOCTYPE html><script type="module" src="/app/assets/index-abc123.js"></script>'
+        '<link rel="stylesheet" href="/app/assets/index-abc123.css">'
+        '<div id=root></div>')
     (d / "assets" / "index-abc123.js").write_text("console.log('new surface')")
     (d / "assets" / "index-abc123.css").write_text(":root{--x:1}")
     (tmp_path / "secret.txt").write_text("June's health data")
@@ -225,10 +233,53 @@ def test_app_refuses_path_traversal(live_server, app_dist):
             assert e.code == 403, f"{path} -> {e.code}, expected 403"
 
 
-def test_old_overlay_still_served_at_root_alongside_the_app(live_server, app_dist):
-    # Load-bearing: June uses the old overlay daily. The new surface comes up beside it.
+def test_the_new_surface_is_what_the_root_serves(live_server, app_dist):
+    """Until 2026-07-18 this test asserted the OPPOSITE — that the old overlay held `/` and the
+    new surface came up beside it. That was correct while promoting it was still June's call to
+    make. She made it ("switch the new ui to be what our server hosts instead of the old ui"), so
+    what is load-bearing now is the promotion, not the coexistence."""
     base, _ = live_server
     status, body = _get(base, "/")
+    assert status == 200 and "id=root" in body
+
+
+def test_the_root_and_app_serve_the_same_bundle(live_server, app_dist):
+    """Not incidental: the bundle's asset URLs are absolute under /app/ (Vite base), so `/`
+    depends on /app/ staying mounted. If someone later 'cleans up' /app/ as a legacy alias, the
+    root keeps returning HTML while every script tag 404s — a white page, not a failed request."""
+    base, _ = live_server
+    assert _get(base, "/")[1] == _get(base, "/app/")[1]
+
+
+def test_the_root_accepts_a_query_string(live_server, app_dist):
+    """`/?verbose=1` is documented in RUNNING.md. It 404'd when the app was first promoted to `/`:
+    the root route compared `self.path` literally, so the query string made the match fail. /app/
+    never had the bug because it parses the URL, which is exactly why promoting a route can break
+    something that worked at its old address."""
+    base, _ = live_server
+    for url in ("/?verbose=1", "/index.html?verbose=1", "/old/?x=1"):
+        status, _ = _get(base, url)
+        assert status == 200, f"{url} should be served, got {status}"
+
+
+def test_the_roots_asset_urls_actually_resolve(live_server, app_dist):
+    """Serving the right HTML at `/` is not enough — the bundle asks for its scripts by absolute
+    path under /app/, so if that mount ever goes away the root keeps returning 200 with a blank
+    page. Fetch what the HTML actually references rather than trusting the HTML alone."""
+    import re
+    base, _ = live_server
+    _, body = _get(base, "/")
+    refs = re.findall(r'(?:src|href)="(/[^"]+)"', body)
+    assert refs, "the root document referenced no local assets at all"
+    for ref in refs:
+        assert _get(base, ref)[0] == 200, f"{ref} referenced by / does not resolve"
+
+
+def test_the_old_overlay_is_still_reachable_at_old(live_server, app_dist):
+    """Moved, not deleted. The new surface has not yet had a full week of her real use, and /old/
+    is the way back if something turns out to be missing from it."""
+    base, _ = live_server
+    status, body = _get(base, "/old/")
     assert status == 200 and "<!DOCTYPE html>" in body and "id=root" not in body
 
 

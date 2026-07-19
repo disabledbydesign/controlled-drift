@@ -37,7 +37,7 @@ Routes:
 
 Run:  python3 scripts/server.py   (then open http://localhost:5050)
 """
-import sys, os, json, threading
+import sys, os, json, threading, ipaddress
 from urllib.parse import urlparse, parse_qs, unquote
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 
@@ -362,12 +362,73 @@ def _bind_name(host):
     return host
 
 
+# --- who is allowed to reach this at all ------------------------------------
+#
+# The bind address alone forced a bad trade: binding the mesh address kept the wifi out but also
+# stopped `localhost` answering on the laptop (and broke the Vite dev proxy, which talks to
+# 127.0.0.1:5050). Binding 0.0.0.0 kept both working and exposed the whole network.
+#
+# That trade-off was never real — it conflated "which interface do we listen on" with "whose
+# requests do we answer". Those are separate. So: listen broadly, answer narrowly. The bind can be
+# 0.0.0.0 and `localhost` keeps working, while anything that is not this laptop or the mesh is
+# refused before a single byte of HTTP is parsed.
+#
+# This is the access control now. There is still no password — it is not a substitute for one, and
+# anything that can forge a source address inside these ranges is not stopped by it. What it does
+# stop is the actual observed hazard: an untrusted LAN (2026-07-18: a hotel /19) reading her
+# medical and financial task data because the server was listening on every interface.
+_ALLOWED_SOURCES = [
+    ipaddress.ip_network("127.0.0.0/8"),        # this laptop
+    ipaddress.ip_network("::1/128"),            # this laptop, IPv6
+    ipaddress.ip_network("100.64.0.0/10"),      # the mesh — Tailscale's CGNAT range
+    ipaddress.ip_network("fd7a:115c:a1e0::/48"),  # the mesh, IPv6
+]
+
+
+def _source_allowed(host):
+    """Is a request FROM this address allowed? Unparseable means no — never fail open."""
+    # `ip_address(123)` happily returns 0.0.0.123 rather than raising, so a non-string source has
+    # to be rejected up front instead of relying on the parse to fail.
+    if not isinstance(host, str):
+        return False
+    try:
+        ip = ipaddress.ip_address(host)
+    except ValueError:
+        return False
+    # A dual-stack listener reports IPv4 peers as ::ffff:192.168.1.5. Compare the real IPv4
+    # address, or every such request would miss the IPv4 ranges above and be refused.
+    if ip.version == 6 and ip.ipv4_mapped is not None:
+        ip = ip.ipv4_mapped
+    return any(ip in net for net in _ALLOWED_SOURCES)
+
+
+class GuardedServer(ThreadingHTTPServer):
+    """Refuses connections from outside `_ALLOWED_SOURCES` at the socket, before HTTP parsing.
+
+    Rejected callers get a closed connection, not a 403: a 403 would confirm to a stranger on the
+    hotel network that something is here to find. June is never the stranger in that scenario — if
+    she ever IS refused, the log line below is what explains it, so this stays debuggable without
+    announcing itself.
+    """
+
+    def verify_request(self, request, client_address):
+        if _source_allowed(client_address[0]):
+            return True
+        # Plain language, per _bind_name's reasoning: naming the bind address here would print
+        # "reachable at 0.0.0.0", which is both meaningless to her and wrong as advice.
+        print(f"  refused a request from {client_address[0]} — that address is not this laptop "
+              f"and not the mesh. Controlled Drift answers on this laptop and on the mesh "
+              f"(Tailscale) only; if you meant to reach it from your phone, open Tailscale.",
+              flush=True)
+        return False
+
+
 def _bind(port, handler):
     """Bind the first address in the preference list that works. Never fall back silently."""
     errors = []
     for i, host in enumerate(_BIND_PREFS):
         try:
-            srv = ThreadingHTTPServer((host, port), handler)
+            srv = GuardedServer((host, port), handler)
         except OSError as e:
             errors.append(f"{host}: {e}")
             continue
@@ -533,7 +594,24 @@ class Handler(BaseHTTPRequestHandler):
     # --- GET ----------------------------------------------------------------
 
     def do_GET(self):
-        if self.path == "/" or self.path == "/index.html":
+        # The new surface is what `/` serves (June, 2026-07-18: "switch the new ui to be what our
+        # server hosts instead of the old ui"). It is served from the SAME bundle as /app/ rather
+        # than a rebuild: Vite's base stays '/app/', so index.html asks for /app/assets/... by
+        # absolute path and /app/ must stay mounted below for those to resolve. Routing is
+        # hash-based, so deep links keep working at the root.
+        # Match on the PATH, not the raw request line: `/?verbose=1` is documented in RUNNING.md
+        # and a literal `self.path == "/"` comparison 404s it. /app/ never had this bug because
+        # _serve_app parses the URL; promoting the app to `/` inherited the root route's stricter
+        # matching, so the query-string form silently stopped working.
+        _path = urlparse(self.path).path
+        if _path == "/" or _path == "/index.html":
+            self._serve_app("/app/")
+            return
+
+        # The old overlay is NOT deleted, just moved. It was the daily driver until today and the
+        # new surface has not yet had a full week of her real use; /old/ is the way back if
+        # something turns out to be missing.
+        if _path == "/old" or _path == "/old/":
             try:
                 with open(OVERLAY_HTML, "rb") as f:
                     body = f.read()
@@ -758,9 +836,12 @@ class Handler(BaseHTTPRequestHandler):
     # --- the new surface's built bundle --------------------------------------
 
     def _serve_app(self, path):
-        """Serve `app/dist/` at /app/. The OLD overlay stays at `/` — June uses it daily and
-        the new surface comes up alongside it, not in place of it (BUILD_DOC §2: retiring a
-        live surface is her judgement, not a build step)."""
+        """Serve `app/dist/` — at `/app/` and, since 2026-07-18, at `/` as well.
+
+        June made the call to promote it (BUILD_DOC §2 is satisfied: retiring a live surface is
+        her judgement, and she gave it). /app/ REMAINS mounted and is not a legacy alias — the
+        bundle's own asset URLs are absolute under /app/, so serving the root depends on it.
+        The old overlay moved to /old/."""
         # Percent-decode BEFORE the containment check, never after: `%2e%2e` must be resolved
         # into `..` and then rejected, not silently treated as an odd filename.
         rel = unquote(path[len("/app"):]).lstrip("/") or "index.html"

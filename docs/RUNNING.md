@@ -1,12 +1,15 @@
 # Running Controlled Drift
 
-Two surfaces run from one server. **The old overlay is untouched** — the new one comes up beside it, and only comes down when you decide it should.
+The new surface is now what the server serves by default (you promoted it 2026-07-18). The old overlay is **moved, not deleted** — it is at `/old/` if something turns out to be missing from the new one.
 
 | What | Where |
 |---|---|
-| **The old overlay** (unchanged, still your daily driver) | `http://localhost:5050/` |
-| **The new surface** | `http://localhost:5050/app/` |
+| **The new surface** (your daily driver) | `http://localhost:5050/` |
+| The same surface, at its old address | `http://localhost:5050/app/` |
 | The token / component reference page | `http://localhost:5050/app/#/check` |
+| **The old overlay** (kept as a way back) | `http://localhost:5050/old/` |
+
+`/app/` is not a leftover alias — the built bundle asks for its own scripts at `/app/assets/...`, so `/` depends on `/app/` staying mounted. Removing it would leave the root serving a blank page.
 
 ---
 
@@ -46,7 +49,9 @@ cd app && npx vite          # then http://localhost:5173/app/
 
 Your phone reaches the laptop over Tailscale:
 
-**`http://lauras-macbook-air.tail2905c9.ts.net:5050/app/`**
+**`http://100.86.195.93:5050/`**
+
+Use the numeric address, not `lauras-macbook-air.tail2905c9.ts.net`. The name depends on a DNS lookup that many networks interfere with — on a hotel network (2026-07-18) the name failed and the number worked immediately. The number is your Mac's Tailscale address and does not change.
 
 Two things have to be true:
 
@@ -55,20 +60,17 @@ Two things have to be true:
 
 If you want it reachable while the laptop stays home, leave it **plugged in** and stop it sleeping — System Settings → Battery → Options → *"Prevent automatic sleeping when the display is off"*, or run `caffeinate -s` in a terminal and leave that terminal open.
 
-### ⚠ One security note, and a decision that is still yours
+### Who can reach it
 
-The server currently binds `0.0.0.0` — **every interface, including your wifi.** It has no authentication of any kind and serves your medical and financial task data. Anything on your home network can read it.
+**Only this laptop and the mesh.** Everything else is refused at the socket, before any HTTP is read — so being on the same wifi as the laptop does not get you in.
 
-**What changed:** `CD_BIND` now takes a list of addresses and tries them in order, so preferring the mesh no longer means the server refuses to start when Tailscale is down. It falls back to wifi and prints a warning that says the mesh is down, that wifi is wider than you chose, and how to check and restart Tailscale. That was the fragility that made this your call last time, and it is fixed.
+This replaced an earlier arrangement where the bind address *was* the access control, which forced a choice that was never actually necessary: bind the mesh address and `localhost` stops answering on the laptop (and the Vite dev proxy breaks, since it talks to `127.0.0.1:5050`), or bind `0.0.0.0` and every device on the network can read your medical and financial task data. Those turned out to be two separate questions — *which interface do we listen on* and *whose requests do we answer*. Listening broadly while answering narrowly gets both halves: `localhost` works, the phone works, the network is shut out.
 
-**What has not changed:** the plist still says `0.0.0.0`, so none of that is in effect yet. Turning it on is one line:
+Allowed sources are `127.0.0.0/8` and `::1` (this laptop) and `100.64.0.0/10` and `fd7a:115c:a1e0::/48` (Tailscale). See `_ALLOWED_SOURCES` in `scripts/server.py`; the tests are `tests/test_source_filter.py`.
 
-```xml
-<key>CD_BIND</key>
-<string>100.86.195.93,0.0.0.0</string>
-```
+A refused request is logged in plain language to `~/.controlled-drift/server.log`, naming the address and reminding you the phone needs Tailscale open. Rejected callers get a dropped connection rather than a "403 Forbidden", so a stranger scanning the network learns nothing about what is running here.
 
-**The trade-off that is still real, and the reason this is not already done:** binding the mesh address means `http://localhost:5050` stops answering *on the laptop*. You would use `http://lauras-macbook-air.tail2905c9.ts.net:5050/app/` from both the laptop and the phone. Everything keeps working; the address you type changes. If that sounds annoying, say so — the exposure can also be narrowed by keeping `0.0.0.0` and refusing requests that arrive from anywhere other than the mesh or the laptop itself, which would give you the narrow surface *and* keep `localhost` working. That is a small piece of work, not built, and worth doing if the address change is the part you would resent.
+**What this is not:** authentication. There is still no password. Anything already on the mesh can read everything, and anything able to forge a source address in those ranges is not stopped by this. What it does stop is the hazard that actually occurred — on 2026-07-18 the laptop sat on a hotel network with room for about 8,000 devices, serving your task data to all of them with no password. A password becomes worth building if you ever want the wifi to be a real fallback; on the mesh alone it adds little.
 
 ---
 
@@ -76,7 +78,7 @@ The server currently binds `0.0.0.0` — **every interface, including your wifi.
 
 The new surface ships a web-app manifest, so Chrome or Edge can install it as a standalone window with its own dock icon and no browser chrome.
 
-Open `http://localhost:5050/app/` in Chrome → the install icon in the address bar, or ⋮ → *Cast, save and share* → *Install page as app*.
+Open `http://localhost:5050/` in Chrome → the install icon in the address bar, or ⋮ → *Cast, save and share* → *Install page as app*.
 
 That gets you the "it's just there" feeling without wrapping it in Electron. If it turns out to fall short — you want a global hotkey, or it to survive a browser restart differently — that's the point to consider a native wrapper, not before.
 
