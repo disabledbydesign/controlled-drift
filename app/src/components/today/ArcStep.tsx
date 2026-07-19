@@ -75,7 +75,11 @@ export function ArcStep({
           border: "none",
           background: "none",
           cursor: "pointer",
-          padding: 0,
+          // Tap-target expansion (2026-07-18, TRIAL) — see `RoundCheck`. Glyph stays 14; only
+          // the hit area grows, cancelled by an equal negative margin. Capped at 4px vertical
+          // to stay inside this row's ~23px pitch (12.5px text at 1.4, plus 3px padding).
+          padding: "4px 8px",
+          margin: "-4px -8px",
           display: "flex",
         }}
       >

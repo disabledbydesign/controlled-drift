@@ -81,7 +81,10 @@ export function WorkBlock({
             border: "none",
             background: "none",
             cursor: "pointer",
-            padding: 0,
+            // Tap-target expansion (2026-07-18, TRIAL) — see `RoundCheck`, same row shape and
+            // the same ~26px pitch cap. Glyph stays 15; only the hit area grows.
+            padding: "5px 10px",
+            margin: "-5px -10px",
             position: "relative",
             top: "2px",
             display: "flex",

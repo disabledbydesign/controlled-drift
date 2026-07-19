@@ -13,6 +13,14 @@ export interface EditChipProps {
  *   · the radius is `r.card`, not `r.chip` — this is a soft rectangle, not a pill, even in
  *     celestial where every other chip is fully rounded
  *   · `fontFamily:'inherit'` — it does NOT take the hardware mono treatment that `Chip` does
+ *
+ * ── tap-target expansion (2026-07-18, TRIAL — revert if it misbehaves) ───────
+ * The visible chip is unchanged. Because it carries a border, padding on the button would have
+ * grown the *drawn* box, so the border/radius/padding moved to an inner span and the button
+ * became a transparent hit area around it. Same pixels, larger target.
+ *
+ * Vertical padding is capped at 3px for the reason given in `RoundCheck`: `TaskRow`'s ~26px row
+ * pitch means anything taller overlaps the neighbouring row.
  */
 export function EditChip({ T, onClick }: EditChipProps) {
   const C = T.c;
@@ -27,16 +35,25 @@ export function EditChip({ T, onClick }: EditChipProps) {
         flex: '0 0 auto',
         alignSelf: 'center',
         background: 'none',
-        border: '1px solid ' + C.border,
-        borderRadius: T.r.card,
+        border: 'none',
         color: C.dimmer,
         fontSize: '10.5px',
         fontFamily: 'inherit',
-        padding: '2px 9px',
+        padding: '3px 8px',
+        margin: '-3px -8px',
         cursor: 'pointer',
+        display: 'flex',
       }}
     >
-      edit
+      <span
+        style={{
+          border: '1px solid ' + C.border,
+          borderRadius: T.r.card,
+          padding: '2px 9px',
+        }}
+      >
+        edit
+      </span>
     </button>
   );
 }
