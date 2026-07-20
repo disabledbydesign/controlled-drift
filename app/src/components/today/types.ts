@@ -13,6 +13,7 @@ import type { Period, Plan } from '../../fixtures/index.ts';
 import type { ArcStepRef, Graph, GraphIndex, MutationResult, PlanResult } from '../../model/index.ts';
 import type { FocusCtx } from '../focus/types.ts';
 import type { MoveTarget } from '../../api/planRow.ts';
+import type { Preset } from '../../api/adapt.ts';
 
 /** v4:63 — `this.PANEL='.16s ease'`. Duplicated for the same one-way-dependency reason. */
 export const PANEL = '.16s ease';
@@ -130,6 +131,27 @@ export interface TodayCtx {
   ) => Promise<boolean>;
   /** Label of the control whose generation is running, or null. See `TodayPanel`'s action row. */
   generating: string | null;
+  /**
+   * Her plan-action buttons, read from her own `~/.controlled-drift/actions.json` via
+   * `GET /api/actions` — NOT a list this app carries.
+   *
+   * ⚠ The labels were hardcoded here until 2026-07-19 and had already drifted from her file:
+   * hers reads "Quick wins first", the button said "Quick wins only". A button that names
+   * itself is a button that can lie about what it does; reading her file is what removes the
+   * class, and editing the hardcoded string would not have.
+   *
+   * ⚠ LABEL IS DISPLAY, ID IS CONTRACT. `preset.label` is hers to change freely; `preset.id`
+   * goes to `/api/negotiate` untouched and an unknown one answers 400. Never derive one from
+   * the other.
+   *
+   * EMPTY MEANS EMPTY. If her file could not be read the row shows only the actions that need
+   * no file; it does not fall back to a remembered set. A remembered label is a claim about her
+   * configuration that nothing has checked.
+   *
+   * ⚠ Type-only import, like `MoveTarget` above — it emits nothing and cannot pull the api
+   * layer into a component bundle, so the one-way dependency rule is intact.
+   */
+  presets: readonly Preset[];
   /**
    * v4's `up({detail:id,_returnFrom:'today'})`, as one callback.
    *

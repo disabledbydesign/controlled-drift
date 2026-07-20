@@ -14,6 +14,7 @@ import { seed, seedPeriods, seedPlan, seedStrategies } from '../../../fixtures/i
 import type { Plan } from '../../../fixtures/index.ts';
 import { index } from '../../../model/index.ts';
 import type { Graph, ModelNode } from '../../../model/index.ts';
+import type { Preset } from '../../../api/adapt.ts';
 import type { TodayCtx, TodayUi } from '../types.ts';
 import { focusCtxWith } from '../../focus/__tests__/harness.ts';
 
@@ -48,6 +49,21 @@ export function ctxWith(
   generating: string | null = null,
   /** Desktop shell? Phone by default, which is the surface June actually carries. */
   wide = false,
+  /*
+   * Her plan-action presets, as `GET /api/actions` serves them from her own
+   * `~/.controlled-drift/actions.json`. The default is HER LIVE FILE, read 2026-07-19 — so a
+   * test that does not care about presets still renders the row she actually has, and the
+   * labels in these tests stay answerable to the file rather than to the app.
+   *
+   * ⚠ Note `quick-wins` reads "Quick wins first". The app used to hardcode "Quick wins only";
+   * that drift is the reason the row now reads her file.
+   */
+  presets: readonly Preset[] = [
+    { id: 'low-energy', label: 'Low energy today' },
+    { id: 'quick-wins', label: 'Quick wins first' },
+    { id: 'stuck', label: "I'm stuck" },
+    { id: 'life-admin', label: 'Life admin & household' },
+  ],
 ) {
   const graph = freshGraph();
   const up = vi.fn();
@@ -82,6 +98,7 @@ export function ctxWith(
     focus: focusCtxWith().ctx,
     ui: { ...BASE_UI, ...ui },
     wide,
+    presets,
     up,
     apply,
     applyPlan,
@@ -99,6 +116,7 @@ export function ctxWith(
   return {
     ctx,
     plan,
+    presets,
     up,
     apply,
     applyPlan,

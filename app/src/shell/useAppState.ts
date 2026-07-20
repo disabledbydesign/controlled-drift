@@ -34,7 +34,14 @@ import {
   notToday as notTodayApi,
   setDuration as setDurationApi,
 } from '../api/planRow.ts';
-import { graphFromTree, periodsFromLive, planFromLive, schemaFromResponse } from '../api/adapt.ts';
+import {
+  graphFromTree,
+  periodsFromLive,
+  planFromLive,
+  presetsFromLive,
+  schemaFromResponse,
+} from '../api/adapt.ts';
+import type { ActionsResponse, Preset } from '../api/adapt.ts';
 import type { LivePlan, PeriodsResponse, TreeResponse } from '../api/adapt.ts';
 import type {
   ArcStepRef,
@@ -693,6 +700,13 @@ export interface AppState {
    * action row looking idle — or finished — during that wait.
    */
   generating: string | null;
+  /**
+   * Her plan-action buttons, read from `GET /api/actions` (her own
+   * `~/.controlled-drift/actions.json`). EMPTY means her file could not be read — the action
+   * row then offers only what needs no file, rather than a remembered set of labels that may
+   * no longer be hers. See `TodayCtx.presets`.
+   */
+  presets: readonly Preset[];
   dismissToast: () => void;
 }
 
@@ -786,6 +800,12 @@ export function useAppState(source: DataSource = 'live'): AppState {
    * is worse than an empty picker, because she would never learn a selection did nothing.
    */
   const [backendOptions, setBackendOptions] = useState<BackendOption[]>([]);
+  /*
+   * Her plan-action presets, read from `GET /api/actions`. Starts EMPTY, not seeded with a
+   * remembered list: an empty action row is honest before the fetch lands, and a remembered one
+   * would show labels that may not be hers.
+   */
+  const [presets, setPresets] = useState<Preset[]>([]);
 
   /** Raise a SUCCESS signal. The three `apply*` seams all land here so the shape is identical. */
   const succeed = useCallback((msg: string, nodeId: string | null) => {
@@ -1182,12 +1202,13 @@ export function useAppState(source: DataSource = 'live'): AppState {
     let cancelled = false;
 
     void (async () => {
-      const [schemaRes, treeRes, planRes, periodsRes, settingsRes] = await Promise.all([
+      const [schemaRes, treeRes, planRes, periodsRes, settingsRes, actionsRes] = await Promise.all([
         apiGet<unknown>('/api/schema'),
         apiGet<TreeResponse>('/api/tree'),
         apiGet<LivePlan>('/api/plan'),
         apiGet<PeriodsResponse>('/api/periods'),
         apiGet<SettingsResponse>('/api/settings'),
+        apiGet<ActionsResponse>('/api/actions'),
       ]);
       if (cancelled) return;
 
@@ -1232,6 +1253,28 @@ export function useAppState(source: DataSource = 'live'): AppState {
         fail(`Could not read your focus periods — none are shown. ${periodsRes.error}`, {
           kind: 'periods_read',
         });
+      }
+
+      /*
+       * HER PLAN-ACTION BUTTONS, from her own `~/.controlled-drift/actions.json`.
+       *
+       * Same rule as the tree, the periods and the settings: NO FALLBACK TO A REMEMBERED SET.
+       * The four labels used to be hardcoded in `TodayPanel` and had already drifted from her
+       * file — hers reads "Quick wins first", the button read "Quick wins only". Showing a
+       * remembered label after a failed read would be the same defect wearing a different hat:
+       * a button claiming to be hers, standing for a preset the server may no longer hold.
+       *
+       * Empty plus a loud failure is the honest state. The row still offers "↻ Fresh plan" and
+       * "Move this later", which need no file.
+       */
+      if (actionsRes.ok) {
+        setPresets(presetsFromLive(actionsRes.data));
+      } else {
+        setPresets([]);
+        fail(
+          `Could not read your plan buttons, so only Fresh plan is shown. ${actionsRes.error}`,
+          { kind: 'actions_read' },
+        );
       }
 
       if (settingsRes.ok) {
@@ -2181,6 +2224,7 @@ export function useAppState(source: DataSource = 'live'): AppState {
     saveSettings,
     regenerate,
     generating,
+    presets,
     dismissToast,
     captureEntries,
     captureSummary,

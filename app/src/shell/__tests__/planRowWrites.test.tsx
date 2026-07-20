@@ -62,6 +62,9 @@ function hydrate(plan: unknown = livePlan()) {
     if (path === '/api/periods') return { ok: true, data: { periods: [] } };
     if (path === '/api/settings')
       return { ok: true, data: { backend: 'mistral', options: [], include_hobby_block: false } };
+    // Not this test's concern (the honest-values thread added the read) — answered so it
+    // doesn't raise a spurious failure toast that these tests' own assertions would trip over.
+    if (path === '/api/actions') return { ok: true, data: { presets: [] } };
     return { ok: false, error: 'not part of this test' };
   });
 }

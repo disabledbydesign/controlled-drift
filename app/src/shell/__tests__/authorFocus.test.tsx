@@ -55,6 +55,9 @@ function hydrate(opts: { status?: unknown; result?: unknown } = {}) {
     if (path === '/api/focus/result') {
       return { ok: true, data: opts.result ?? { raw_text: 'x', fields: STRUCTURED } };
     }
+    // Not this test's concern (the honest-values thread added the read) — answered so it
+    // doesn't raise a spurious failure toast that these tests' own assertions would trip over.
+    if (path === '/api/actions') return { ok: true, data: { presets: [] } };
     return { ok: false, error: 'not part of this test' };
   });
 }

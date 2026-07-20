@@ -195,6 +195,8 @@ export function useSurface({ T, name, setTheme, wide, source }: SurfaceOptions):
     // text she wrote and may only clear it on a generation that actually happened.
     regenerate: (req, label) => st.regenerate(req, label),
     generating: st.generating,
+    // Her plan-action buttons, from her own actions.json — see TodayCtx.presets.
+    presets: st.presets,
     openDetail: (id: string) => st.up({ detail: id, returnFrom: 'today' }),
     goTab: (t) => goTab(t),
     // The three per-row plan writes. Fire-and-forget for the same reason as `chunk`: each one

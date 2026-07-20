@@ -84,6 +84,9 @@ function hydrate(periods: unknown[] = []) {
     if (path === '/api/schema') return { ok: true, data: { relations: {}, types: {} } };
     if (path === '/api/plan') return { ok: true, data: { empty: true } };
     if (path === '/api/periods') return { ok: true, data: { periods } };
+    // Not this test's concern (the honest-values thread added the read) — answered so it
+    // doesn't raise a spurious failure toast that these tests' own assertions would trip over.
+    if (path === '/api/actions') return { ok: true, data: { presets: [] } };
     return { ok: false, error: 'not part of this test' };
   });
 }
