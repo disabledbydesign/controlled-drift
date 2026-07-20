@@ -183,6 +183,9 @@ export function useSurface({ T, name, setTheme, wide, source }: SurfaceOptions):
     apply: st.apply,
     applyPlan: st.applyPlan,
     flash: (msg: string) => st.apply({ graph: st.graph, toast: msg, ui: null, node: null }),
+    // A write that did not happen, said as a FAILURE and recorded — never through `flash`, which
+    // raises a success signal and logs nothing. See `TodayCtx.fail`.
+    fail: (msg: string, nodeId: string | null = null) => st.fail(msg, { nodeId }),
     // The work-block check. `void` for the same reason as `regenerate`: every outcome reports
     // itself through `succeed`/`fail` inside `chunkBlock`, so the row has nothing to await.
     chunk: (id, done) => void st.chunkBlock(id, done),

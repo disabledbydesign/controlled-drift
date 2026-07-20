@@ -71,6 +71,12 @@ export function ctxWith(
   const applyPlan = vi.fn();
   const flash = vi.fn();
   /**
+   * Spied SEPARATELY from `flash`, because the two say opposite things: `flash` is a success
+   * signal and `fail` is a not-saved one. A single spy would let a test about an honest failure
+   * pass against a control that reported it as a success.
+   */
+  const fail = vi.fn();
+  /**
    * Defaults to a generation that SUCCEEDED, because that is what the real seam resolves on the
    * ordinary path and because the value is load-bearing: the ask box clears her text on `true`
    * and holds it on anything else. A test about the failure path says so itself with
@@ -103,6 +109,7 @@ export function ctxWith(
     apply,
     applyPlan,
     flash,
+    fail,
     regenerate,
     chunk,
     completeStep,
@@ -121,6 +128,7 @@ export function ctxWith(
     apply,
     applyPlan,
     flash,
+    fail,
     regenerate,
     chunk,
     completeStep,

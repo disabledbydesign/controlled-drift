@@ -12,7 +12,8 @@ import { TaskCheck } from "../atoms/index.ts";
 import { ArcStep } from "./ArcStep.tsx";
 import { RowActions } from "./RowActions.tsx";
 import { PlaceTarget } from "./PlaceTarget.tsx";
-import { placementFor, planDrag } from "./placement.ts";
+import { neighbourSlot, placementFor, planDrag } from "./placement.ts";
+import type { NudgeRefusal } from "./placement.ts";
 import type { TodayCtx } from "./types.ts";
 import { toggleKey } from "./util.ts";
 
@@ -122,7 +123,20 @@ export function PriorityList({ ctx, reasonShown = false }: PriorityListProps) {
   // no longer has, then append anything the ranking does not mention — so a stale order can
   // never hide a row. `seen` adds only the de-duplication above; an id already placed is not
   // placed again, in either step.
-  const stored = ctx.ui.priOrder;
+  /*
+   * ⚠ ON A CLOCK-SHAPE DAY THIS VIEW SHOWS THE PLAN'S OWN ORDER, AND ONLY THAT.
+   *
+   * June, 2026-07-20, on what the Priority toggle should show on a timed day: "the same list as
+   * the clock times, but as a list rather than a schedule with clock times." Same rows, same
+   * order. She did not design a separate ranking for a timed day, so there is none: `ui.priOrder`
+   * is a FRAGMENTED-day ranking, and applying it here would show her a list whose order the clock
+   * view contradicts — two answers to "what is my day", from one plan.
+   *
+   * It is reachable state, not a hypothetical: a ranking hydrated on a fragmented day survives in
+   * `ui` across a regenerate that hands back a clock-shape plan.
+   */
+  const timedDay = ctx.plan.shape !== 'priority';
+  const stored = timedDay ? null : ctx.ui.priOrder;
   const seen = new Set<string>();
   const order: string[] = [];
   // ONE gate, not two: `present` is built from the id-filtered `addressed` above, so an id-less
@@ -223,7 +237,10 @@ export function PriorityList({ ctx, reasonShown = false }: PriorityListProps) {
     // Only when she has no ordering on screen yet. An order already in `ui` is either hers from
     // this session or an earlier hydration, and re-reading would overwrite a fresh reorder with
     // whatever the server last heard.
-    if (storedOrder || hydrated.current) return;
+    // Nothing to hydrate on a timed day: the stored ranking is a fragmented-day one and this
+    // view does not apply it (see `timedDay` above), so reading it would spend a request on a
+    // value nothing renders.
+    if (timedDay || storedOrder || hydrated.current) return;
     hydrated.current = true;
     void (async () => {
       const saved = await readPriorityOrder();
@@ -232,12 +249,63 @@ export function PriorityList({ ctx, reasonShown = false }: PriorityListProps) {
       // is worth a message about a ranking she may never have made.
       if (saved && saved.length) upFn({ priOrder: saved });
     })();
-  }, [storedOrder, upFn]);
+  }, [timedDay, storedOrder, upFn]);
 
+  /**
+   * Why a nudge on a timed day did not happen, in her words. Literal throughout: each one names
+   * the row's real obstacle and then says the thing she needs to know, which is that her ordering
+   * is unchanged. A refusal that only explains itself still leaves her guessing whether the list
+   * moved.
+   */
+  const nudgeRefusalText = (why: NudgeRefusal): string => {
+    if (why === 'appointment') {
+      return 'That row has a fixed time, so it stays where it is — your ordering did not change.';
+    }
+    if (why === 'not-found') {
+      return 'I could not find that row in today’s plan, so nothing moved — your ordering did not change.';
+    }
+    // 'nowhere' and 'no-slot' are one sentence to her: both mean the plan has no other position
+    // for this row in the direction she pushed it.
+    return 'There is no other place in today’s plan for that row, so nothing moved — your ordering did not change.';
+  };
+
+  /**
+   * ── THE ▲/▼ CONTROLS ROUTE BY THE PLAN'S SHAPE ───────────────────────────────
+   *
+   * A fragmented day has a flat ranking and `POST /api/plan/priority-order` stores it. A
+   * CLOCK-SHAPE day does not: `plan_store.set_priority_order` raises `LookupError` for one,
+   * because a clock-shape day orders its rows under `blocks[]`. Until 2026-07-20 both shapes sent
+   * the same request, so on a timed day these arrows moved the row on screen, took a 400, said
+   * NOTHING, and the ordering reverted on the next load — live-verified against her real plan.
+   *
+   * A timed day therefore goes to `POST /api/task/move`, which already relocates one row in the
+   * cached plan in either direction and re-flows the clock times. That is what moving a row up or
+   * down on a timed day means, and it is the endpoint that means it.
+   */
   const move = (i: number, d: number) => {
     const a = order.slice();
     const j = i + d;
     if (j < 0 || j >= a.length) return;
+    if (timedDay) {
+      const id = a[i]!;
+      // Where the row should end up: immediately below the neighbour it passes going DOWN, and
+      // immediately below that neighbour's own predecessor going UP — which for the top of the
+      // list is the band's first slot, named by `null`.
+      const anchorId = d > 0 ? a[j]! : j > 0 ? a[j - 1]! : null;
+      const anchorBand = addressById.get(a[j]!)?.bandIndex ?? 0;
+      const nudge = neighbourSlot(ctx, id, anchorId, anchorBand);
+      if (nudge.refusal) {
+        // Said as a FAILURE and recorded, not flashed as a success. Nothing moved on screen
+        // either, so there is nothing to put back — she sees one message and one unchanged list.
+        ctx.fail(nudgeRefusalText(nudge.refusal), id);
+        return;
+      }
+      // `moveRow` in the shell owns the request, the rewritten plan it answers with, and the
+      // report either way — including "That did not move — it is where it was." on a refusal from
+      // the server. Reporting it a second time here would tell her twice.
+      ctx.moveItem(id, nudge.target);
+      return;
+    }
     const t = a[i]!;
     a[i] = a[j]!;
     a[j] = t;
@@ -250,7 +318,14 @@ export function PriorityList({ ctx, reasonShown = false }: PriorityListProps) {
       // change removes. The row stays where she put it for this session — undoing her move on
       // top of the bad news would be a second surprise — and the sentence is the server's own.
       if (res.kind === 'failed') {
-        ctx.flash('That new order did not save, so it will not be here next time. ' + res.error);
+        // ⚠ `fail`, NOT `flash` (2026-07-20). `flash` routes through `apply` and raises a
+        // SUCCESS-kind signal, so this sentence was arriving in the same bar that says a write
+        // landed — and reached no log, so a message she swiped away left no trace. `fail` raises
+        // the failure signal and records it through `POST /api/log/correction`.
+        ctx.fail(
+          'That new order did not save, so it will not be here next time. ' + res.error,
+          a[i] ?? null,
+        );
       }
     })();
   };

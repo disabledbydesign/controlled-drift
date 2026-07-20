@@ -97,6 +97,19 @@ export interface TodayCtx {
   /** v4's `flash(msg)` — a toast with no state change behind it. */
   flash: (msg: string) => void;
   /**
+   * Report a write that DID NOT HAPPEN — the shell's `fail`, reaching Today for the first time.
+   *
+   * ⚠ NOT `flash`, and the difference is not cosmetic. `flash` routes through `apply`, which
+   * raises a SUCCESS-kind signal and records nothing; saying "that did not save" in a success bar
+   * is the same mixed message as saying nothing. `fail` raises a FAILURE-kind signal AND writes
+   * the sentence to `corrections_log` through `POST /api/log/correction`, so a message she
+   * dismisses without reading is still diagnosable afterwards (`shell/errorLog.ts`).
+   *
+   * Use it for a refusal a component can see for itself. Anything that reached the server already
+   * reports itself from the shell writer that sent it — do not report the same failure twice.
+   */
+  fail: (msg: string, nodeId?: string | null) => void;
+  /**
    * Record (or un-record) a chunk of work on a block — the work-block check, in BOTH views.
    *
    * ⚠ Deliberately NOT `apply(toggleDone(...))`. A block check means "did a chunk today", never

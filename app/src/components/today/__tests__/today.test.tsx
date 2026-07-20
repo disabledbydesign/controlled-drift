@@ -346,13 +346,41 @@ describe('spec §14 — what must NOT be rendered', () => {
 });
 
 describe('the priority list reorder', () => {
-  it('moves an item up and writes the new order', () => {
-    const { ctx, up } = ctxWith({ todayShape: 'priority' });
+  /**
+   * ⚠ REWRITTEN 2026-07-20, and the old expectation was the BUG.
+   *
+   * `ctxWith`'s default plan is `seedPlan`, which is CLOCK-shape (`shape:'schedule'`) — the
+   * Priority/Schedule toggle in `ui.todayShape` is a view choice and does not change the plan's
+   * shape. This test used to assert that a nudge on that plan wrote `ui.priOrder`, which is what
+   * the surface then posted to `POST /api/plan/priority-order`. `plan_store.set_priority_order`
+   * raises `LookupError` for a clock-shape plan, so the server answered 400 and June's ordering
+   * silently reverted on reload — live-verified against her real plan.
+   *
+   * A timed day nudges the row through `POST /api/task/move` instead, which is the endpoint that
+   * relocates a row in a clock-shape plan and re-flows the clock times.
+   */
+  it('a nudge on a CLOCK-shape plan moves the row through the plan-move seam', () => {
+    const { ctx, moveItem, up } = ctxWith({ todayShape: 'priority' });
     render(<TodayPanel ctx={ctx} />);
     fireEvent.click(screen.getAllByLabelText('move up')[1]!);
     const ids = workItems(seedPlan).map((it) => it.id);
-    const expected = [ids[1], ids[0], ...ids.slice(2)];
-    expect(up).toHaveBeenCalledWith({ priOrder: expected });
+    // Row 1 moving up passes row 0, the first row of band 0 — so it lands at that band's first
+    // position.
+    expect(moveItem).toHaveBeenCalledWith(ids[1], { block: 0, position: 0 });
+    expect(up).not.toHaveBeenCalled();
+  });
+
+  it('a nudge on a PRIORITY-shape plan writes the ranking, as it always did', () => {
+    const rows = workItems(seedPlan);
+    const ids = rows.map((it) => it.id);
+    const { ctx, up } = ctxWith({ todayShape: 'priority' }, {
+      ...freshPlan(),
+      shape: 'priority',
+      blocks: [{ label: '', time: '', framing: '', items: rows }],
+    });
+    render(<TodayPanel ctx={ctx} />);
+    fireEvent.click(screen.getAllByLabelText('move up')[1]!);
+    expect(up).toHaveBeenCalledWith({ priOrder: [ids[1], ids[0], ...ids.slice(2)] });
   });
 
   it('appends plan items a stale stored order does not mention', () => {

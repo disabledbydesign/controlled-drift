@@ -114,25 +114,34 @@ describe('moving a row persists the new order', () => {
     expect(saveMock).not.toHaveBeenCalled();
   });
 
-  it('TELLS HER when the ordering could not be saved', async () => {
+  /**
+   * ⚠ `fail`, NOT `flash` (changed 2026-07-20). `flash` routes through `apply`, which raises a
+   * SUCCESS-kind signal and records nothing — so this sentence used to arrive in the same bar
+   * that says a write landed, and a message she swiped away left no trace. `fail` raises the
+   * failure signal and writes it to `corrections_log` via `POST /api/log/correction`.
+   */
+  it('TELLS HER when the ordering could not be saved, as a FAILURE', async () => {
     saveMock.mockResolvedValue({ kind: 'failed', error: 'no cached plan to rank' });
-    const { ctx, flash } = ctxWith({ todayShape: 'priority' }, priorityPlan());
+    const { ctx, fail, flash } = ctxWith({ todayShape: 'priority' }, priorityPlan());
     render(<PriorityList ctx={ctx} />);
 
     fireEvent.click(screen.getAllByLabelText('move down')[0]!);
 
-    await waitFor(() => expect(flash).toHaveBeenCalledTimes(1));
-    expect(String(flash.mock.calls[0]![0])).toContain('no cached plan to rank');
+    await waitFor(() => expect(fail).toHaveBeenCalledTimes(1));
+    expect(String(fail.mock.calls[0]![0])).toContain('no cached plan to rank');
+    expect(String(fail.mock.calls[0]![0])).toContain('did not save');
+    expect(flash).not.toHaveBeenCalled();
   });
 
   it('says nothing at all when the ordering saved', async () => {
-    const { ctx, flash } = ctxWith({ todayShape: 'priority' }, priorityPlan());
+    const { ctx, flash, fail } = ctxWith({ todayShape: 'priority' }, priorityPlan());
     render(<PriorityList ctx={ctx} />);
 
     fireEvent.click(screen.getAllByLabelText('move down')[0]!);
 
     await waitFor(() => expect(saveMock).toHaveBeenCalled());
     expect(flash).not.toHaveBeenCalled();
+    expect(fail).not.toHaveBeenCalled();
   });
 });
 
