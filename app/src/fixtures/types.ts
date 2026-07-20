@@ -193,6 +193,15 @@ export interface PlanTaskItem {
    * graph, and an explicit `false` must win over it.
    */
   done?: boolean;
+  /**
+   * This task row IS a fixed-time appointment (its id is in the plan's `appointments[]`). The
+   * backend schedules an appointment into a block at its real time, so on screen it is an
+   * ordinary task row — this flag is the only surviving trace that it is fixed, and it is what
+   * keeps the move controls off it (`moveTargets.isAppointmentRow`). Set by `adapt.planFromLive`
+   * on any row whose id matches an appointment; replaces the old "first `apptCount` rows of band
+   * 0" geometry, which could not see an appointment rendered in its real later block.
+   */
+  appointment?: boolean;
 }
 
 export interface PlanBreakItem {

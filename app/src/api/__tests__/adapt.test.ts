@@ -165,6 +165,62 @@ describe('planFromLive', () => {
     expect(plan.apptCount).toBe(0);
   });
 
+  /**
+   * ⚠ 2026-07-20. On a clock day the backend schedules the appointment INTO a block at its real
+   * time AND carries it in `appointments[]` — both, every generation. Prepending the second copy
+   * put the same object on screen twice, once at the top of the morning band labelled "2:00" and
+   * once at its real 14:00 slot, and the block copy read as an ordinary movable task. An
+   * appointment already placed in a block is NOT prepended again: it renders once, at its real
+   * time, and the offset is zero because the client's bands now match the server's exactly.
+   */
+  it('does not prepend an appointment that is already scheduled into a block', () => {
+    const plan = planFromLive({
+      shape: 'schedule',
+      blocks: [
+        { label: 'MORNING', time: '9–12', framing: '', items: [{ id: 't1', task: 'draft' }] },
+        {
+          label: 'AFTERNOON', time: '14–17', framing: '',
+          items: [{ id: 'appt', task: 'Drop-In', time: '14:00 – 15:00' }],
+        },
+      ],
+      appointments: [{ id: 'appt', task: 'Drop-In', time: '14:00', duration_min: 60 }],
+    });
+    const allIds = plan.blocks.flatMap((b) => b.items.map((i) => ('id' in i ? i.id : null)));
+    expect(allIds.filter((id) => id === 'appt')).toEqual(['appt']); // exactly once
+    expect(plan.apptCount).toBe(0); // nothing folded in, so no index offset
+  });
+
+  it('flags the in-block appointment row so the surface knows it is fixed', () => {
+    const plan = planFromLive({
+      shape: 'schedule',
+      blocks: [
+        {
+          label: 'AFTERNOON', time: '14–17', framing: '',
+          items: [{ id: 'appt', task: 'Drop-In', time: '14:00 – 15:00' },
+                  { id: 't1', task: 'draft' }],
+        },
+      ],
+      appointments: [{ id: 'appt', task: 'Drop-In', time: '14:00', duration_min: 60 }],
+    });
+    const appt = plan.blocks[0]!.items.find((i) => 'id' in i && i.id === 'appt')!;
+    const plain = plan.blocks[0]!.items.find((i) => 'id' in i && i.id === 't1')!;
+    expect(appt.kind === 'task' && appt.appointment).toBe(true);
+    expect(plain.kind === 'task' && (plain.appointment ?? false)).toBe(false);
+  });
+
+  it('still prepends and flags an appointment the model did NOT schedule into any block', () => {
+    // The shape-independent guarantee: an appointment absent from every block must still appear.
+    const plan = planFromLive({
+      shape: 'schedule',
+      blocks: [{ label: 'MORNING', time: '9–12', framing: '', items: [{ id: 't1' }] }],
+      appointments: [{ id: 'appt', task: 'Drop-In', time: '14:00', duration_min: 60 }],
+    });
+    const first = plan.blocks[0]!.items[0]!;
+    expect('id' in first && first.id).toBe('appt');
+    expect(first.kind === 'task' && first.appointment).toBe(true);
+    expect(plan.apptCount).toBe(1);
+  });
+
   it('gives a priority-shape plan an UNLABELLED container band, so no header renders', () => {
     const plan = planFromLive({ shape: 'priority', items: [{ id: 't1' }] });
     expect(plan.shape).toBe('priority');

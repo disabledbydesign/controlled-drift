@@ -188,12 +188,24 @@ export function moveDestinations(
 }
 
 /**
- * Is this row a folded-in appointment? Derived from GEOMETRY, not from a row-kind flag, because
- * `api/adapt.planFromLive` has already turned appointments into `kind:'task'` rows by the time
- * anything on this surface sees them — the only surviving trace is that they occupy the first
- * `plan.apptCount` rendered slots of band 0.
+ * Is this row a fixed-time appointment? Two traces are honoured, because there are two ways an
+ * appointment reaches the screen:
+ *
+ *   · THE ROW'S OWN `appointment` FLAG — `api/adapt.planFromLive` sets it on every row whose id is
+ *     a real appointment, INCLUDING the one it renders inside its real later block. Geometry alone
+ *     is blind to that one (it is not at the front of band 0), so without the flag a fixed
+ *     commitment scheduled into the afternoon would read as an ordinary movable row (2026-07-20).
+ *   · THE LEGACY GEOMETRY — an appointment PREPENDED to the front of band 0 occupies its first
+ *     `plan.apptCount` slots. Retained so a prepended appointment (a priority day, or one the
+ *     model did not place) is still caught even if a caller builds it without the flag.
+ *
+ * In real adapt output the two agree: a prepended appointment is both flagged and in the front
+ * slots, an in-block one is flagged with `apptCount` zero. Neither trace false-positives a plain
+ * row, so OR-ing them is safe.
  */
 function isAppointmentRow(plan: Plan, at: Located): boolean {
+  const item = plan.blocks[at.bandIndex]?.items[at.renderIndex];
+  if (item && item.kind === 'task' && item.appointment) return true;
   return at.bandIndex === 0 && at.renderIndex < (plan.apptCount ?? 0);
 }
 

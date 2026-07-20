@@ -230,10 +230,20 @@ export function planFromLive(live: LivePlan): Plan {
       ...(it.description ? { description: it.description } : null),
       ...(it.held_back_names?.length ? { heldBack: it.held_back_names } : null),
       ...(it.done ? { done: true } : null),
+      // A row whose id is a real appointment is FIXED, wherever it renders. The flag is the only
+      // trace of that once the backend has scheduled it into a block as an ordinary-looking row;
+      // it is what holds the move controls off it. See `PlanTaskItem.appointment`.
+      ...(it.id && apptIds.has(it.id) ? { appointment: true } : null),
     } as PlanItem;
   };
 
-  const appts = (live.appointments ?? []).map(conv);
+  // The ids the backend calls fixed-time appointments. Used both to FLAG appointment rows and to
+  // avoid rendering one twice: on a clock day the backend both schedules the appointment into a
+  // block (at its real time) AND lists it in appointments[], so prepending the second copy put
+  // the same object on screen twice — once out of temporal place at the top of band 0. We prepend
+  // an appointment ONLY when the model did not already place it in a block.
+  const apptIds = new Set((live.appointments ?? []).map((a) => a.id).filter(Boolean));
+
   const blocks: PlanBlock[] =
     shape === 'schedule'
       ? (live.blocks ?? []).map((b) => ({
@@ -244,7 +254,19 @@ export function planFromLive(live: LivePlan): Plan {
         }))
       : [{ label: '', time: '', framing: '', items: (live.items ?? []).map(conv) }];
 
-  // Appointments are fixed-time anchors, so they lead. See the ⚠ above.
+  const idsInBlocks = new Set(
+    blocks.flatMap((b) => b.items.map((i) => ('id' in i ? i.id : null))).filter(Boolean),
+  );
+  // Only the appointments NOT already standing in a block. On a clock day that is usually none —
+  // the appointment renders at its real time in its block, and the client's bands then match the
+  // server's list exactly, so the move offset (apptCount) is zero. On a priority day, or when the
+  // model dropped an appointment, the ones left over are prepended so a fixed commitment never
+  // vanishes.
+  const appts = (live.appointments ?? [])
+    .filter((a) => !(a.id && idsInBlocks.has(a.id)))
+    .map(conv);
+
+  // Appointments are fixed-time anchors, so any that must be prepended lead. See the ⚠ above.
   if (appts.length) {
     const first = blocks[0];
     if (first) first.items = [...appts, ...first.items];
@@ -274,9 +296,11 @@ export function planFromLive(live: LivePlan): Plan {
      */
     generated: live.generated_at ?? '',
     shape,
-    // How many appointments were folded into `blocks[0]` above. `/api/task/move` indexes its
-    // `position` against the server's own list, which keeps appointments separate — so this is
-    // the offset between the rendered order and the contract's. See `Plan.apptCount`.
+    // How many appointments were PREPENDED into `blocks[0]` above — the ones the model did not
+    // already place in a block. Those extra front rows are not in the server's own list, so
+    // `/api/task/move`'s `position` on band 0 is offset by exactly this many. When every
+    // appointment already stands in its real block (the common clock day) this is zero and the
+    // rendered order matches the server's. See `Plan.apptCount` and `moveTargets.offsetOf`.
     apptCount: appts.length,
     // The server's own reason for that shape, carried verbatim. NOT composed here: the client
     // cannot know which branch of `resolve_output_shape` produced the shape, so a locally

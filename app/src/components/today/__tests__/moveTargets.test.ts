@@ -32,6 +32,10 @@ import { moveDestinations, moveOptions } from '../moveTargets.ts';
 
 const task = (id: string, title: string): PlanItem =>
   ({ kind: 'task', id, task: title, time: '', durationMin: 30, why: '' }) as PlanItem;
+// A fixed-time appointment rendered in its real block: a task row carrying the `appointment`
+// flag adapt sets, identified by the flag rather than by a front-of-band-0 position (2026-07-20).
+const appt = (id: string, title: string): PlanItem =>
+  ({ kind: 'task', id, task: title, time: '', durationMin: 30, why: '', appointment: true }) as PlanItem;
 const brk = (): PlanItem => ({ kind: 'break', time: '13:00', task: 'lunch' }) as PlanItem;
 
 const titleOf = (it: PlanItem) => ('task' in it && it.task ? it.task : 'untitled');
@@ -210,6 +214,25 @@ describe('moveOptions — why a move is not on offer', () => {
     // Positively: the same plan DOES offer destinations for the row right after it, so this
     // cannot pass against a function that refuses everything.
     expect(moveOptions(withAppt, 'a', titleOf).refusal).toBeNull();
+  });
+
+  /**
+   * ⚠ 2026-07-20. The one the geometry test could not catch: an appointment rendered in its REAL
+   * later block (`apptCount` zero, not the front of band 0). Only the row's own `appointment`
+   * flag marks it — without it a fixed commitment scheduled into the afternoon would read as an
+   * ordinary movable row, exactly the case the duplicate-prepend removal created.
+   */
+  it('refuses an in-block appointment identified only by its flag, not its position', () => {
+    const plan = schedulePlan([
+      { label: 'Morning', items: [task('a', 'Call')] },
+      { label: 'Afternoon', items: [appt('drop-in', 'Drop-In'), task('b', 'Email')] },
+    ]); // apptCount defaults to 0 — nothing folded into band 0
+    expect(plan.apptCount).toBe(0);
+    const opts = moveOptions(plan, 'drop-in', titleOf);
+    expect(opts.refusal).toBe('appointment');
+    expect(opts.destinations).toEqual([]);
+    // Positively: an ordinary row in the same band is still movable, so this is not "refuse all".
+    expect(moveOptions(plan, 'b', titleOf).refusal).toBeNull();
   });
 
   it('reports nowhere-to-go only when the row is real and genuinely has no destination', () => {
