@@ -181,6 +181,15 @@ LEVEL_TYPE = {
 # mockup drifted from the data model and the data model wins. `What for` is empirically where
 # her instructions live across all 12 real Strategy objects. The UI's valKey stays `directive`
 # because that is the frontend contract; only the storage target is corrected here.
+# The most minutes any duration-family field will accept — a full day. A fact about days, not a
+# view about how long June's work should take (the full reasoning lives at server.py's
+# /api/duration guard: an example-turned-rule is exactly the failure mode BLOCK_DEFAULT_MIN = 90
+# already was). ONE source of truth, because a duration reaches Anytype by two doors — the
+# dedicated /api/duration route and the generic object-field write (set_vals) — and a cap on only
+# one is a cap on neither. DURATION_VAL_KEYS names the UI valKeys that mean "minutes".
+MAX_DURATION_MIN = 24 * 60
+DURATION_VAL_KEYS = frozenset({"duration", "blockMin"})
+
 PROPERTY_FOR = {
     "GOAL": {"engagement": "Goal engagement", "status": "Goal status", "horizon": "Horizon",
              "reaching": "Reaching for", "resolution": "Resolution condition",

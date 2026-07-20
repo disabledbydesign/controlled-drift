@@ -144,10 +144,11 @@ import api_write
 # June changes this from the gear panel without restarting; the choice persists in settings.json.
 VALID_BACKENDS = ("mistral", "openrouter", "claude", "local")
 
-# The most minutes /api/duration will accept. A full day — a fact about days, NOT a view about
-# how long June's work should take. See the long note at the guard itself for why the looser
-# bound was chosen over a tighter one.
-MAX_DURATION_MIN = 24 * 60
+# The most minutes /api/duration will accept — a full day. Defined in api_schema so the OTHER
+# duration door (set_vals, the object editor) enforces the identical bound; a cap on one route
+# only is a cap on neither. See the long note at the /api/duration guard for why a day and not
+# something tighter.
+MAX_DURATION_MIN = api_schema.MAX_DURATION_MIN
 
 
 def _load_settings():

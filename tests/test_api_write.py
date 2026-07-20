@@ -512,3 +512,36 @@ def test_a_cadence_default_that_does_not_persist_is_reported_not_reported_as_suc
     space._apply = drop_the_interval
     with pytest.raises(RuntimeError, match="Interval unit"):
         api_write.convert_type("task-1", "Recurring")
+
+
+# --- the duration cap holds on THIS path too (2026-07-20) --------------------
+#
+# /api/duration caps a duration at a day, but the object editor writes the SAME 'Duration min'
+# field through set_vals, and that path had no range check — so 3045 minutes (the value the
+# pre-filled duration box produced live) could reach her real object by the other door. The cap
+# is one shared constant now, enforced on both writers.
+
+def test_a_duration_over_a_day_is_refused_on_the_object_path(space):
+    with pytest.raises(api_write.WriteRefused, match="24 hours"):
+        api_write.set_vals("task-1", {"duration": 3045})
+
+
+def test_a_refused_duration_does_not_reach_the_object(space):
+    try:
+        api_write.set_vals("task-1", {"duration": 3045})
+    except api_write.WriteRefused:
+        pass
+    out = api_write.set_vals("task-1", {"duration": 60})   # a normal write still lands
+    assert out["object"]["vals"]["duration"] == 60
+
+
+def test_a_full_day_duration_is_accepted_on_the_object_path(space):
+    out = api_write.set_vals("task-1", {"duration": 1440})
+    assert out["object"]["vals"]["duration"] == 1440
+
+
+def test_the_block_length_field_is_capped_too(space):
+    # blockMin -> 'Block chunk min' is a duration in minutes as well, and reaches Anytype by the
+    # same path; the cap is keyed on the field's meaning, not on which route wrote it.
+    with pytest.raises(api_write.WriteRefused, match="24 hours"):
+        api_write.set_vals("proj-1", {"blockMin": 3045})

@@ -541,6 +541,14 @@ def set_vals(object_id, vals):
     for key, value in vals.items():
         prop = _property_for(level, key)
         coerced = _coerce(prop, value)
+        # The same day-cap /api/duration enforces, on the field's meaning rather than the route
+        # that wrote it — the object editor reaches 'Duration min' / 'Block chunk min' here, and
+        # without this it was the uncapped door 3045 minutes could still walk through.
+        if (key in api_schema.DURATION_VAL_KEYS
+                and isinstance(coerced, (int, float))
+                and coerced > api_schema.MAX_DURATION_MIN):
+            raise WriteRefused("That is longer than 24 hours, so it was not saved. "
+                               "The duration is unchanged.")
         # A valKey whose stored polarity is the inverse of the UI's (contract Q3) is flipped on
         # the way IN; `api_tree._vals` flips it back on the way out, so `intended` stays UI-space.
         props[prop] = (not coerced) if (level, key) in api_tree.INVERTED_VALS else coerced
