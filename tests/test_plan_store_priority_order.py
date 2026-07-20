@@ -175,6 +175,71 @@ def test_a_server_side_move_clears_the_saved_order(tmp_path, monkeypatch):
     assert "priority_order" not in after
 
 
+def _real_shape_plan():
+    """June's ACTUAL fragmented-day plan shape, read off the live server 2026-07-19.
+
+    ⚠ A BLOCK ROW CARRIES ITS ID IN `project_id`, AND HAS NO `id` AT ALL. Three of the seven rows
+    on her real plan that day were blocks ("Work on Life admin", "Work on IOP and recovery",
+    "Work on Leatherworking"), each with `id` absent. `api/adapt.ts` already records this in a
+    ⚠ of its own — `planFromLive` reads `it.id ?? it.project_id` — and the surface therefore
+    sends a block's project_id as its id.
+
+    The plan fixture above gives every row an `id`, so it could not see this. Reading `id` alone
+    put `None` in the known-ids list, and `set_priority_order` raised
+    `TypeError: '<' not supported between instances of 'str' and 'NoneType'` from `sorted()`.
+    That was found by POSTing to the running server, not by any test.
+    """
+    return {
+        "shape": "priority",
+        "items": [
+            {"id": A, "task": "Clean the kitchen"},
+            {"project_id": B, "block": True, "task": "Work on Life admin"},
+            {"id": C, "task": "Go on a long walk"},
+        ],
+    }
+
+
+def test_a_block_row_can_be_ranked_by_the_id_the_surface_sends(tmp_path, monkeypatch):
+    """A block is addressed by its `project_id`, because that is the id it has."""
+    _redirect(tmp_path, monkeypatch)
+    plan_store.save_plan(_real_shape_plan())
+
+    plan_store.set_priority_order([B, C, A])
+
+    assert plan_store.load_plan()["priority_order"] == [B, C, A]
+
+
+def test_a_plan_holding_a_block_does_not_crash_the_refusal_path(tmp_path, monkeypatch):
+    """The exact live failure: a bad id on a plan containing a block row must come back as an
+    ordinary refusal naming the id, not a TypeError out of `sorted()`."""
+    _redirect(tmp_path, monkeypatch)
+    plan_store.save_plan(_real_shape_plan())
+
+    with pytest.raises(ValueError) as e:
+        plan_store.set_priority_order(["bafyGHOST"])
+
+    assert "bafyGHOST" in str(e.value)
+
+
+def test_a_row_with_no_id_of_any_kind_is_refused_not_ranked(tmp_path, monkeypatch):
+    """If a row carries neither `id` nor `project_id` there is nothing to rank it by, and a
+    ranking that silently skipped it would put a row on screen with no position. Say so.
+
+    ⚠ THREE rows, not two, and that matters. With only one other row the id-less row is the sole
+    entry in the mismatch set, `sorted()` of a one-element set never compares anything, and the
+    refusal comes out cleanly even with the guard deleted — so the test passed against the
+    unguarded code. With two named rows left out, `sorted()` has to compare a string against
+    `None` and raises TypeError instead of refusing. Found by mutation.
+    """
+    _redirect(tmp_path, monkeypatch)
+    plan_store.save_plan(
+        {"shape": "priority", "items": [{"id": A}, {"id": C}, {"task": "nameless"}]}
+    )
+
+    with pytest.raises(ValueError):
+        plan_store.set_priority_order([A])
+
+
 def test_checking_a_row_off_leaves_the_saved_order_alone(tmp_path, monkeypatch):
     """Ordinary day-of writes are not reorderings. Her ranking survives them."""
     _redirect(tmp_path, monkeypatch)

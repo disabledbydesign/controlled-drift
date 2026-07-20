@@ -653,7 +653,19 @@ def set_priority_order(order):
     order = [str(i) for i in order]
     if len(set(order)) != len(order):
         raise ValueError("that order names the same task twice — one row, one rank")
-    known = [it.get("id") for it in items]
+
+    # ⚠ A BLOCK ROW HAS NO `id` — its id lives in `project_id`. Verified against June's real
+    # fragmented-day plan 2026-07-19, where three of seven rows were blocks with `id` absent.
+    # `api/adapt.ts` reads `it.id ?? it.project_id` for exactly this reason and the surface then
+    # sends a block's project_id as its id, so reading `id` alone here disagreed with every id
+    # the client can possibly send. It also put `None` in this list, which made the refusal path
+    # raise TypeError out of `sorted()` instead of naming the offending id.
+    #
+    # Found by POSTing to the running server, NOT by a test — the fixture gave every row an
+    # `id`, so it could not see this. Same class as the block-id bug `adapt.ts` records.
+    known = [it.get("id") or it.get("project_id") for it in items]
+    if not all(known):
+        raise ValueError("that plan has a row with no id, so it cannot be ranked")
     if set(order) != set(known):
         unknown = sorted(set(order) - set(known))
         missing = sorted(set(known) - set(order))
