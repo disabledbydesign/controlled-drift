@@ -235,3 +235,114 @@ describe('a fragmented day still ranks', () => {
     expect(moveItem).not.toHaveBeenCalled();
   });
 });
+
+/**
+ * ── A LEGAL UP-NUDGE OVER A FOLDED-IN APPOINTMENT WAS REFUSED WITH AN UNTRUE SENTENCE ─────────
+ *
+ * `addressedWorkItems` keeps appointment rows, so on a band ordered [Appointment, T1, T2] an
+ * up-nudge of T2 anchors on the APPOINTMENT — and `moveDestinations` emits no `after` destination
+ * for any row above `offset` (`moveTargets.ts:177`), because the server never indexes an
+ * appointment. The lookup missed, and she was told "There is no other place in today's plan for
+ * that row." That was false: the band-first slot sits deliberately BELOW the folded-in
+ * appointments (`moveTargets.ts:166`) and is exactly where the row should land.
+ *
+ * June's real plan has a 14:00 appointment, so this fired in ordinary use. A control that refuses
+ * a possible move with an untrue explanation is the same broken promise as one that silently
+ * reverts.
+ *
+ * Asserted POSITIVELY: the nudge must SEND, and it must send the band's first position.
+ */
+describe('an up-nudge anchored on an appointment takes the band-first slot', () => {
+  it('MOVES the row to the first position of the band instead of refusing', () => {
+    // `apptCount: 1` marks the first rendered row of band 0 as a folded-in appointment, which is
+    // the only surviving trace of one after `planFromLive`.
+    const { ctx, moveItem, fail } = ctxWith(
+      { todayShape: 'priority' },
+      { ...clockPlan(), apptCount: 1 },
+    );
+    render(<PriorityList ctx={ctx} />);
+
+    /*
+     * Row 2 (ieshky, Afternoon) nudged up passes row 1 (kt4i6q), so its anchor is row 0 — the
+     * APPOINTMENT. That anchor has no `after` destination, and the band-first slot of band 0 is
+     * the right landing place: server position 0, which sits below the appointment.
+     *
+     * Row 1 is deliberately NOT the subject: with one folded-in appointment it is already at
+     * server position 0, so its up-nudge is a genuine refusal and would prove nothing.
+     */
+    fireEvent.click(screen.getAllByLabelText('move up')[2]!);
+
+    expect(moveItem).toHaveBeenCalledTimes(1);
+    expect(moveItem).toHaveBeenCalledWith('ieshky', { block: 0, position: 0 });
+    expect(fail).not.toHaveBeenCalled();
+  });
+
+  /**
+   * The fallback is DIRECTIONAL. Falling back to the band-first slot on a DOWNWARD nudge would
+   * send the row to the top of the band — the opposite of what she pressed — so the fallback must
+   * apply only when the anchor sits above the moving row. Asserted on the row whose downward
+   * neighbour is the one real refusal left: nothing is sent to the wrong end.
+   */
+  it('never sends a downward nudge to the top of the band', () => {
+    const { ctx, moveItem } = ctxWith({ todayShape: 'priority' }, { ...clockPlan(), apptCount: 1 });
+    render(<PriorityList ctx={ctx} />);
+
+    fireEvent.click(screen.getAllByLabelText('move down')[1]!);
+
+    expect(moveItem).toHaveBeenCalledTimes(1);
+    // Downward from row 1 lands AFTER row 2, never at position 0.
+    expect(moveItem.mock.calls[0]![1]).not.toEqual({ block: 0, position: 0 });
+  });
+
+  /**
+   * And the two refusal reasons stay distinct in her words. `nowhere` and `no-slot` used to share
+   * one sentence, and that sentence was the untrue one above. Once a real `no-slot` can no longer
+   * be a mislabelled appointment case, it needs wording that is true of what it actually is.
+   */
+  it('says something different for a missing neighbouring position than for no position at all', async () => {
+    const { nudgeRefusalText } = await import('../PriorityList.tsx');
+    expect(nudgeRefusalText('no-slot')).not.toBe(nudgeRefusalText('nowhere'));
+    // Literal, no metaphors, and each one still tells her that her ordering is unchanged.
+    expect(nudgeRefusalText('no-slot')).toContain('your ordering did not change');
+    expect(nudgeRefusalText('nowhere')).toContain('your ordering did not change');
+  });
+});
+
+/**
+ * ── `neighbourSlot`'s OWN CONTRACT, driven directly ──────────────────────────
+ *
+ * The band-first fallback above is a fallback for ONE direction. Through the UI that is currently
+ * all it can be — appointments are folded into the FRONT of band 0, so an anchor with no `after`
+ * destination is always above the moving row, and no click reaches the other case. But
+ * `neighbourSlot` is a function with a contract of its own, and the geometry it relies on is an
+ * OPEN QUESTION: contract §6 Q9 has not decided whether appointments stay folded into band 0 or
+ * become a band of their own. If that changes, an anchor below the moving row becomes reachable,
+ * and a non-directional fallback would send a downward nudge to the TOP of the band — the
+ * opposite of what she pressed, reported as a success.
+ *
+ * So the guard is asserted where it is expressible: an anchor the plan does not contain must
+ * REFUSE, not quietly become "first in the band".
+ */
+describe('neighbourSlot refuses rather than guessing at a slot it was not asked for', () => {
+  it('does not turn an anchor it cannot place into the top of the band', async () => {
+    const { neighbourSlot } = await import('../placement.ts');
+    const { ctx } = ctxWith({ todayShape: 'priority' }, clockPlan());
+
+    const nudge = neighbourSlot(ctx, 'kt4i6q', 'bafyrei-not-in-this-plan', 0);
+
+    expect(nudge.refusal).toBe('no-slot');
+    expect(nudge.target).toBeNull();
+  });
+
+  /** The other half, so the assertion above cannot pass against a function that refuses always. */
+  it('still gives the band-first slot when the anchor is genuinely above the row', async () => {
+    const { neighbourSlot } = await import('../placement.ts');
+    const { ctx } = ctxWith({ todayShape: 'priority' }, { ...clockPlan(), apptCount: 1 });
+
+    // 'l3pdzq' is the folded-in appointment: above 'ieshky', and carrying no `after` destination.
+    const nudge = neighbourSlot(ctx, 'ieshky', 'l3pdzq', 0);
+
+    expect(nudge.refusal).toBeNull();
+    expect(nudge.target).toEqual({ block: 0, position: 0 });
+  });
+});

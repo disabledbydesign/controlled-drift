@@ -75,7 +75,9 @@ describe('an interstitial row with no id is a genuine anchor', () => {
   });
 
   it('treats a blank id as no id, not as an id', () => {
-    // `''` is a real shape on this wire and `??` would have let it through as an "id".
+    // `''` is a real shape on this wire. NOTE: this row is NOT a block, so it does not by itself
+    // distinguish `||` from `??` anywhere in `usableId` — both operators leave it a break. The
+    // fixture that actually separates them is the blank-id BLOCK below.
     const row = oneRow({ id: '', task: 'Rest or light activity', interstitial: true });
     expect(row.kind).toBe('break');
   });
@@ -108,6 +110,26 @@ describe('a block carries its id in project_id', () => {
     });
     expect(row).toMatchObject({ kind: 'block', id: 'bafyreic3jgl5z' });
   });
+
+  /**
+   * THE FIXTURE THAT SEPARATES `||` FROM `??`, and the reason it had to be written: the change
+   * that introduced `||` was described as pinned by tests and was not. Every other block fixture
+   * here OMITS `id`, and `undefined ?? x` and `undefined || x` both give `x` — so reverting the
+   * operator left the whole suite green.
+   *
+   * A blank id is a real shape on this wire, and `'' ?? p` is `''` — a block whose id resolved to
+   * the empty string is the uncheckoffable ghost row again. Only `||` reaches `project_id` here.
+   */
+  it('resolves a block’s id from project_id even when id arrives BLANK, not just absent', () => {
+    const row = oneRow({
+      task: 'Work on IOP and recovery',
+      block: true,
+      id: '',
+      project_id: 'bafyreihsi3mak',
+      chunk_min: 25,
+    });
+    expect(row).toMatchObject({ kind: 'block', id: 'bafyreihsi3mak' });
+  });
 });
 
 describe('project_id on a NON-block row is the parent project, not the row', () => {
@@ -124,5 +146,50 @@ describe('project_id on a NON-block row is the parent project, not the row', () 
   it('gives an id-less ordinary task an empty id rather than its project’s', () => {
     const row = oneRow({ task: 'Rest or light activity', project_id: 'bafyrei-household' });
     expect(row).toMatchObject({ kind: 'task', id: '' });
+  });
+
+  /**
+   * `block_project` DOES NOT MEAN "this row is a block". `plan_generate.py:726-735` sets it on
+   * ORDINARY TASK rows and `continue`s past every row where `block` is true, so `block_project`
+   * being set implies `block` is falsy and `project_id` is the row's PARENT PROJECT.
+   *
+   * `usableId` used to gate its `project_id` fallback on `block || block_project`, which made a
+   * task row answer with its PARENT's id.
+   *
+   * ⚠ MEASURED, NOT ASSUMED: this particular row does NOT change under that gate, because the
+   * task branch of `conv` reads `it.id ?? ''` directly and never calls `usableId`. Mutating the
+   * gate back leaves this test green — it is kept as a positive statement of the rule, and as the
+   * guard that catches a future change routing the task branch through `usableId`. The fixture
+   * that DOES bite is the interstitial one below; see its note.
+   */
+  it('does not let block_project make a task row addressable as its parent project', () => {
+    const row = oneRow({
+      task: 'Draft the cover letter',
+      block_project: true,
+      project_id: 'bafyrei-parent-project',
+      duration_min: 30,
+    });
+    expect(row).toMatchObject({ kind: 'task', id: '', task: 'Draft the cover letter' });
+    // Named directly, so a future `project_id` fallback cannot pass this by being "not undefined".
+    expect(row.kind === 'task' && row.id).toBe('');
+  });
+
+  /**
+   * THE ROW THE WRONG GATE ACTUALLY CHANGED, and the only one — verified by mutation, not read
+   * off the code. `usableId` is consulted in exactly two places: the `interstitial && !usableId`
+   * test, and the block branch's own `id`. So a `block_project` row is affected only when it is
+   * ALSO interstitial: the parent's id made `usableId` non-empty, the break test failed, and a
+   * fixed anchor ("Rest or light activity") was converted to a task row instead — a row with no
+   * id, which `PriorityList` then filters out entirely. She loses the anchor from her day.
+   */
+  it('keeps a block_project row a BREAK when it is a short id-less anchor', () => {
+    // The parent's id must not rescue an anchor into looking addressable.
+    const row = oneRow({
+      task: 'Rest or light activity',
+      interstitial: true,
+      block_project: true,
+      project_id: 'bafyrei-parent-project',
+    });
+    expect(row).toEqual({ kind: 'break', time: '', task: 'Rest or light activity' });
   });
 });

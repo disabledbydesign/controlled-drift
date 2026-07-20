@@ -152,14 +152,26 @@ export interface LivePlan {
  * everywhere in this file. An empty string counts as NO id, which is why this is not `??`:
  * `'' ?? x` is `''`, and a blank id addresses nothing.
  *
- * ⚠ `project_id` IS ONLY THIS ROW'S OWN ID WHEN THE ROW IS A BLOCK. `plan_generate.py:734` sets
- * `project_id` on ORDINARY task rows as well, where it names the task's PARENT PROJECT. Falling
- * back to it unconditionally would hand a project's id to a task row and address the wrong
- * object — so the fallback is gated on the block flags that make it the row's own identity.
+ * ⚠ `project_id` IS ONLY THIS ROW'S OWN ID WHEN THE ROW IS A BLOCK — so the fallback is gated on
+ * `it.block` ALONE, which is the one flag that makes `project_id` the row's own identity.
+ * `plan_generate.py:734` sets `project_id` on ORDINARY task rows as well, where it names the
+ * task's PARENT PROJECT. Falling back to it unconditionally would hand a project's id to a task
+ * row and address the wrong object.
+ *
+ * ⚠ `block_project` IS NOT A BLOCK FLAG, and reading it as one was this exact defect arriving by
+ * the back door. `plan_generate.py:726-735` sets `block_project` on ORDINARY TASK rows, and
+ * explicitly `continue`s past any row where `block` is true — so `block_project: true` implies
+ * `block` is falsy, and the row's `project_id` is its PARENT's. Gating on it made a task row
+ * addressable as its own parent project: checking it off, setting its duration or moving it would
+ * each have written to the wrong Anytype object. A `block_project` row with no `id` therefore
+ * answers `''` here, which is the truth — it is not addressable by an id of its own.
+ *
+ * The gate also matches `planFromLive`'s render branch, which tests `if (it.block)` and nothing
+ * else. Two different tests for "is this a block" is how the two answers drift apart.
  */
 function usableId(it: LivePlanItem): string {
   if (it.id) return it.id;
-  if (it.block || it.block_project) return it.project_id || '';
+  if (it.block) return it.project_id || '';
   return '';
 }
 

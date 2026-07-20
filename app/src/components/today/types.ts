@@ -125,8 +125,14 @@ export interface TodayCtx {
    * shows the STORED value — not the input that was refused. June, 2026-07-20: *"if a change
    * can't be made, the UI content needs to show what's really in the data — that's essential."*
    * Revert the control first; then say why.
+   *
+   * ⚠ PASS `hold` WHEN NOTHING REVERTED, because nothing changed at all. An INSTRUCTION is the
+   * case: "Pick an item to move" tells her to go and find the `edit` panel on a row, and the
+   * screen is identical before and after it. The licence to fade comes from a control having put
+   * a truthful value back; where there is no such control, the sentence is the only thing carrying
+   * the message and it must stay until she dismisses it. Refusals WITH a revert must not hold.
    */
-  notice: (msg: string, nodeId?: string | null) => void;
+  notice: (msg: string, nodeId?: string | null, hold?: boolean) => void;
   /**
    * Record (or un-record) a chunk of work on a block — the work-block check, in BOTH views.
    *

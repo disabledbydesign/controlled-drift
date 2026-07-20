@@ -93,13 +93,58 @@ export function neighbourSlot(
 ): Nudge {
   const offer = moveOptions(ctx.plan, movingId, titleOfIn(ctx));
   if (offer.refusal) return { target: null, refusal: offer.refusal };
-  const dest = offer.destinations.find((d) =>
-    anchorId === null ? d.afterId === null && d.bandIndex === anchorBand : d.afterId === anchorId,
-  );
-  // No destination for that neighbour means the server has no position there to give. Answering
-  // with a refusal rather than a nearby guess is the point: a row that quietly lands somewhere
-  // other than where she pushed it is the same broken promise as one that does not move at all.
+  const bandFirst = () =>
+    offer.destinations.find((d) => d.afterId === null && d.bandIndex === anchorBand);
+  const afterAnchor =
+    anchorId === null ? undefined : offer.destinations.find((d) => d.afterId === anchorId);
+  /*
+   * ⚠ AN APPOINTMENT ANCHOR HAS NO `after` SLOT, AND THAT IS NOT THE SAME AS HAVING NOWHERE TO GO.
+   *
+   * `addressedWorkItems` keeps appointment rows, so on a band ordered [Appointment, T1, T2] a
+   * legal up-nudge of T2 anchors on the APPOINTMENT — and `moveDestinations` emits no `after`
+   * destination for any row above `offset` (`moveTargets.ts:177`), because the server does not
+   * index appointments. The lookup missed and she was told "There is no other place in today's
+   * plan for that row", which was untrue: the band-first slot is deliberately positioned BELOW the
+   * folded-in appointments (`moveTargets.ts:166`) and is exactly where that row should land.
+   *
+   * June's real plan has a 14:00 appointment, so this fired in ordinary use.
+   *
+   * ⚠ THE FALLBACK IS DIRECTIONAL. Band-first is only the right answer when she pushed the row
+   * UPWARD — falling back to it on a downward nudge would send the row to the top of the band,
+   * the opposite of what she asked for. So it applies only when the anchor currently sits ABOVE
+   * the moving row. That test is a comparison of rendered positions and computes no server
+   * positions of its own; `moveDestinations` remains the only place index arithmetic lives.
+   */
+  const dest = afterAnchor ?? (anchorAbove(ctx, movingId, anchorId) ? bandFirst() : undefined);
+  // No destination at all means the server has no position there to give. Answering with a refusal
+  // rather than a nearby guess is the point: a row that quietly lands somewhere other than where
+  // she pushed it is the same broken promise as one that does not move at all.
   return dest ? { target: dest.target, refusal: null } : { target: null, refusal: 'no-slot' };
+}
+
+/**
+ * Does `anchorId` render ABOVE `movingId` in the plan? `null` counts as above — it names the slot
+ * at the top of a band, which is the upward direction by definition.
+ *
+ * Deliberately reads only the rendered order (band index, then index within the band) and returns
+ * no position: the offset arithmetic that separates rendered order from the server's index space
+ * belongs to `moveTargets` and must not be copied here.
+ */
+function anchorAbove(ctx: TodayCtx, movingId: string, anchorId: string | null): boolean {
+  if (anchorId === null) return true;
+  const at = (id: string): number => {
+    let n = 0;
+    for (const band of ctx.plan.blocks) {
+      for (const it of band.items) {
+        if ('id' in it && it.id === id) return n;
+        n += 1;
+      }
+    }
+    return -1;
+  };
+  const a = at(anchorId);
+  const m = at(movingId);
+  return a >= 0 && m >= 0 && a < m;
 }
 
 /** The slots belonging to one band, in the order they are rendered. */

@@ -582,7 +582,7 @@ export interface AppState {
    * written to the error log because nothing went wrong. See the implementation for why this is
    * neither `flash` (which renders nowhere) nor `fail` (which claims a defect).
    */
-  refuse: (msg: string, nodeId?: string | null) => void;
+  refuse: (msg: string, nodeId?: string | null, hold?: boolean) => void;
   /**
    * Append a log entry to the friction log via `POST /api/logday`. Resolves `true` only when the
    * server confirmed the write — callers must not clear her text on `false`.
@@ -867,12 +867,20 @@ export function useAppState(source: DataSource = 'live'): AppState {
    * fills `errorLog` with non-defects, which is what stops that log being useful for real ones.
    * So this deliberately does not log.
    *
-   * It FADES (5s), and that is only sound because of the other half of the rule: the control the
-   * refusal came from must revert to the stored value, so the screen is truthful with or without
-   * the sentence. Do not use this from a control that goes on displaying the rejected input.
+   * It FADES (5s) BY DEFAULT, and that is only sound because of the other half of the rule: the
+   * control the refusal came from must revert to the stored value, so the screen is truthful with
+   * or without the sentence. Do not use the fading form from a control that goes on displaying the
+   * rejected input.
+   *
+   * ⚠ `hold` IS FOR THE SITE WHERE NOTHING REVERTS, because there is nothing to revert. An
+   * INSTRUCTION ("Pick an item to move") changes nothing on screen at all — she has to act on the
+   * sentence, by finding the `edit` panel on a row, and a sentence that disappears after five
+   * seconds while the screen is unchanged leaves her with no way back to it. That is the same
+   * defect as a fading notice about an invisible write, which is why `Signal.hold` already exists.
+   * A refusal WITH a revert must keep the default and fade — the screen carries it by then.
    */
-  const refuse = useCallback((msg: string, nodeId: string | null = null) => {
-    setToast((prev) => ({ kind: 'notice', msg, nodeId, seq: (prev?.seq ?? 0) + 1 }));
+  const refuse = useCallback((msg: string, nodeId: string | null = null, hold = false) => {
+    setToast((prev) => ({ kind: 'notice', msg, nodeId, seq: (prev?.seq ?? 0) + 1, hold }));
   }, []);
 
   /**

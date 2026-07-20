@@ -718,3 +718,44 @@ describe('one `edit` per row — the object editor moved into the panel', () => 
     expect(screen.getByLabelText('open editor')).toBeTruthy();
   });
 });
+
+/**
+ * ── THE RED MARK MUST NOT SURVIVE A CLOSE ────────────────────────────────────
+ *
+ * `RowActions` does NOT unmount when the panel closes — the row keeps rendering it, and only the
+ * floating pane stops being drawn — so `refused` (and `editingMinutes` with it) persisted. Refuse
+ * a value, close the panel, reopen it, and the box came back outlined in red and marked
+ * `aria-invalid` while showing the STORED value, which nobody had just judged. The mark means
+ * "the system has this moment refused what you typed"; after a close there is no such moment, and
+ * a red box over a good value is the screen making a claim that is not true.
+ *
+ * The panel's open state lives in `ctx.ui.editOpen`, which the shell owns, so the close and the
+ * reopen are driven by re-rendering the SAME mounted element with a changed `ui` — which is
+ * exactly how it happens in the app, and is what makes the state survive.
+ */
+describe('the invalid mark belongs to a judgement, not to the row', () => {
+  it('clears the red mark when the panel is closed, so a reopened box is not marked', () => {
+    const open = ctxWith({ editOpen: { t1: true } });
+    const { rerender } = render(<RowActions ctx={open.ctx} id="t1" kind="task" durationMin={90} />);
+
+    fireEvent.click(screen.getByText('90 min'));
+    const box = screen.getByLabelText('minutes') as HTMLInputElement;
+    fireEvent.change(box, { target: { value: '0' } });
+    fireEvent.submit(box.form!);
+    // The refusal really happened — otherwise this test would pass by never marking anything.
+    expect(screen.getByLabelText('minutes').getAttribute('aria-invalid')).toBe('true');
+
+    fireEvent.click(screen.getByText('close'));
+
+    // The shell would now write `editOpen: {}`; re-render the same element with it, then reopen.
+    const shut = ctxWith({ editOpen: {} });
+    rerender(<RowActions ctx={shut.ctx} id="t1" kind="task" durationMin={90} />);
+    const again = ctxWith({ editOpen: { t1: true } });
+    rerender(<RowActions ctx={again.ctx} id="t1" kind="task" durationMin={90} />);
+
+    // Positively: the box is back, holding the stored value, and it is NOT marked wrong.
+    const reopened = screen.getByLabelText('minutes') as HTMLInputElement;
+    expect(reopened.value).toBe('90');
+    expect(reopened.getAttribute('aria-invalid')).toBe(null);
+  });
+});

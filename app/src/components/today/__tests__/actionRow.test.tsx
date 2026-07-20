@@ -204,7 +204,28 @@ describe('the row shows the work in progress', () => {
      * `flash` the sentence rendered nowhere — so the button was a control that visibly did
      * nothing at all, while this test passed.
      */
-    expect(notice).toHaveBeenCalledWith('Pick an item to move');
+    expect(notice).toHaveBeenCalledWith('Pick an item to move', null, true);
+  });
+
+  /**
+   * ── AND IT MUST NOT FADE ─────────────────────────────────────────────────────
+   * `signals.ts` lets a notice fade for ONE reason: the control it came from has reverted to a
+   * truthful value, so the screen carries the message after the words go. Nothing reverts here —
+   * nothing on screen changes at all — and she has to ACT on the sentence by finding the `edit`
+   * panel on a row. A five-second instruction off an unchanged screen is one she cannot get back.
+   *
+   * Asserted on the third argument by POSITION and by VALUE. `toHaveBeenCalledWith` deep equality
+   * treats an explicit `undefined` as an absent argument, so "was called with the message" alone
+   * would pass against the fading version this replaced.
+   */
+  it('holds that instruction on screen until she dismisses it, because nothing reverted', () => {
+    const { ctx, notice } = ctxWith({});
+    render(<TodayPanel ctx={ctx} />);
+
+    fireEvent.click(screen.getByText('Move this later'));
+
+    expect(notice).toHaveBeenCalledTimes(1);
+    expect(notice.mock.calls[0]![2]).toBe(true);
   });
 
   it('“Life admin & household” is held with the other generation controls', () => {

@@ -84,6 +84,39 @@ function durationOf(item: PlanItem | undefined): number {
   return item && item.kind === 'task' ? item.durationMin : 0;
 }
 
+/**
+ * Why a nudge on a timed day did not happen, in her words.
+ *
+ * At module scope and exported so the WORDS can be asserted directly. Held inside the component
+ * they were only reachable by driving a refusal, and the distinction that matters most here —
+ * that 'no-slot' and 'nowhere' do not share one sentence — has no such driver now that the
+ * commonest 'no-slot' has become a legal move. Literal throughout: each one names
+ * the row's real obstacle and then says the thing she needs to know, which is that her ordering
+ * is unchanged. A refusal that only explains itself still leaves her guessing whether the list
+ * moved.
+ */
+export const nudgeRefusalText = (why: NudgeRefusal): string => {
+  if (why === 'appointment') {
+    return 'That row has a fixed time, so it stays where it is — your ordering did not change.';
+  }
+  if (why === 'not-found') {
+    return 'I could not find that row in today’s plan, so nothing moved — your ordering did not change.';
+  }
+  if (why === 'no-slot') {
+    /*
+     * ⚠ KEPT SEPARATE FROM 'nowhere' ON PURPOSE. These used to share one sentence, and that
+     * sentence — "There is no other place in today's plan for that row" — was UNTRUE for the
+     * commonest 'no-slot' case, an up-nudge anchored on a folded-in appointment, where a legal
+     * band-first slot existed the whole time. `neighbourSlot` now takes that slot, so what
+     * reaches here is the genuinely different case: the plan has no position immediately next
+     * to that neighbour. Saying it in its own words keeps a real 'no-slot' from being absorbed
+     * into wording that may not be true of it.
+     */
+    return 'There is no position next to that row for it to move into, so nothing moved — your ordering did not change.';
+  }
+  return 'There is no other place in today’s plan for that row, so nothing moved — your ordering did not change.';
+};
+
 export function PriorityList({ ctx, reasonShown = false }: PriorityListProps) {
   const C = ctx.T.c;
   // Each item arrives with the band/item address `toggleArcStep` and the `blocksOpen` /
@@ -252,24 +285,6 @@ export function PriorityList({ ctx, reasonShown = false }: PriorityListProps) {
   }, [timedDay, storedOrder, upFn]);
 
   /**
-   * Why a nudge on a timed day did not happen, in her words. Literal throughout: each one names
-   * the row's real obstacle and then says the thing she needs to know, which is that her ordering
-   * is unchanged. A refusal that only explains itself still leaves her guessing whether the list
-   * moved.
-   */
-  const nudgeRefusalText = (why: NudgeRefusal): string => {
-    if (why === 'appointment') {
-      return 'That row has a fixed time, so it stays where it is — your ordering did not change.';
-    }
-    if (why === 'not-found') {
-      return 'I could not find that row in today’s plan, so nothing moved — your ordering did not change.';
-    }
-    // 'nowhere' and 'no-slot' are one sentence to her: both mean the plan has no other position
-    // for this row in the direction she pushed it.
-    return 'There is no other place in today’s plan for that row, so nothing moved — your ordering did not change.';
-  };
-
-  /**
    * ── THE ▲/▼ CONTROLS ROUTE BY THE PLAN'S SHAPE ───────────────────────────────
    *
    * A fragmented day has a flat ranking and `POST /api/plan/priority-order` stores it. A
@@ -282,16 +297,57 @@ export function PriorityList({ ctx, reasonShown = false }: PriorityListProps) {
    * cached plan in either direction and re-flows the clock times. That is what moving a row up or
    * down on a timed day means, and it is the endpoint that means it.
    */
+  /*
+   * ⚠ A NUDGE MUST MOVE SOMETHING SHE CAN SEE, OR SAY THAT IT DID NOT.
+   *
+   * `order` and the rendered list are NOT the same length. A row whose id `node(ctx.idx, id)`
+   * cannot resolve keeps its place in `order` — dropping it would discard its ranking on the next
+   * save — but renders nothing at all. Stepping one index at a time therefore swapped a row with
+   * an INVISIBLE one: the list on screen did not change, and the save fired and reported success.
+   * Until the gutter numbering was made contiguous, the gap it left (1, 2, 4…) was the only clue
+   * such a row existed; the numbering is June's own decision and is not being put back.
+   *
+   * So the step is taken in RENDERED space: the next index in that direction whose id is in
+   * `renderIndex`. `-1` means there is no visible row that way at all, which is what the arrow's
+   * unavailable styling below says, and what the refusal says out loud.
+   */
+  const nextVisible = (from: number, step: number): number => {
+    for (let k = from + step; k >= 0 && k < order.length; k += step) {
+      if (renderIndex.has(order[k]!)) return k;
+    }
+    return -1;
+  };
+  const atVisibleTop = (i: number) => nextVisible(i, -1) < 0;
+  const atVisibleEnd = (i: number) => nextVisible(i, 1) < 0;
+
   const move = (i: number, d: number) => {
     const a = order.slice();
-    const j = i + d;
-    if (j < 0 || j >= a.length) return;
+    const step = d < 0 ? -1 : 1;
+    const j = nextVisible(i, step);
+    if (j < 0) {
+      /*
+       * Said out loud rather than returning in silence. Nothing on screen changes here — the row
+       * is already at the visible end — so `notice` with `hold` is right: it is not a defect worth
+       * the error log, and nothing reverts to make the screen truthful without the sentence.
+       */
+      ctx.notice(
+        step < 0
+          ? 'That row is already first in today’s list, so nothing moved — your ordering did not change.'
+          : 'That row is already last in today’s list, so nothing moved — your ordering did not change.',
+        a[i] ?? null,
+        true,
+      );
+      return;
+    }
     if (timedDay) {
       const id = a[i]!;
       // Where the row should end up: immediately below the neighbour it passes going DOWN, and
       // immediately below that neighbour's own predecessor going UP — which for the top of the
-      // list is the band's first slot, named by `null`.
-      const anchorId = d > 0 ? a[j]! : j > 0 ? a[j - 1]! : null;
+      // list is the band's first slot, named by `null`. Both are read in RENDERED space for the
+      // same reason as the step itself: an invisible predecessor is not a row she can be said to
+      // have moved past.
+      const up = nextVisible(j, -1);
+      const anchorId = step > 0 ? a[j]! : up >= 0 ? a[up]! : null;
       const anchorBand = addressById.get(a[j]!)?.bandIndex ?? 0;
       const nudge = neighbourSlot(ctx, id, anchorId, anchorBand);
       if (nudge.refusal) {
@@ -306,6 +362,11 @@ export function PriorityList({ ctx, reasonShown = false }: PriorityListProps) {
       ctx.moveItem(id, nudge.target);
       return;
     }
+    // ⚠ CAPTURED BEFORE THE SWAP. The failure handler below names the row the correction log is
+    // about, and it used to read `a[i]` AFTER these three lines had put the NEIGHBOUR there — so
+    // every unsaved reorder was recorded against the wrong row, and the log pointed at a row she
+    // had not touched.
+    const movedId = a[i]!;
     const t = a[i]!;
     a[i] = a[j]!;
     a[j] = t;
@@ -324,7 +385,7 @@ export function PriorityList({ ctx, reasonShown = false }: PriorityListProps) {
         // the failure signal and records it through `POST /api/log/correction`.
         ctx.fail(
           'That new order did not save, so it will not be here next time. ' + res.error,
-          a[i] ?? null,
+          movedId,
         );
       }
     })();
@@ -352,6 +413,13 @@ export function PriorityList({ ctx, reasonShown = false }: PriorityListProps) {
    * The ▲/▼ pair. `stopPropagation` matters on a BLOCK row, whose whole header is the
    * expand/collapse target — without it, reordering a block would also toggle it open.
    */
+  /*
+   * ⚠ THE UNAVAILABLE STYLING IS READ IN RENDERED SPACE TOO. It used to test `i === 0` and
+   * `i === order.length - 1`, which are `order` positions — so when the list ended with a row the
+   * graph could not resolve, the LAST VISIBLE row showed a ▼ styled as available that had nothing
+   * below it to move past. The arrow's appearance and what the arrow can do have to answer the
+   * same question.
+   */
   const reorder = (i: number) => (
     <div
       style={{
@@ -371,9 +439,9 @@ export function PriorityList({ ctx, reasonShown = false }: PriorityListProps) {
           background: "none",
           border: "1px solid " + C.border,
           borderRadius: "5px",
-          color: i === 0 ? C.dimmer : C.dim,
+          color: atVisibleTop(i) ? C.dimmer : C.dim,
           fontSize: "9px",
-          cursor: i === 0 ? "default" : "pointer",
+          cursor: atVisibleTop(i) ? "default" : "pointer",
           padding: "2px 6px",
           fontFamily: "inherit",
         }}
@@ -390,9 +458,9 @@ export function PriorityList({ ctx, reasonShown = false }: PriorityListProps) {
           background: "none",
           border: "1px solid " + C.border,
           borderRadius: "5px",
-          color: i === order.length - 1 ? C.dimmer : C.dim,
+          color: atVisibleEnd(i) ? C.dimmer : C.dim,
           fontSize: "9px",
-          cursor: i === order.length - 1 ? "default" : "pointer",
+          cursor: atVisibleEnd(i) ? "default" : "pointer",
           padding: "2px 6px",
           fontFamily: "inherit",
         }}

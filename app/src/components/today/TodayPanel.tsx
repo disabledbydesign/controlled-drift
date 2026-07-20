@@ -382,11 +382,17 @@ export function TodayPanel({ ctx }: TodayPanelProps) {
         {/*
           An INSTRUCTION, and the only thing this button does. Through `flash` it did nothing at
           all — a success-kind signal with no node renders nowhere — so the button was a control
-          that visibly did not respond. `notice` puts it in the bar for five seconds, which is the
-          whole of its job: it tells her where the move control actually is (the `edit` panel on
-          each row), and nothing on screen needs to change for that to be true.
+          that visibly did not respond. `notice` puts it in the bar: it tells her where the move
+          control actually is (the `edit` panel on each row).
+
+          ⚠ IT HOLDS, and the five-second version was wrong. `signals.ts` licenses a notice to fade
+          only because the control it came from has reverted to a truthful value, so the screen
+          carries the message once the words go. NOTHING REVERTS HERE — nothing on screen changes
+          at all — and she has to ACT on the sentence, by finding the `edit` panel on a row. A
+          sentence that leaves after five seconds, off a screen that never changed, is an
+          instruction she cannot get back. It stays until she dismisses it.
         */}
-        {act('Move this later', false, () => ctx.notice('Pick an item to move'))}
+        {act('Move this later', false, () => ctx.notice('Pick an item to move', null, true))}
       </div>
 
       <div style={{ padding: '10px 14px 18px' }}>

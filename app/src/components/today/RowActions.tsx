@@ -224,6 +224,14 @@ export function RowActions({ ctx, id, kind, durationMin }: RowActionsProps) {
   const storedDraft = durationMin ? String(durationMin) : '';
 
   const closePanel = () => {
+    /*
+     * ⚠ THE RED MARK IS CLEARED ON THE WAY OUT. `RowActions` does not unmount when the panel
+     * closes — only the pane inside it stops rendering — so `refused` survived: refuse a value,
+     * close the panel, reopen it, and the box came back red while showing a number nobody had
+     * just judged. The mark means "the system has this moment refused what you typed", and after
+     * a close there is no such moment. The chip handler already clears it for the same reason.
+     */
+    setRefused(false);
     const next = { ...ctx.ui.editOpen };
     delete next[id];
     ctx.up({ editOpen: next });

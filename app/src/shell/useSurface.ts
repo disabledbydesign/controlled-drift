@@ -188,7 +188,8 @@ export function useSurface({ T, name, setTheme, wide, source }: SurfaceOptions):
     fail: (msg: string, nodeId: string | null = null) => st.fail(msg, { nodeId }),
     // A change that cannot be made, or what to do next — visible and autofading. See
     // `TodayCtx.notice`: this is the route a refusal must take, because `flash` renders nowhere.
-    notice: (msg: string, nodeId: string | null = null) => st.refuse(msg, nodeId),
+    notice: (msg: string, nodeId: string | null = null, hold = false) =>
+      st.refuse(msg, nodeId, hold),
     // The work-block check. `void` for the same reason as `regenerate`: every outcome reports
     // itself through `succeed`/`fail` inside `chunkBlock`, so the row has nothing to await.
     chunk: (id, done) => void st.chunkBlock(id, done),

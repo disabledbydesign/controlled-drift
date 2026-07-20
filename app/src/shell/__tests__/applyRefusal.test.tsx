@@ -87,3 +87,40 @@ describe('apply — a refused mutation is said out loud, not filed as a success'
     expect(result.current.toast?.kind).toBe('success');
   });
 });
+
+/**
+ * ── `refuse` CAN NOW HOLD, AND THE DEFAULT IS STILL TO FADE ───────────────────
+ *
+ * `signals.ts` licenses a notice to fade for exactly one reason: the control it came from has
+ * reverted to a truthful value, so the screen carries the message once the words go. That licence
+ * does not cover an INSTRUCTION — "Pick an item to move" changes nothing on screen at all and she
+ * has to act on it, by finding the `edit` panel on a row. Off an unchanged screen, a sentence that
+ * leaves after five seconds is an instruction she cannot get back.
+ *
+ * So `refuse` takes a third argument. Both directions are asserted, because a flag that is always
+ * on is the same as no flag: a held call must set `hold`, and an ordinary refusal must not.
+ */
+describe('refuse — holding is opt-in, per call site', () => {
+  it('pins a notice to the screen when the caller says nothing reverted', async () => {
+    const { result } = renderHook(() => useAppState('fixtures'));
+
+    await act(async () => {
+      result.current.refuse('Pick an item to move', null, true);
+    });
+
+    expect(result.current.toast?.kind).toBe('notice');
+    expect(result.current.toast?.msg).toBe('Pick an item to move');
+    expect(result.current.toast?.hold).toBe(true);
+  });
+
+  it('still lets an ordinary refusal fade, because its control put the stored value back', async () => {
+    const { result } = renderHook(() => useAppState('fixtures'));
+
+    await act(async () => {
+      result.current.refuse('That needs to be a number of minutes above zero.', 'bafyrei-x');
+    });
+
+    expect(result.current.toast?.kind).toBe('notice');
+    expect(result.current.toast?.hold).toBe(false);
+  });
+});
