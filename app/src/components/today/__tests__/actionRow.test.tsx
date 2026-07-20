@@ -193,13 +193,18 @@ describe('the row shows the work in progress', () => {
    * server's one-at-a-time lock has nothing to do with it and it stays tappable.
    */
   it('“Move this later” stays live while a generation runs', () => {
-    const { ctx, flash } = ctxWith({}, undefined, '↻ Fresh plan');
+    const { ctx, notice } = ctxWith({}, undefined, '↻ Fresh plan');
     render(<TodayPanel ctx={ctx} />);
 
     const move = screen.getByText('Move this later');
     expect(move.hasAttribute('disabled')).toBe(false);
     fireEvent.click(move);
-    expect(flash).toHaveBeenCalledWith('Pick an item to move');
+    /**
+     * Through `notice`, not `flash`. This button's ONLY job is to say this sentence, and through
+     * `flash` the sentence rendered nowhere — so the button was a control that visibly did
+     * nothing at all, while this test passed.
+     */
+    expect(notice).toHaveBeenCalledWith('Pick an item to move');
   });
 
   it('“Life admin & household” is held with the other generation controls', () => {

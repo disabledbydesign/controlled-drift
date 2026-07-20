@@ -169,6 +169,18 @@ export interface MutationResult {
   ui: Record<string, unknown> | null;
   node: ModelNode | null;
   /**
+   * THIS `toast` IS A REFUSAL, NOT A RECEIPT — the mutation declined, deliberately, and nothing
+   * changed. Absent (falsy) on every ordinary mutation, whose `toast` reports what did happen.
+   *
+   * It exists because the two cannot share a presentation. A receipt is quiet: the control has
+   * already re-rendered with the new value, so the message is a second telling of a visible fact.
+   * A refusal has no such fact behind it — nothing on screen moved — so it has to be READ, and
+   * the caller must raise it as a notice rather than a success. Raised as a success it renders
+   * nowhere at all, because success is presented `inline` and a refusal carries no `node` to
+   * settle on. See `shell/signals.ts`.
+   */
+  refusal?: boolean;
+  /**
    * WHAT THIS MUTATION MEANS ON THE WIRE — see `WriteIntent`. Absent on a no-op and on the
    * mutations that have no endpoint yet; present on every mutation that must persist.
    */

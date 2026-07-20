@@ -71,14 +71,18 @@ export function TaskRow({ ctx, item, entryKey, showProj }: TaskRowProps) {
             'task' in it && it.task ? it.task : 'this row',
           );
           if (opts.refusal) {
-            // Never a silent snap-back.
+            // Never a silent snap-back — and `flash` WAS silent, which made this comment false:
+            // a success-kind signal with no node renders nowhere. `notice` reaches the bar.
+            // The row snaps back to where it was on its own, so the screen is already truthful
+            // and the sentence may fade. See `TodayCtx.notice`.
             e.preventDefault();
-            ctx.flash(
+            ctx.notice(
               opts.refusal === 'appointment'
                 ? 'This is an appointment at a fixed time, so it does not move.'
                 : opts.refusal === 'not-found'
                   ? 'I could not find this row in today’s plan, so it cannot be moved.'
                   : 'There is nowhere else to put this today.',
+              item.id,
             );
             return;
           }

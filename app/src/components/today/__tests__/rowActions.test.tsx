@@ -209,15 +209,85 @@ describe('A4/C — the length is labelled, and honest when unset', () => {
 
   /** The server 400s a non-positive value; refusing to send it keeps that out of her way. */
   it('sends nothing at all for a value the server would refuse', () => {
-    const { ctx, setDuration, flash } = ctxWith({ editOpen: { t1: true } });
+    const { ctx, setDuration, notice } = ctxWith({ editOpen: { t1: true } });
     render(<RowActions ctx={ctx} id="t1" kind="task" durationMin={0} />);
     fireEvent.click(screen.getByText('not set'));
     const box = screen.getByLabelText('minutes') as HTMLInputElement;
     fireEvent.change(box, { target: { value: '0' } });
     fireEvent.submit(box.form!);
     expect(setDuration).not.toHaveBeenCalled();
-    // Positively: she is TOLD, rather than the tap doing nothing silently.
-    expect(flash).toHaveBeenCalledWith('That needs to be a number of minutes above zero.');
+    /**
+     * Positively: she is TOLD, rather than the tap doing nothing silently — and told through
+     * `notice`, which reaches the bar. This assertion used to name `flash`, and it PASSED while
+     * the sentence rendered nowhere at all: `flash` raises a success-kind signal with no node,
+     * `present()` answers `inline`, and an inline success with no node to settle on is dropped.
+     * The test was green and the screen was silent. Naming the seam that can actually be seen is
+     * the whole difference.
+     */
+    expect(notice).toHaveBeenCalledWith('That needs to be a number of minutes above zero.', 't1');
+  });
+
+  /**
+   * ── THE ESSENTIAL ONE (June, 2026-07-20) ───────────────────────────────────
+   * *"if a change can't be made, the UI content needs to show what's really in the data — that's
+   * essential."*
+   *
+   * She typed `0` over a stored 90, pressed save, and the box went on displaying `0` while the
+   * data still said 90. A message would not have fixed that: the screen itself was asserting a
+   * number that existed nowhere. So the box must PUT THE STORED VALUE BACK.
+   *
+   * Asserted on what the input DISPLAYS, positively — not on the absence of a write, which would
+   * also pass against a box wired to nothing.
+   */
+  it('puts the stored minutes back in the box when the value is refused', () => {
+    const { ctx } = ctxWith({ editOpen: { t1: true } });
+    render(<RowActions ctx={ctx} id="t1" kind="task" durationMin={90} />);
+    fireEvent.click(screen.getByText('90 min'));
+    const box = screen.getByLabelText('minutes') as HTMLInputElement;
+    fireEvent.change(box, { target: { value: '0' } });
+    fireEvent.submit(box.form!);
+    expect((screen.getByLabelText('minutes') as HTMLInputElement).value).toBe('90');
+  });
+
+  /** An unset duration has no stored value to show, so the honest revert is an empty box. */
+  it('reverts to an empty box when nothing was stored', () => {
+    const { ctx } = ctxWith({ editOpen: { t1: true } });
+    render(<RowActions ctx={ctx} id="t1" kind="task" durationMin={0} />);
+    fireEvent.click(screen.getByText('not set'));
+    const box = screen.getByLabelText('minutes') as HTMLInputElement;
+    fireEvent.change(box, { target: { value: '-5' } });
+    fireEvent.submit(box.form!);
+    expect((screen.getByLabelText('minutes') as HTMLInputElement).value).toBe('');
+  });
+
+  /**
+   * Her *"a line of text and a red outline or something like that"* — the outline half, and its
+   * screen-reader equivalent, because a border colour is no signal at all to a screen reader.
+   */
+  it('marks the box invalid when the value is refused', () => {
+    const { ctx } = ctxWith({ editOpen: { t1: true } });
+    render(<RowActions ctx={ctx} id="t1" kind="task" durationMin={90} />);
+    fireEvent.click(screen.getByText('90 min'));
+    const box = screen.getByLabelText('minutes') as HTMLInputElement;
+    fireEvent.change(box, { target: { value: '0' } });
+    fireEvent.submit(box.form!);
+    expect(screen.getByLabelText('minutes').getAttribute('aria-invalid')).toBe('true');
+  });
+
+  /**
+   * And it clears the moment she types, because from then on the box is showing her own current
+   * input and marking it wrong would be a claim about a value nobody has judged yet.
+   */
+  it('clears the invalid mark as soon as she types again', () => {
+    const { ctx } = ctxWith({ editOpen: { t1: true } });
+    render(<RowActions ctx={ctx} id="t1" kind="task" durationMin={90} />);
+    fireEvent.click(screen.getByText('90 min'));
+    const box = screen.getByLabelText('minutes') as HTMLInputElement;
+    fireEvent.change(box, { target: { value: '0' } });
+    fireEvent.submit(box.form!);
+    fireEvent.change(screen.getByLabelText('minutes'), { target: { value: '45' } });
+    expect(screen.getByLabelText('minutes').getAttribute('aria-invalid')).toBe(null);
+    expect((screen.getByLabelText('minutes') as HTMLInputElement).value).toBe('45');
   });
 });
 
@@ -321,11 +391,13 @@ describe('B1/B5 — the three reasons a move is not on offer, said apart', () =>
    * is not what happened; the row was not found. Fixed here rather than worked around.
    */
   it('says it could not find a row that is not in the plan, not that there is nowhere to put it', () => {
-    const { ctx, flash, up } = ctxWith({ editOpen: { nosuch: true } });
+    const { ctx, notice, up } = ctxWith({ editOpen: { nosuch: true } });
     render(<RowActions ctx={ctx} id="nosuch" kind="task" durationMin={0} />);
     fireEvent.click(screen.getByText('move'));
-    expect(flash).toHaveBeenCalledWith(
+    // `notice`, not `flash` — see the duration test above for why a `flash` refusal is silence.
+    expect(notice).toHaveBeenCalledWith(
       'I could not find this row in today’s plan, so it cannot be moved.',
+      'nosuch',
     );
     // And it does NOT enter a placement mode with nowhere to place anything.
     expect(up).not.toHaveBeenCalled();
@@ -338,10 +410,10 @@ describe('B1/B5 — the three reasons a move is not on offer, said apart', () =>
       id: string;
     };
     plan.blocks = [{ label: '', time: '', framing: '', items: [only as never] }];
-    const { ctx, flash } = ctxWith({ editOpen: { [only.id]: true } }, plan);
+    const { ctx, notice } = ctxWith({ editOpen: { [only.id]: true } }, plan);
     render(<RowActions ctx={ctx} id={only.id} kind="task" durationMin={0} />);
     fireEvent.click(screen.getByText('move'));
-    expect(flash).toHaveBeenCalledWith('There is nowhere else to put this today.');
+    expect(notice).toHaveBeenCalledWith('There is nowhere else to put this today.', only.id);
   });
 
   /**
@@ -407,14 +479,15 @@ describe('A3 — the desktop drags, the phone does not', () => {
     const plan = freshPlan();
     plan.apptCount = 1;
     const first = plan.blocks[0]!.items[0]!;
-    const { ctx, flash, up } = ctxWith({}, plan, null, true);
+    const { ctx, notice, up } = ctxWith({}, plan, null, true);
     const { container } = render(
       <TaskRow ctx={ctx} item={first as never} entryKey="0-0" showProj />,
     );
     const row = container.querySelector('[draggable="true"]')!;
     fireEvent.dragStart(row, { dataTransfer: { setData: () => {}, effectAllowed: '' } });
-    expect(flash).toHaveBeenCalledWith(
+    expect(notice).toHaveBeenCalledWith(
       'This is an appointment at a fixed time, so it does not move.',
+      (first as { id: string }).id,
     );
     expect(up).not.toHaveBeenCalled();
   });

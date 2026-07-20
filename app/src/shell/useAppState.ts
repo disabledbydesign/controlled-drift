@@ -578,6 +578,12 @@ export interface AppState {
    */
   fail: (msg: string, opts?: { nodeId?: string | null; before?: unknown; kind?: string }) => void;
   /**
+   * Say that a change CANNOT be made, or what she has to do next — visible, autofading, and not
+   * written to the error log because nothing went wrong. See the implementation for why this is
+   * neither `flash` (which renders nowhere) nor `fail` (which claims a defect).
+   */
+  refuse: (msg: string, nodeId?: string | null) => void;
+  /**
    * Append a log entry to the friction log via `POST /api/logday`. Resolves `true` only when the
    * server confirmed the write — callers must not clear her text on `false`.
    *
@@ -845,6 +851,28 @@ export function useAppState(source: DataSource = 'live'): AppState {
       nodeId: opts.nodeId ?? null,
       seq: (prev?.seq ?? 0) + 1,
     }));
+  }, []);
+
+  /**
+   * SAY THAT A CHANGE CANNOT BE MADE — a refusal, or an instruction about what to do next.
+   *
+   * ⚠ NOT `flash`. `flash` raises a SUCCESS-kind signal with no node behind it, and `present()`
+   * gives success `inline`, which needs a node to settle on. So a `flash` refusal renders
+   * NOWHERE AT ALL: it cannot go inline (no node) and it is not a failure so it never reaches
+   * the bar. That is how "That needs to be a number of minutes above zero." became silence while
+   * the box went on displaying a number that was never stored (June, 2026-07-20 live check).
+   *
+   * ⚠ NOT `fail` either. Nothing broke — the system declined, correctly, and nothing was written
+   * that should have been. Routing it through `fail` addresses her as if there were a defect and
+   * fills `errorLog` with non-defects, which is what stops that log being useful for real ones.
+   * So this deliberately does not log.
+   *
+   * It FADES (5s), and that is only sound because of the other half of the rule: the control the
+   * refusal came from must revert to the stored value, so the screen is truthful with or without
+   * the sentence. Do not use this from a control that goes on displaying the rejected input.
+   */
+  const refuse = useCallback((msg: string, nodeId: string | null = null) => {
+    setToast((prev) => ({ kind: 'notice', msg, nodeId, seq: (prev?.seq ?? 0) + 1 }));
   }, []);
 
   /**
@@ -1123,7 +1151,11 @@ export function useAppState(source: DataSource = 'live'): AppState {
       if (result.ui) setUi((prev) => ({ ...prev, ...result.ui }));
       // `result.node` is the object the write was about — that is what makes an INLINE success
       // possible at all, because it is the only thing that says which row to settle.
-      if (result.toast) succeed(result.toast, result.node ? result.node.id : null);
+      // A REFUSAL AND A RECEIPT ARE NOT THE SAME MESSAGE. A refusal has nothing visible behind
+      // it, so it has to be read; raised as a success it would be presented `inline` and — with
+      // no `node` to settle on — would render nowhere at all. See `MutationResult.refusal`.
+      if (result.toast && result.refusal) refuse(result.toast, result.node ? result.node.id : null);
+      else if (result.toast) succeed(result.toast, result.node ? result.node.id : null);
 
       // THE ONE PLACE THE SURFACE WRITES. Every mutation call site in the app funnels through
       // `apply`, so there is no second route to the network and none to forget.
@@ -1157,7 +1189,7 @@ export function useAppState(source: DataSource = 'live'): AppState {
       if (intent.op === 'patchVals') fieldWrites.current.set(intent.id, p);
       else void p;
     },
-    [live, performWrite, succeed],
+    [live, performWrite, succeed, refuse],
   );
 
   /**
@@ -1328,7 +1360,14 @@ export function useAppState(source: DataSource = 'live'): AppState {
    * politer failure.
    */
   const notify = useCallback((msg: string) => {
-    setToast((prev) => ({ kind: 'notice', msg, nodeId: null, seq: (prev?.seq ?? 0) + 1 }));
+    // `hold` — nothing on screen changed, so this one must not fade. See `Signal.hold`.
+    setToast((prev) => ({
+      kind: 'notice',
+      msg,
+      nodeId: null,
+      seq: (prev?.seq ?? 0) + 1,
+      hold: true,
+    }));
   }, []);
 
   /**
@@ -2211,6 +2250,7 @@ export function useAppState(source: DataSource = 'live'): AppState {
     applyPlan,
     applyPeriods,
     fail,
+    refuse,
     logDay,
     authorFocus,
     saveFocusPeriod,

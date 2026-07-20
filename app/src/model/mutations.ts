@@ -274,6 +274,12 @@ export function setType(graph: Graph, id: string, target: string): MutationResul
     return {
       graph,
       toast: 'Can’t convert — has sub-items, move them first',
+      // A REFUSAL, not a receipt. Without this the caller raises it as a success, and a success
+      // is presented `inline` — a silent settle on the row, which here would say the opposite of
+      // what happened. `node` is null too, so it could not even settle: it rendered nowhere.
+      // Nothing changed on screen, which is exactly right — the type is still what it was — so
+      // the sentence is free to fade. See `MutationResult.refusal`.
+      refusal: true,
       ui: null,
       node: null,
     };

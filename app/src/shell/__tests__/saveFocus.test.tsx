@@ -226,6 +226,17 @@ describe('a refused write names the field and does not claim a save', () => {
 
     expect(result.current.toast?.kind).toBe('notice');
     expect(result.current.toast?.msg).toContain('end date');
+    /**
+     * AND IT STAYS UP UNTIL SHE DISMISSES IT. `hold` is what pins it, and this one has to be
+     * pinned: nothing on screen changed when the server declined, so a sentence that faded would
+     * leave her believing the period saved.
+     *
+     * Asserted here because the notice kind now has two presentations. Refusals fade after five
+     * seconds — correctly, because the control they come from reverts to the stored value in the
+     * same breath. This one has no such control behind it, so sharing their fade would be a
+     * silent regression that nothing else in the suite could see.
+     */
+    expect(result.current.toast?.hold).toBe(true);
   });
 
   it('reports a refused save as NOT landed, so the editor stays open on her work', async () => {

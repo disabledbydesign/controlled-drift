@@ -565,6 +565,19 @@ describe('setType', () => {
     expect(r.graph).toBe(g);
     expect(r.node).toBeNull();
     expect(r.toast).toBe('Can’t convert — has sub-items, move them first');
+    /**
+     * And it says that this `toast` is a REFUSAL, so the caller raises it as a notice she can
+     * read rather than as a success. Without the flag it went out as a success with a null
+     * `node` — presented `inline`, dropped for having no row to settle on, rendered nowhere.
+     * The sentence existed in the code and never once reached the screen.
+     */
+    expect(r.refusal).toBe(true);
+  });
+
+  /** And an ordinary write is NOT marked a refusal — the flag has to distinguish, not decorate. */
+  it('does not mark a conversion that actually happened as a refusal', () => {
+    const g: Graph = { roots: [n('p', 'PROJECT')], strategies: [] };
+    expect(setType(g, 'p', 'Task').refusal).toBeFalsy();
   });
 
   it('allows a leaf-type conversion once the node has no children', () => {

@@ -60,12 +60,25 @@ export type SignalKind = 'success' | 'failure' | 'notice';
  * `nodeId` is the "target" — which object the signal is ABOUT, so an inline success can settle
  * on that row rather than somewhere generic. Null when the signal has no single object behind
  * it (a plan regeneration, a period save).
+ *
+ * `hold` says: THE RESULT OF THIS IS NOT VISIBLE AT THE CONTROL, so the text is the only thing
+ * carrying it and it must not fade. Only the raiser of a signal can know that, which is why it
+ * is data on the signal rather than a rule inside `present()` — but `present()` is still the only
+ * thing that turns it into a presentation. It matters for `notice` and nothing else: a failure
+ * persists regardless, and a success is quiet regardless.
+ *
+ * Concretely, the two notices differ exactly here. The focus-period notice ("you have not put an
+ * end date in yet") holds: nothing on screen changed, so if the sentence fades she believes the
+ * write landed. A refusal does NOT hold, because the control it came from reverts to the stored
+ * value in the same breath — the screen already tells the truth, and the sentence is there to
+ * explain it, not to protect her from a wrong screen.
  */
 export interface Signal {
   kind: SignalKind;
   msg: string;
   seq: number;
   nodeId: string | null;
+  hold?: boolean;
 }
 
 /** How a signal should be presented. The only vocabulary the render layer understands. */
@@ -112,12 +125,28 @@ export function verboseSignals(): boolean {
  * (a move, where the row leaves the list you were looking at).
  */
 export function present(sig: Signal): Presentation {
-  if (sig.kind === 'failure' || sig.kind === 'notice') {
-    // Textual, and it does not go away on its own. A notice shares the persistence for a
-    // different reason than a failure does: not because it is alarming, but because its result
-    // is invisible at the control — if it fades before she reads it she believes the write
-    // landed. `SignalBar` renders the two with different wording and different urgency.
+  if (sig.kind === 'failure') {
+    // Textual, and it does not go away on its own. A silent failure is the worst outcome
+    // available in a system whose promise is "you never have to wonder if it saved".
     return { mode: 'bar', persist: true, ms: 0 };
+  }
+  if (sig.kind === 'notice') {
+    /**
+     * A notice is always TEXTUAL — it has to be read, which is the whole reason it is not a
+     * success. What varies is whether it stays.
+     *
+     * HOLDING notice: its result is invisible at the control (a period the server declined
+     * because a date is still empty). Nothing on screen changed, so a bar that fades leaves her
+     * believing the write landed. Persist.
+     *
+     * FADING notice — refusals and instructions: June, 2026-07-20, on a duration box that kept
+     * displaying a value the server had refused — *"if a change can't be made, the UI content
+     * needs to show what's really in the data — that's essential."* Once the control reverts to
+     * the stored value, the screen is already truthful and the sentence is explanation. It may
+     * fade. 5s, not the 900ms of the success timing, which is far too short to read a sentence.
+     */
+    if (sig.hold) return { mode: 'bar', persist: true, ms: 0 };
+    return { mode: 'bar', persist: false, ms: 5000 };
   }
   if (verboseSignals()) {
     // Dev mode: v2/v3's green pill, 1.6s, exactly as those mockups had it before v4 stubbed

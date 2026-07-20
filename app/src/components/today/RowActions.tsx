@@ -101,6 +101,21 @@ export function RowActions({ ctx, id, kind, durationMin }: RowActionsProps) {
   const isBlock = kind === 'block';
   const [editingMinutes, setEditingMinutes] = useState(false);
   const [draft, setDraft] = useState('');
+  /**
+   * The box is showing a value the system REFUSED and has just put back.
+   *
+   * ── why this exists (June, 2026-07-20, from driving the real app) ────────────
+   * *"if a change can't be made, the UI content needs to show what's really in the data — that's
+   * essential."* Typing `0` and pressing save left `0` in the box while the stored value stayed
+   * at 90, and said nothing — so a refused save and a real one looked the same, and the screen
+   * showed a number that was in no data anywhere. The message was the smaller half of that bug.
+   * The box telling the truth is the larger half, and it is what makes the message safe to fade.
+   *
+   * So on a refusal the draft goes back to the STORED minutes and this turns on, which is her
+   * *"a line of text and a red outline"*. It clears the moment she types, because from then on
+   * the box is showing her own current input again, not a rejected one.
+   */
+  const [refused, setRefused] = useState(false);
 
   // B2 — before anything else. A row with no backing object has nowhere to persist to, so it
   // gets no control at all rather than one that can only fail.
@@ -168,7 +183,10 @@ export function RowActions({ ctx, id, kind, durationMin }: RowActionsProps) {
   const startPlacing = () => {
     if (!opts) return;
     if (opts.refusal) {
-      ctx.flash(REFUSAL_WORDS[opts.refusal]);
+      // `notice`, not `flash`: a `flash` refusal renders nowhere at all. See `TodayCtx.notice`.
+      // Nothing on the row changed and nothing needed to — the move simply did not begin — so
+      // the screen is already truthful and the sentence is free to fade.
+      ctx.notice(REFUSAL_WORDS[opts.refusal], id);
       return;
     }
     // The panel gives way to the slots — it is not a menu she picks from any more.
@@ -200,6 +218,10 @@ export function RowActions({ ctx, id, kind, durationMin }: RowActionsProps) {
    */
   const durationName = isBlock ? 'chunk length:' : 'duration:';
   const durationValue = durationMin ? durationMin + ' min' : 'not set';
+  // WHAT IS ACTUALLY IN THE DATA, as the box would show it. The box opens on this and reverts to
+  // it — an unset duration reverts to an empty box, which matches the `not set` the closed
+  // control shows. Never a fabricated default: that would read as a decision nobody made.
+  const storedDraft = durationMin ? String(durationMin) : '';
 
   const closePanel = () => {
     const next = { ...ctx.ui.editOpen };
@@ -214,11 +236,17 @@ export function RowActions({ ctx, id, kind, durationMin }: RowActionsProps) {
     // The server 400s a non-positive value. Refusing to send it keeps a failure she cannot act on
     // out of her way — and says so, rather than letting the tap do nothing.
     if (!Number.isFinite(n) || n <= 0) {
-      ctx.flash('That needs to be a number of minutes above zero.');
+      // ORDER MATTERS, and it is the point of the whole fix: put the STORED value back in the box
+      // FIRST, so the screen stops displaying a number that was never saved, and only then say
+      // why. The sentence explains a truthful screen; it does not stand in for one.
+      setDraft(storedDraft);
+      setRefused(true);
+      ctx.notice('That needs to be a number of minutes above zero.', id);
       return;
     }
     ctx.setDuration(id, Math.round(n));
     setEditingMinutes(false);
+    setRefused(false);
     setDraft('');
   };
 
@@ -264,16 +292,29 @@ export function RowActions({ ctx, id, kind, durationMin }: RowActionsProps) {
               autoFocus
               inputMode="numeric"
               value={draft}
-              onChange={(e) => setDraft(e.target.value)}
+              // `aria-invalid` carries the red outline to a screen reader, which cannot see a
+              // border colour. The outline alone would be the whole signal for a sighted user
+              // and no signal at all for anyone else.
+              aria-invalid={refused || undefined}
+              onChange={(e) => {
+                // She is typing again, so the box is showing her own input, not a rejected one.
+                setRefused(false);
+                setDraft(e.target.value);
+              }}
               onClick={(e) => e.stopPropagation()}
               style={{
                 width: '58px',
                 background: C.panel,
-                border: '1px solid ' + C.border,
+                // Her *"a red outline or something like that"*. Two pixels rather than one, so it
+                // reads as a state and not as a focus ring.
+                border: refused ? '2px solid ' + C.red : '1px solid ' + C.border,
+                // The 1px the thicker border took, given back as padding, so the box does not
+                // change size when it turns red — a control that resizes under her is its own
+                // distraction.
+                padding: refused ? '4px 6px' : '5px 7px',
                 borderRadius: ctx.T.r.field,
                 color: C.text,
                 fontSize: '12px',
-                padding: '5px 7px',
                 outline: 'none',
                 fontFamily: 'inherit',
               }}
@@ -288,7 +329,8 @@ export function RowActions({ ctx, id, kind, durationMin }: RowActionsProps) {
             {chip(
               durationValue,
               () => {
-                setDraft(durationMin ? String(durationMin) : '');
+                setDraft(storedDraft);
+                setRefused(false);
                 setEditingMinutes(true);
               },
               isBlock ? 'set how long a chunk is' : 'set how long this takes',

@@ -77,6 +77,13 @@ export function ctxWith(
    */
   const fail = vi.fn();
   /**
+   * Spied SEPARATELY again, for the same reason and a sharper one. `notice` is a refusal or an
+   * instruction: visible, autofading, not an error. Sharing a spy with `flash` would let a test
+   * about a refusal being SHOWN pass against the bug this seam was built to close — a refusal
+   * sent through `flash`, which raises a success-kind signal and renders nowhere at all.
+   */
+  const notice = vi.fn();
+  /**
    * Defaults to a generation that SUCCEEDED, because that is what the real seam resolves on the
    * ordinary path and because the value is load-bearing: the ask box clears her text on `true`
    * and holds it on anything else. A test about the failure path says so itself with
@@ -110,6 +117,7 @@ export function ctxWith(
     applyPlan,
     flash,
     fail,
+    notice,
     regenerate,
     chunk,
     completeStep,
@@ -129,6 +137,7 @@ export function ctxWith(
     applyPlan,
     flash,
     fail,
+    notice,
     regenerate,
     chunk,
     completeStep,

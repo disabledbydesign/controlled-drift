@@ -110,6 +110,24 @@ export interface TodayCtx {
    */
   fail: (msg: string, nodeId?: string | null) => void;
   /**
+   * A change that CANNOT be made, or an instruction about what to do next — said out loud, in a
+   * bar that fades after about five seconds.
+   *
+   * ⚠ NOT `flash`, and this is the bug it exists to close. `flash` raises a SUCCESS-kind signal
+   * with no node behind it; `present()` gives success `inline`, and inline needs a node to settle
+   * on. So a refusal sent through `flash` renders NOWHERE — it cannot go inline and it is not a
+   * failure so it never reaches the bar. A refused save and a successful save looked identical.
+   *
+   * ⚠ NOT `fail` either. Nothing broke and nothing was lost; the system declined and said so.
+   * `fail` writes `errorLog` and addresses her as if there were a defect.
+   *
+   * ⚠ THE CALLER OWES THE OTHER HALF. This fades, which is only safe if the control it came from
+   * shows the STORED value — not the input that was refused. June, 2026-07-20: *"if a change
+   * can't be made, the UI content needs to show what's really in the data — that's essential."*
+   * Revert the control first; then say why.
+   */
+  notice: (msg: string, nodeId?: string | null) => void;
+  /**
    * Record (or un-record) a chunk of work on a block — the work-block check, in BOTH views.
    *
    * ⚠ Deliberately NOT `apply(toggleDone(...))`. A block check means "did a chunk today", never

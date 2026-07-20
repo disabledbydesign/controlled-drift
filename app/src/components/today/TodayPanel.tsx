@@ -379,7 +379,14 @@ export function TodayPanel({ ctx }: TodayPanelProps) {
             p.id,
           ),
         )}
-        {act('Move this later', false, () => ctx.flash('Pick an item to move'))}
+        {/*
+          An INSTRUCTION, and the only thing this button does. Through `flash` it did nothing at
+          all — a success-kind signal with no node renders nowhere — so the button was a control
+          that visibly did not respond. `notice` puts it in the bar for five seconds, which is the
+          whole of its job: it tells her where the move control actually is (the `edit` panel on
+          each row), and nothing on screen needs to change for that to be true.
+        */}
+        {act('Move this later', false, () => ctx.notice('Pick an item to move'))}
       </div>
 
       <div style={{ padding: '10px 14px 18px' }}>
