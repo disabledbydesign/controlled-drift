@@ -338,14 +338,24 @@ describe('the author flow', () => {
     await waitFor(() => expect(up).toHaveBeenCalledWith({ focusReflect: BASE_AUTHORED_FORM }));
   });
 
-  it('the reflect-back screen uses the confirm wording, not the edit wording', () => {
+  /**
+   * ⚠ UPDATED 2026-07-19 — this asserted the heading "Here’s what I heard", which the author
+   * screen no longer carries. That heading sat above a form the client had filled in; the screen
+   * now shows the SERVER's itemised read-back (`POST /api/focus/reflect`), whose own wording
+   * comes from Python so there is one source for what she checks. What the test is actually for
+   * is unchanged: the author route must not wear the edit route's wording.
+   *
+   * The read-back's CONTENT arrives asynchronously and is covered in `focusReflect.test.tsx`
+   * against the live payload. What is asserted here is the route fork, which is synchronous.
+   */
+  it('the author screen shows the read-back, not the edit wording', () => {
     const { ctx } = focusCtxWith({
       focusView: 'author',
       focusReflect: BASE_AUTHORED_FORM,
     });
     render(<FocusOverlay ctx={ctx} open />);
-    expect(screen.getByText('Here’s what I heard')).toBeTruthy();
-    expect(screen.getByText('Looks right — save')).toBeTruthy();
+    expect(screen.getByText('What it made of what you wrote')).toBeTruthy();
+    expect(screen.queryByText('Edit focus period')).toBeNull();
   });
 });
 

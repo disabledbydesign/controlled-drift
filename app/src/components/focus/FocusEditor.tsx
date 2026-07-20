@@ -1,5 +1,7 @@
+import { useState } from 'react';
 import type { FocusForm } from '../../model/index.ts';
 import { FEditor } from './FEditor.tsx';
+import { FocusReflect } from './FocusReflect.tsx';
 import { FField, FSub, inputStyle } from './fields.tsx';
 
 import type { FocusCtx } from './types.ts';
@@ -40,6 +42,17 @@ export function FocusEditor({ ctx, view }: FocusEditorProps) {
   const { T, ui, up, closeEditor, authorFocus, saveFocusPeriod } = ctx;
   const C = T.c;
   const form = ui.focusReflect;
+  /**
+   * Whether the author flow is showing the FULL form instead of the read-back.
+   *
+   * ⚠ WHY THIS ESCAPE EXISTS. The reflect payload does not itemise every field: `name` arrives
+   * as the `summary` (a heading, with no item and so no editor) and the availability NOTE lives
+   * inside the availability item's editor. Rendering an item the server did not send — to give
+   * the name a row of its own — would be composing read-back on the client, which is the one
+   * thing this screen must never do. So the payload is rendered exactly as sent, and anything
+   * it does not itemise is reached through the form that was already here.
+   */
+  const [allFields, setAllFields] = useState(false);
 
   const back = (
     <button
@@ -150,6 +163,44 @@ export function FocusEditor({ ctx, view }: FocusEditorProps) {
     const landed = await saveFocusPeriod(view, ui.focusEditId, form);
     if (landed) closeEditor();
   };
+
+  /**
+   * ── THE AUTHOR FLOW ENDS HERE: the server's own itemised read-back ──────────
+   * `POST /api/focus/reflect` states what the structure step made of her words, field by field,
+   * each one fixable with the right deterministic editor, with the save held while a required
+   * field is still empty. It was built and specified and NOTHING CALLED IT.
+   *
+   * ⚠ THE EDIT ROUTE DELIBERATELY DOES NOT COME THROUGH HERE. Opening an existing period is not
+   * a read-back of anything a model just did — there is no comprehension to verify — so it keeps
+   * the full form below. (The server's payload does carry an edit-mode diff, `is_edit` plus a
+   * `changed` flag per item, for a SPOKEN revision. That route is retired, so nothing renders it.)
+   */
+  if (view === 'author' && !allFields) {
+    return (
+      <div style={page}>
+        {back}
+        <FocusReflect ctx={ctx} form={form} setF={setF} onSave={() => void onSave()} />
+        <div style={{ display: 'flex', justifyContent: 'center', marginTop: '10px' }}>
+          <button
+            onClick={() => setAllFields(true)}
+            style={{
+              background: 'none',
+              border: 'none',
+              color: C.roseDim,
+              fontSize: '11.5px',
+              fontFamily: 'inherit',
+              textDecoration: 'underline',
+              textUnderlineOffset: '2px',
+              padding: '4px',
+              cursor: 'pointer',
+            }}
+          >
+            Show every field
+          </button>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div style={page}>

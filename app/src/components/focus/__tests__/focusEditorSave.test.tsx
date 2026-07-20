@@ -15,14 +15,41 @@
  * `vite.config` sets `globals: false`, so `afterEach(cleanup)` is explicit.
  */
 
-import { afterEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { themes } from '@tokens';
 import { FocusEditor } from '../FocusEditor.tsx';
 import type { FocusCtx, FocusUi } from '../types.ts';
 import type { FocusForm } from '../../../model/index.ts';
 
+/**
+ * ⚠ ADDED 2026-07-19. The AUTHOR route now ends on the server's itemised read-back
+ * (`POST /api/focus/reflect`), so its save button only exists once that payload has arrived —
+ * the screen renders nothing of the server's before the server has sent it, deliberately. The
+ * stub stands in for the endpoint; the read-back's own behaviour is covered in
+ * `focusReflect.test.tsx`. The EDIT route does not go through it and is untouched.
+ */
+vi.mock('../../../api/focus.ts', async () => {
+  const real = await vi.importActual<typeof import('../../../api/focus.ts')>(
+    '../../../api/focus.ts',
+  );
+  return { ...real, reflectFields: vi.fn() };
+});
+
+import { reflectFields } from '../../../api/focus.ts';
+
 afterEach(cleanup);
+beforeEach(() => {
+  vi.mocked(reflectFields).mockResolvedValue({
+    ok: true,
+    status: 200,
+    data: {
+      summary: 'Jobs week',
+      items: [{ key: 'dates', label: 'Dates', edit: 'daterange', display: 'Mon Jul 20 – Sun Jul 26' }],
+      blocking: [],
+    },
+  } as never);
+});
 
 const FORM: FocusForm = {
   name: 'Jobs week',
@@ -114,7 +141,8 @@ describe('Save changes writes the period to the server', () => {
     const { ctx, saveFocusPeriod } = ctxWith({ focusView: 'author', focusEditId: null });
     render(<FocusEditor ctx={ctx} view="author" />);
 
-    fireEvent.click(screen.getByText('Looks right — save'));
+    // The save control belongs to the read-back and appears with it. See the mock note above.
+    fireEvent.click(await screen.findByText('Looks right — save'));
 
     await waitFor(() => expect(saveFocusPeriod).toHaveBeenCalledWith('author', null, FORM));
   });
