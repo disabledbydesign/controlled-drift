@@ -144,6 +144,11 @@ import api_write
 # June changes this from the gear panel without restarting; the choice persists in settings.json.
 VALID_BACKENDS = ("mistral", "openrouter", "claude", "local")
 
+# The most minutes /api/duration will accept. A full day — a fact about days, NOT a view about
+# how long June's work should take. See the long note at the guard itself for why the looser
+# bound was chosen over a tighter one.
+MAX_DURATION_MIN = 24 * 60
+
 
 def _load_settings():
     """Read persisted overlay settings, or an empty dict if none/corrupt (benign first-run)."""
@@ -1328,6 +1333,26 @@ class Handler(BaseHTTPRequestHandler):
                 minutes = None
             if not item_id or minutes is None or minutes <= 0:
                 self._send(400, {"error": "duration needs id and positive integer minutes"})
+                return
+            # An upper guard, added 2026-07-20 after the overlay produced 3045 live. The duration
+            # box is PRE-FILLED with the stored value and tapping it places a cursor rather than
+            # selecting, so typing "45" over a pre-filled "30" appends. Fifty hours would have
+            # been written to her real Anytype object, because `minutes <= 0` was the only test.
+            #
+            # ⚠ WHY A DAY AND NOT SOMETHING TIGHTER. June asked "24 hours? 14 hours?" and the
+            # looser bound is deliberate. A 14-hour cap encodes an OPINION about how long her
+            # work should take, and this repo has already paid for that move once:
+            # BLOCK_DEFAULT_MIN = 90 was traced to an ILLUSTRATION in a design doc ("work on GRA
+            # for 90 min") that hardened into a rule nobody had decided. A day is a fact rather
+            # than a view about her, and it still catches the typo this guard exists for.
+            #
+            # This is the SECOND line of defence. The first is that the control now reverts to
+            # the stored value when a write is refused, so the screen stops showing a number that
+            # is not in the data (June: "if a change can't be made, the UI content needs to show
+            # what's really in the data — that's essential").
+            if minutes > MAX_DURATION_MIN:
+                self._send(400, {"error": "That is longer than 24 hours, so it was not saved. "
+                                          "The duration is unchanged."})
                 return
             try:
                 if plan_store.is_block_item(item_id):
