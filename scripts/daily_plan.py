@@ -780,6 +780,20 @@ def default_meal_anchors(today_recurrings, start_time):
             # Past the default but still in window — suggest lunch soon
             fixed = start_time + dt.timedelta(minutes=30)
 
+        # A meal is a SOFT anchor — a suggestion. The scheduler places every anchor at its own
+        # fixed_time with no anchor-vs-anchor check, so a meal computed onto a real appointment
+        # overlaps it (live 2026-07-20: a 13:30 start put lunch at 14:00, on top of a 14:00
+        # appointment). The appointment is the fixed thing; the meal is the movable one, so step
+        # it past any HARD commitment it would overlap, in time order — it settles just after the
+        # last one it runs into rather than sitting inside it.
+        meal_dur = lp["duration_min"]
+        for r in sorted((x for x in today_recurrings if x.get("fixed_time")),
+                        key=lambda x: x["fixed_time"]):
+            r_start = r["fixed_time"]
+            r_end = r_start + dt.timedelta(minutes=r.get("duration_min") or 0)
+            if fixed < r_end and r_start < fixed + dt.timedelta(minutes=meal_dur):
+                fixed = r_end
+
         anchors.append({
             "id": None,
             "name": "Lunch",
