@@ -1,0 +1,379 @@
+diff --git a/scripts/plan_store.py b/scripts/plan_store.py
+index b36574d..9e78f91 100644
+--- a/scripts/plan_store.py
++++ b/scripts/plan_store.py
+@@ -731,16 +731,70 @@ def move_item(task_id, target_block_index, position=None):
+     return plan
+ 
+ 
+-def move_priority_item(task_id, position):
+-    """Move one item UP OR DOWN the ranked list of a fragmented-day (priority-shape) plan.
+-    `position` is the item's FINAL index in the flat list (the tap-target the overlay showed);
+-    it may be above or below where the item sits now. Pure position change — priority items
+-    carry no clock times, so there is nothing to re-flow. Same honesty rule as move_item: a
+-    day-of adjustment to the cache; the next generation replaces it. Preserves
+-    generated_at/source.
+-
+-    Raises LookupError (no cached plan / no priority list / id absent) and ValueError
+-    (position out of range, or already the item's current spot)."""
++def _resolve_order(items, order):
++    """The plan's own row ids, checked against an order that claims to name all of them.
++
++    Shared by `move_priority_item` and `set_priority_order`, which ask the same question and
++    must refuse in the same words — two hand-written copies of this check would be two chances
++    for the two routes to disagree about what a legal order is.
++
++    Returns the plan's ids in the plan's own order. Raises ValueError with June-facing words.
++    """
++    order = [str(i) for i in order]
++    if len(set(order)) != len(order):
++        raise ValueError("that order names the same task twice — one row, one rank")
++
++    # ⚠ A BLOCK ROW HAS NO `id` — its id lives in `project_id`. Verified against June's real
++    # fragmented-day plan 2026-07-19, where three of seven rows were blocks with `id` absent.
++    # `api/adapt.ts` reads `it.id ?? it.project_id` for exactly this reason and the surface then
++    # sends a block's project_id as its id, so reading `id` alone here disagreed with every id
++    # the client can possibly send. It also put `None` in this list, which made the refusal path
++    # raise TypeError out of `sorted()` instead of naming the offending id.
++    #
++    # Found by POSTing to the running server, NOT by a test — the fixture gave every row an
++    # `id`, so it could not see this. Same class as the block-id bug `adapt.ts` records.
++    known = [_row_id(it) for it in items]
++    if not all(known):
++        raise ValueError("that plan has a row with no id, so it cannot be ranked")
++    if set(order) != set(known):
++        unknown = sorted(set(order) - set(known))
++        missing = sorted(set(known) - set(order))
++        raise ValueError(
++            "that order does not match the plan's list"
++            + (f"; not in the plan: {unknown}" if unknown else "")
++            + (f"; left out of the order: {missing}" if missing else ""))
++    return known
++
++
++def move_priority_item(task_id, order):
++    """Put the fragmented-day (priority-shape) list into the order June asked for.
++
++    ── ⚠ CONTRACT CHANGED 2026-07-19: AN ORDER OF IDS, NOT A POSITION ──────────
++    This took a POSITION — the item's final index — and counted it against the SERVER's list.
++    The surface counts in the order on JUNE'S SCREEN, and those are not the same list once she
++    has reordered it, so a move could land somewhere she had not pointed at. Both sides were
++    right about their own list; the contract was what made them disagree.
++
++    Persisting her ordering (commit 1e029d9) made that reachable in every session rather than
++    only within one, which is why the two changes landed together.
++
++    The fix is to remove the disagreement rather than to correct for it: `order` is the COMPLETE
++    list of row ids in the order she wants, so there is no index arithmetic on either side and
++    nothing left to translate between two index spaces.
++
++    ── WHAT IT DOES TO HER SAVED RANKING — also reversed ───────────────────────
++    A move used to CLEAR the ranking, so a stale ranking could not keep governing the display and
++    hide the move. That was a mitigation for the divergence above, and this contract removes the
++    divergence itself: the order the move applies IS her ranking. Clearing it now would throw
++    away the spot she just chose, because the ranking is what survives the next regeneration
++    (`_carry_priority_order`).
++
++    Cache-only, like `move_item`: a day-of adjustment the next generation rebuilds from Anytype.
++    Preserves generated_at/source — a move is not a regeneration.
++
++    Raises LookupError (no cached plan / no priority list / id absent) and ValueError (the order
++    does not name exactly the plan's rows, or it leaves everything where it already was).
++    """
+     plan = load_plan()
+     if plan is None:
+         raise LookupError("no cached plan to move within")
+@@ -748,20 +802,21 @@ def move_priority_item(task_id, position):
+     if not items:
+         raise LookupError("plan has no priority list to reorder (a clock-shape day moves via "
+                           "move_item)")
+-    src_pos = next((i for i, it in enumerate(items) if it.get("id") == task_id), None)
+-    if src_pos is None:
++    if not any(_row_id(it) == task_id for it in items):
+         raise LookupError(f"no item with id {task_id!r} to move")
+-    if not (0 <= position <= len(items) - 1):
+-        raise ValueError(f"position {position} out of range for the list "
+-                         f"(0..{len(items) - 1})")
+-    if position == src_pos:
++
++    known = _resolve_order(items, order)
++    order = [str(i) for i in order]
++    # The honest-failure path, kept: a move that changes nothing is reported, never silently
++    # swallowed as if it had happened.
++    if order == known:
+         raise ValueError("that task is already in that spot — nothing to move")
+-    item = items.pop(src_pos)
+-    items.insert(position, item)   # after the pop, inserting at `position` = final index
+-    # A move rewrites the plan's OWN order, so a manual ranking saved by set_priority_order is
+-    # now stale. Keeping it would leave it governing the display and make the move she just made
+-    # look like it did not take — the worse of the two surprises. The move wins.
+-    plan.pop("priority_order", None)
++
++    by_id = {_row_id(it): it for it in items}
++    plan["items"] = [by_id[i] for i in order]
++    # Her ranking and the plan's own order are now the same list, which is the whole point of the
++    # contract above. `_weave_remembered` keeps any id being remembered for an item that is away.
++    plan["priority_order"] = _weave_remembered(plan.get("priority_order") or [], order)
+     _write_plan(plan)
+     return plan
+ 
+diff --git a/scripts/server.py b/scripts/server.py
+index 2b264fe..6b94dd0 100644
+--- a/scripts/server.py
++++ b/scripts/server.py
+@@ -1242,6 +1242,14 @@ class Handler(BaseHTTPRequestHandler):
+             task_id = (body.get("id") or "").strip()
+             target = body.get("target_block")
+             position = body.get("position")
++            # ⚠ CONTRACT CHANGED 2026-07-19 — a fragmented-day reorder now names the COMPLETE row
++            # order, not an index. A position counted against the SERVER's list, while the surface
++            # counts in the order on June's screen, and once she has reordered those are different
++            # lists — so a move could land somewhere she had not pointed at. Persisting her order
++            # (1e029d9) made that reachable in every session rather than only within one. Sending
++            # the ids removes the disagreement instead of correcting for it. The clock-shape move
++            # (`target_block`) is unchanged: it addresses a band, which both sides agree on.
++            order = body.get("order")
+ 
+             def _bad_int(v):
+                 # bool is an int subclass in Python — a JSON `true` must not pass as an index.
+@@ -1250,14 +1258,17 @@ class Handler(BaseHTTPRequestHandler):
+             if not task_id or _bad_int(target) or _bad_int(position):
+                 self._send(400, {"error": "move needs a task id and integer target_block/position"})
+                 return
+-            if target is None and position is None:
+-                self._send(400, {"error": "move needs a destination (target_block and/or position)"})
++            if order is not None and not isinstance(order, list):
++                self._send(400, {"error": "order must be the list of row ids, in the order you want"})
++                return
++            if target is None and order is None:
++                self._send(400, {"error": "move needs a destination (target_block, or the row order)"})
+                 return
+             try:
+                 if target is not None:
+                     plan = plan_store.move_item(task_id, target, position=position)
+                 else:
+-                    plan = plan_store.move_priority_item(task_id, position)
++                    plan = plan_store.move_priority_item(task_id, order)
+             except ValueError as e:      # out of range / already there
+                 self._send(400, {"error": str(e)})
+                 return
+diff --git a/tests/test_plan_store.py b/tests/test_plan_store.py
+index eb03a81..1dabc28 100644
+--- a/tests/test_plan_store.py
++++ b/tests/test_plan_store.py
+@@ -324,65 +324,111 @@ def _priority_plan():
+             "still_here": []}
+ 
+ 
+-def test_priority_move_to_later_position(tmp_path, monkeypatch):
++def test_priority_move_takes_the_whole_order_she_wants(tmp_path, monkeypatch):
++    """⚠ CONTRACT CHANGED 2026-07-19. `move_priority_item` took a POSITION and counted it in the
++    server's own list. The surface counts in the order on JUNE'S SCREEN, which is not the same
++    list once she has reordered it — so a move could land somewhere she did not point at, and
++    persisting her ordering made that reachable every session instead of only within one.
++
++    It now takes the complete list of ids in the order she wants. There is no counting left for
++    the two sides to disagree about."""
+     _redirect(tmp_path, monkeypatch)
+     plan_store.save_plan(_priority_plan(), source="generate")
+-    updated = plan_store.move_priority_item("P1", 2)
++    updated = plan_store.move_priority_item("P1", ["P2", "P3", "P1"])
+     assert [i["id"] for i in updated["items"]] == ["P2", "P3", "P1"]
+     # No times involved on a fragmented day — items still carry none.
+     assert "time" not in updated["items"][2]
+ 
+ 
+-def test_priority_move_one_step(tmp_path, monkeypatch):
+-    _redirect(tmp_path, monkeypatch)
+-    plan_store.save_plan(_priority_plan(), source="generate")
+-    updated = plan_store.move_priority_item("P1", 1)
+-    assert [i["id"] for i in updated["items"]] == ["P2", "P1", "P3"]
+-
+-
+ def test_priority_move_persists_and_preserves_stamp(tmp_path, monkeypatch):
+     _redirect(tmp_path, monkeypatch)
+     saved = plan_store.save_plan(_priority_plan(), source="refresh")
+-    plan_store.move_priority_item("P1", 1)
++    plan_store.move_priority_item("P1", ["P2", "P1", "P3"])
+     reloaded = plan_store.load_plan()
+     assert [i["id"] for i in reloaded["items"]] == ["P2", "P1", "P3"]
+     assert reloaded["generated_at"] == saved["generated_at"]
+     assert reloaded["source"] == "refresh"
+ 
+ 
+-def test_priority_move_to_earlier_position(tmp_path, monkeypatch):
++def test_priority_move_goes_up_the_list_as_readily_as_down(tmp_path, monkeypatch):
+     _redirect(tmp_path, monkeypatch)
+     plan_store.save_plan(_priority_plan(), source="generate")
+-    # Up the ranked list, not only down.
+-    updated = plan_store.move_priority_item("P3", 0)
++    updated = plan_store.move_priority_item("P3", ["P3", "P1", "P2"])
+     assert [i["id"] for i in updated["items"]] == ["P3", "P1", "P2"]
+-    updated = plan_store.move_priority_item("P2", 1)
++    updated = plan_store.move_priority_item("P2", ["P3", "P2", "P1"])
+     assert [i["id"] for i in updated["items"]] == ["P3", "P2", "P1"]
+ 
+ 
+-def test_priority_move_rejects_no_op_and_out_of_range(tmp_path, monkeypatch):
++def test_a_priority_move_saves_that_order_as_her_ranking(tmp_path, monkeypatch):
++    """⚠ ALSO A REVERSAL. The move used to CLEAR the saved ranking, because a stale ranking left
++    standing would keep governing the display and hide the move she had just made. That was a
++    mitigation for the two-index-spaces divergence, and this contract removes the divergence
++    itself — the order the move applies IS her ranking, so the two cannot disagree.
++
++    Clearing it now would be a real loss: the ranking is what survives the next regeneration
++    (`_carry_priority_order`), so a cleared one would throw away the spot she just chose."""
++    _redirect(tmp_path, monkeypatch)
++    plan_store.save_plan(_priority_plan(), source="generate")
++
++    plan_store.move_priority_item("P1", ["P2", "P3", "P1"])
++
++    assert plan_store.load_plan()["priority_order"] == ["P2", "P3", "P1"]
++
++
++def test_priority_move_refuses_an_order_that_changes_nothing(tmp_path, monkeypatch):
++    """The honest-failure path, kept. A move that cannot legally happen still refuses in words
++    rather than reporting a change that did not occur."""
+     _redirect(tmp_path, monkeypatch)
+     plan_store.save_plan(_priority_plan(), source="generate")
+     import pytest
++    with pytest.raises(ValueError) as e:
++        plan_store.move_priority_item("P2", ["P1", "P2", "P3"])
++    assert "already" in str(e.value)
++
++
++def test_priority_move_refuses_an_order_that_is_not_the_plans_list(tmp_path, monkeypatch):
++    """An order naming a row that is not there, or leaving one out, is refused BY NAME. Silently
++    accepting it would drop a row off her list or invent one."""
++    _redirect(tmp_path, monkeypatch)
++    plan_store.save_plan(_priority_plan(), source="generate")
++    import pytest
++    with pytest.raises(ValueError) as e:
++        plan_store.move_priority_item("P1", ["P1", "P2", "GHOST"])
++    assert "GHOST" in str(e.value)
++    with pytest.raises(ValueError) as e2:
++        plan_store.move_priority_item("P1", ["P2", "P1"])       # P3 left out
++    assert "P3" in str(e2.value)
+     with pytest.raises(ValueError):
+-        plan_store.move_priority_item("P2", 1)   # already there (no-op)
+-    with pytest.raises(ValueError):
+-        plan_store.move_priority_item("P1", 9)   # out of range
+-    with pytest.raises(ValueError):
+-        plan_store.move_priority_item("P1", -1)  # below the top of the list
++        plan_store.move_priority_item("P1", ["P1", "P1", "P2", "P3"])   # named twice
+ 
+ 
+ def test_priority_move_raises_on_missing_id_clock_shape_or_no_cache(tmp_path, monkeypatch):
+     _redirect(tmp_path, monkeypatch)
+     import pytest
+     with pytest.raises(LookupError):
+-        plan_store.move_priority_item("P1", 1)   # no cache
++        plan_store.move_priority_item("P1", ["P1"])   # no cache
+     plan_store.save_plan(_priority_plan(), source="generate")
+     with pytest.raises(LookupError):
+-        plan_store.move_priority_item("NOPE", 1)
++        plan_store.move_priority_item("NOPE", ["P3", "P1", "P2"])
+     plan_store.save_plan(_clock_plan(), source="generate")
+     with pytest.raises(LookupError):
+-        plan_store.move_priority_item("T1", 1)   # clock plan has no priority list
++        plan_store.move_priority_item("T1", ["T1"])   # clock plan has no priority list
++
++
++def test_a_block_row_can_be_moved_by_the_id_the_surface_sends(tmp_path, monkeypatch):
++    """⚠ A BLOCK ROW HAS NO `id` — its id is in `project_id`, and three of the seven rows on
++    June's real fragmented day are blocks. The move resolves identity the same way the ranking
++    does; reading `id` alone would refuse every move of a block on her real plan."""
++    _redirect(tmp_path, monkeypatch)
++    plan_store.save_plan({"shape": "priority", "items": [
++        {"id": "P1", "task": "Clean the kitchen"},
++        {"project_id": "B1", "block": True, "task": "Work on Life admin"},
++        {"id": "P3", "task": "Go on a long walk"},
++    ]}, source="generate")
++
++    updated = plan_store.move_priority_item("B1", ["B1", "P1", "P3"])
++
++    assert [i.get("id") or i.get("project_id") for i in updated["items"]] == ["B1", "P1", "P3"]
+ 
+ 
+ # --- "not today" removal (cache-only view drop, no Anytype write) -------------
+diff --git a/tests/test_plan_store_priority_order.py b/tests/test_plan_store_priority_order.py
+index 379436e..568cdf4 100644
+--- a/tests/test_plan_store_priority_order.py
++++ b/tests/test_plan_store_priority_order.py
+@@ -322,19 +322,24 @@ def test_reordering_keeps_a_remembered_item_that_is_not_on_screen(tmp_path, monk
+     assert plan_store.load_plan()["priority_order"] == [A, B, C]
+ 
+ 
+-def test_a_server_side_move_clears_the_saved_order(tmp_path, monkeypatch):
+-    """`move_priority_item` rewrites the plan's OWN item order. If a manual ranking outlived
+-    that, it would keep governing the display and the move she just made would appear not to
+-    have taken effect — the worse of the two surprises. So the move wins and the ranking goes."""
++def test_a_server_side_move_becomes_the_saved_order(tmp_path, monkeypatch):
++    """⚠ REVERSED 2026-07-19. A move used to CLEAR the saved ranking: the ranking was computed in
++    one index space and the move in another, so a ranking left standing could keep governing the
++    display and hide the move she had just made.
++
++    The move now carries the full id order she wants, so there is no second index space and
++    nothing for the two to disagree about — the order the move applies IS her ranking. Clearing
++    it would now throw away the spot she just chose, because the ranking is what survives the
++    next regeneration."""
+     _redirect(tmp_path, monkeypatch)
+     plan_store.save_plan(_plan())
+     plan_store.set_priority_order([C, A, B])
+ 
+-    plan_store.move_priority_item(A, 2)
++    plan_store.move_priority_item(A, [B, C, A])
+ 
+     after = plan_store.load_plan()
+     assert [it["id"] for it in after["items"]] == [B, C, A]
+-    assert "priority_order" not in after
++    assert after["priority_order"] == [B, C, A]
+ 
+ 
+ def _real_shape_plan():
+diff --git a/tests/test_server.py b/tests/test_server.py
+index f509463..da83eb2 100644
+--- a/tests/test_server.py
++++ b/tests/test_server.py
+@@ -567,15 +567,40 @@ def test_move_relocates_and_reflows_in_cache(live_server):
+ 
+ 
+ def test_move_priority_shape_reorders(live_server):
++    """⚠ WIRE CONTRACT CHANGED 2026-07-19: a fragmented-day move sends `order`, the full list of
++    ids in the order she wants, not a `position`. A position was counted in the SERVER's list
++    while she tapped a slot in HER list, and once her ordering persisted those two were routinely
++    different lists."""
+     base, _ = live_server
+     plan_store.save_plan({"shape": "priority",
+                           "items": [{"task": "a", "id": "P1"}, {"task": "b", "id": "P2"}],
+                           "still_here": []}, source="generate")
+-    status, data = _post(base, "/api/task/move", {"id": "P1", "position": 1})
++    status, data = _post(base, "/api/task/move", {"id": "P1", "order": ["P2", "P1"]})
+     assert status == 200
+     assert [i["id"] for i in data["plan"]["items"]] == ["P2", "P1"]
+ 
+ 
++def test_move_priority_shape_refuses_a_position(live_server):
++    """The old shape is gone, and says so rather than being read as something else. A body with
++    neither a target block nor an order names no destination at all."""
++    base, _ = live_server
++    plan_store.save_plan({"shape": "priority",
++                          "items": [{"task": "a", "id": "P1"}, {"task": "b", "id": "P2"}],
++                          "still_here": []}, source="generate")
++    status, _b = _post(base, "/api/task/move", {"id": "P1", "position": 1})
++    assert status == 400
++
++
++def test_move_priority_shape_refuses_a_malformed_order(live_server):
++    base, _ = live_server
++    plan_store.save_plan({"shape": "priority",
++                          "items": [{"task": "a", "id": "P1"}, {"task": "b", "id": "P2"}],
++                          "still_here": []}, source="generate")
++    for bad in ([], "P1", ["P1", ""], ["P1", 2]):
++        status, _b = _post(base, "/api/task/move", {"id": "P1", "order": bad})
++        assert status == 400, bad
++
++
+ def test_move_bad_body_is_400(live_server):
+     base, _ = live_server
+     status, _b = _post(base, "/api/task/move", {"id": "", "target_block": 1})
