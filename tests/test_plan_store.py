@@ -480,3 +480,86 @@ def test_remove_item_does_not_touch_block_siblings(tmp_path, monkeypatch):
     plan, removed = plan_store.remove_item("B1")
     assert [r["id"] for r in removed] == ["B1"]
     assert [i["id"] for i in plan["blocks"][0]["items"]] == ["B2", "T4"]
+
+
+# --- moving must not land a row on top of a fixed appointment (2026-07-20) --
+#
+# June: "we dont want to be able to drop a row on top of an appointment." An appointment is a
+# fixed-time anchor — it cannot be re-timed by a reflow, and no other row may be scheduled over
+# its clock span. A move that would do so is refused, honestly, and nothing is persisted.
+
+def _plan_with_appointment():
+    return {
+        "woven_frame": "wf",
+        "blocks": [
+            {"label": "Morning", "time": "09:00 – 12:00",
+             "items": [{"time": "09:00 – 10:30", "project": "Alpha", "task": "draft", "id": "T1",
+                        "duration_min": 90},
+                       {"time": "10:30 – 11:15", "project": "Beta", "task": "email", "id": "T2",
+                        "duration_min": 45}]},
+            {"label": "Afternoon", "time": "13:00 – 16:00",
+             "items": [{"time": "14:00 – 15:00", "project": None, "task": "Doctor", "id": "APT",
+                        "duration_min": 60, "recurring": True},
+                       {"time": "15:00 – 15:30", "project": "Gamma", "task": "call", "id": "T3",
+                        "duration_min": 30}]},
+        ],
+        "appointments": [{"id": "APT", "task": "Doctor", "time": "14:00", "duration_min": 60}],
+        "still_here": [],
+    }
+
+
+def test_move_onto_an_appointment_is_refused(tmp_path, monkeypatch):
+    import pytest
+    _redirect(tmp_path, monkeypatch)
+    plan_store.save_plan(_plan_with_appointment(), source="generate")
+    # T1 is 90 min; dropped at the front of the afternoon it runs 13:00–14:30 and crosses into
+    # the 14:00 Doctor appointment. Refused, not silently overlaid.
+    with pytest.raises(ValueError) as exc:
+        plan_store.move_item("T1", 1, position=0)
+    assert "Doctor" in str(exc.value)
+
+
+def test_a_refused_move_leaves_the_plan_untouched(tmp_path, monkeypatch):
+    _redirect(tmp_path, monkeypatch)
+    plan_store.save_plan(_plan_with_appointment(), source="generate")
+    try:
+        plan_store.move_item("T1", 1, position=0)
+    except ValueError:
+        pass
+    reloaded = plan_store.load_plan()
+    morning_ids = [i["id"] for i in reloaded["blocks"][0]["items"]]
+    assert morning_ids == ["T1", "T2"]
+    assert reloaded["blocks"][0]["items"][0]["time"] == "09:00 – 10:30"
+
+
+def test_move_before_an_appointment_that_fits_succeeds(tmp_path, monkeypatch):
+    _redirect(tmp_path, monkeypatch)
+    plan_store.save_plan(_plan_with_appointment(), source="generate")
+    # T2 is 45 min; at the front of the afternoon it runs 13:00–13:45 and clears 14:00.
+    updated = plan_store.move_item("T2", 1, position=0)
+    assert [i["id"] for i in updated["blocks"][1]["items"]] == ["T2", "APT", "T3"]
+
+
+def test_reflow_pins_the_appointment_to_its_fixed_time(tmp_path, monkeypatch):
+    _redirect(tmp_path, monkeypatch)
+    plan_store.save_plan(_plan_with_appointment(), source="generate")
+    updated = plan_store.move_item("T2", 1, position=0)
+    appt = next(i for i in updated["blocks"][1]["items"] if i["id"] == "APT")
+    # Without pinning, stacking T2(45) from 13:00 would drift the appointment to 13:45–14:45.
+    assert appt["time"] == "14:00 – 15:00"
+    t3 = next(i for i in updated["blocks"][1]["items"] if i["id"] == "T3")
+    assert t3["time"] == "15:00 – 15:30"
+
+
+def test_a_work_block_row_can_be_moved_by_its_project_id(tmp_path, monkeypatch):
+    _redirect(tmp_path, monkeypatch)
+    plan = _clock_plan()
+    # A block row carries no `id`; its identity is `project_id`. move_item could not find it
+    # before, so blocks were unmovable though the control offered the move.
+    plan["blocks"][0]["items"][0] = {"time": "09:00 – 10:30", "task": "Work on Alpha",
+                                     "block": True, "project_id": "PROJ1", "duration_min": 90}
+    plan_store.save_plan(plan, source="generate")
+    updated = plan_store.move_item("PROJ1", 1)
+    assert "PROJ1" not in [i.get("project_id") for i in updated["blocks"][0]["items"]]
+    landed = [i for i in updated["blocks"][1]["items"] if i.get("project_id") == "PROJ1"]
+    assert len(landed) == 1

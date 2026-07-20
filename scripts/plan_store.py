@@ -576,8 +576,9 @@ def set_item_duration(item_id, minutes):
         if item.get("id") == item_id:
             item["duration_min"] = minutes
             changed = True
+    appt_spans = _appointment_spans(plan)
     for block in touched_blocks:
-        _reflow_block(block)
+        _reflow_block(block, appt_spans)
     if changed:
         _persist_plan(plan)
     return plan
@@ -620,7 +621,53 @@ def _range_bounds(s):
     return start, end
 
 
-def _reflow_block(block):
+def _row_identity(item):
+    """The id a plan row is addressed by: its own `id`, or `project_id` for a work-block row,
+    whose id lives there because the block is a synthetic container over a block-grain project
+    (grain=block). Same rule as adapt.ts `usableId` on the client — kept in step at both ends,
+    because a block that could not be found here was a control that offered a move it could not
+    perform (2026-07-20)."""
+    return item.get("id") or (item.get("project_id") if item.get("block") else None)
+
+
+def _appointment_spans(plan):
+    """Fixed [start, end) minute spans of today's real timed appointments, keyed by object id.
+    An appointment is an anchor: it cannot be re-timed by a reflow, and nothing may be moved on
+    top of it (June, 2026-07-20: "we dont want to be able to drop a row on top of an
+    appointment"). Read from plan['appointments'] — the shape-independent list
+    daily_plan.format_appointments writes, each entry an 'HH:MM' start plus duration_min."""
+    spans = {}
+    for a in plan.get("appointments") or []:
+        aid = a.get("id")
+        start, _ = _range_bounds(a.get("time"))
+        if aid is None or start is None:
+            continue
+        dur = a.get("duration_min")
+        dur = dur if isinstance(dur, (int, float)) and dur > 0 else _DEFAULT_ITEM_MIN
+        spans[aid] = (start, start + dur)
+    return spans
+
+
+def _overlaps_appointment(blocks, appt_spans):
+    """First (row, appointment-id) where a NON-appointment row's clock span intersects a fixed
+    appointment's span, or None. Two half-open spans [s,e) overlap when s < ae and as < e, so a
+    row that merely touches an appointment's edge (ends exactly at its start) does not count."""
+    if not appt_spans:
+        return None
+    for block in blocks:
+        for item in block.get("items", []):
+            if item.get("id") in appt_spans:
+                continue                          # the appointment itself is not "on top of" itself
+            s, e = _range_bounds(item.get("time"))
+            if s is None or e is None:
+                continue
+            for aid, (astart, aend) in appt_spans.items():
+                if s < aend and astart < e:
+                    return item, aid
+    return None
+
+
+def _reflow_block(block, appt_spans=None):
     """Recompute every item's clock time in this block, in order — the automatic time
     recalculation June asked for. Each item's slot length is its duration_min when the row
     carries a positive one — that's the number she just set explicitly, and it must win
@@ -630,7 +677,14 @@ def _reflow_block(block):
     the block's own start time (or the first item's, if the block has none). If nothing gives
     a start time, the times are left exactly as they are — an honest no-op, never invented.
     If the durations run past the block's labelled end, the times run past it too: the
-    arithmetic tells the truth rather than squeezing tasks to fit."""
+    arithmetic tells the truth rather than squeezing tasks to fit.
+
+    A fixed-time appointment (its id in `appt_spans`) is PINNED to its real span rather than
+    re-stacked, and the walk resumes at the later of the running cursor and the appointment's
+    end — so nothing AFTER it is timed on top of it, and it never drifts off its real clock time
+    when a shorter row is placed ahead of it. A row placed BEFORE it can still overrun into it;
+    that is the "dropped on top" case `move_item` refuses via `_overlaps_appointment`."""
+    appt_spans = appt_spans or {}
     items = block.get("items", [])
     if not items:
         return
@@ -640,6 +694,12 @@ def _reflow_block(block):
     if cursor is None:
         return
     for item in items:
+        span = appt_spans.get(item.get("id"))
+        if span is not None:
+            start, end = span
+            item["time"] = f"{_min_to_hhmm(start)} – {_min_to_hhmm(end)}"
+            cursor = max(cursor, end)
+            continue
         dur = item.get("duration_min")
         if not isinstance(dur, (int, float)) or dur <= 0:
             s, e = _range_bounds(item.get("time"))
@@ -692,7 +752,7 @@ def move_item(task_id, target_block_index, position=None):
     src_index = src_pos = None
     for bi, block in enumerate(blocks):
         for pos, item in enumerate(block.get("items", [])):
-            if item.get("id") == task_id:
+            if _row_identity(item) == task_id:      # a work block is addressed by project_id
                 src_index, src_pos = bi, pos
                 break
         if src_index is not None:
@@ -723,9 +783,24 @@ def move_item(task_id, target_block_index, position=None):
     # including the same-block case (everything after src_pos shifted down by one).
     blocks[target_block_index].setdefault("items", []).insert(position, src_item)
 
-    _reflow_block(blocks[src_index])
+    appt_spans = _appointment_spans(plan)
+    _reflow_block(blocks[src_index], appt_spans)
     if target_block_index != src_index:
-        _reflow_block(blocks[target_block_index])
+        _reflow_block(blocks[target_block_index], appt_spans)
+
+    # June ruled a row may not land on a fixed appointment. The reflow above pins each
+    # appointment to its real span; if a row placed before one now overruns into it, refuse
+    # rather than persist a schedule that overlaps her commitment. load_plan() returns a fresh
+    # dict each call, so raising before _write_plan leaves the cache on disk untouched.
+    clash = _overlaps_appointment(blocks, appt_spans)
+    if clash is not None:
+        _, aid = clash
+        appt = next((a for a in plan.get("appointments") or [] if a.get("id") == aid), {})
+        name = appt.get("task") or "an appointment"
+        when = appt.get("time")
+        raise ValueError(f"That would land on {name}"
+                         + (f" at {when}" if when else "")
+                         + ", a fixed-time appointment, so it was not moved.")
 
     _write_plan(plan)
     return plan
