@@ -130,7 +130,7 @@ export interface LivePlan {
  * applied client-side, entirely from §2.4's own table, and nothing is invented:
  *
  *   woven_frame → woven · chunk_min → chunkMin · held_back_names → heldBack ·
- *   duration_min → durationMin · interstitial → kind:'break' · block → kind:'block' ·
+ *   duration_min → durationMin · interstitial AND no id → kind:'break' · block → kind:'block' ·
  *   everything else → kind:'task' · `why` DROPPED (spec §14, already unrendered).
  *
  * ⚠ TWO FIELDS ARE STILL OPEN QUESTIONS and are NOT invented into a shape here:
@@ -144,10 +144,41 @@ export interface LivePlan {
  * anyway, so the flat list is carried in ONE unlabelled block. That is a container, not a
  * label the user reads — an empty `label`/`time`/`framing` renders no band header.
  */
+/**
+ * The id this row can actually be addressed by on the server, or `''` when it has none.
+ *
+ * ⚠ A BLOCK CARRIES ITS ID IN `project_id`, NOT `id` — see the long note in `planFromLive`'s
+ * block branch — so both are read here, and "does this row have an id" answers the same question
+ * everywhere in this file. An empty string counts as NO id, which is why this is not `??`:
+ * `'' ?? x` is `''`, and a blank id addresses nothing.
+ *
+ * ⚠ `project_id` IS ONLY THIS ROW'S OWN ID WHEN THE ROW IS A BLOCK. `plan_generate.py:734` sets
+ * `project_id` on ORDINARY task rows as well, where it names the task's PARENT PROJECT. Falling
+ * back to it unconditionally would hand a project's id to a task row and address the wrong
+ * object — so the fallback is gated on the block flags that make it the row's own identity.
+ */
+function usableId(it: LivePlanItem): string {
+  if (it.id) return it.id;
+  if (it.block || it.block_project) return it.project_id || '';
+  return '';
+}
+
 export function planFromLive(live: LivePlan): Plan {
   const shape = live.shape === 'priority' ? 'priority' : 'schedule';
   const conv = (it: LivePlanItem): PlanItem => {
-    if (it.interstitial) {
+    /*
+     * ⚠ `interstitial` ALONE DOES NOT MEAN "a break" — it means "short", and a real task can be
+     * short. The LLM prompt (JSON rule 3) instructs the model to flag real tasks of 15 minutes
+     * or less as interstitial too, so the backend's own test is `interstitial AND no id`
+     * (`scripts/plan_generate.py:1338`). Reading the flag by itself is the same test with the
+     * second half missing, and it read one of June's real recurring chores — "Do the dishes",
+     * with a real Anytype id — as a rest break: the row vanished from her Priority list and lost
+     * its checkbox, live, 2026-07-20.
+     *
+     * So an interstitial row that carries an id is an ordinary short task and converts like one.
+     * Only an interstitial row with no id is an anchor (Lunch, Rest) with nothing to address.
+     */
+    if (it.interstitial && !usableId(it)) {
       return { kind: 'break', time: it.time ?? '', task: it.task ?? '' };
     }
     if (it.block) {
@@ -160,7 +191,7 @@ export function planFromLive(live: LivePlan): Plan {
         // matches on that id. Reading `it.id` alone produced an unchecked-offable block — the
         // "uncheckoffable ghost row" this repo already paid a rebuild for, arriving by a
         // different route. The fixture hid it: `seedPlan`'s blocks carry a plain `id`.
-        id: it.id ?? it.project_id ?? '',
+        id: usableId(it),
         task: it.task ?? '',
         time: it.time ?? '',
         chunkMin: it.chunk_min ?? 0,

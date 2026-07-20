@@ -90,7 +90,26 @@ export function PriorityList({ ctx, reasonShown = false }: PriorityListProps) {
   // reorder below moves rows freely — so the address has to travel with the item rather than
   // be recomputed from the loop index. `addressedWorkItems` drops breaks, exactly as
   // `workItems` did, and returns them in the same order.
-  const addressed = addressedWorkItems(ctx.plan);
+  /*
+   * ⚠ AN ID-LESS ROW IS NOT ADDRESSABLE AND MUST NOT REACH THE WIRE (live-verified 2026-07-20).
+   *
+   * `addressedWorkItems` drops `kind:'break'` rows, and that used to be the whole filter. It is
+   * not enough: a fixed anchor the generator writes without an id (Lunch, "Rest or light
+   * activity") arrives as `kind:'task'` with `id: ''`. Such a row renders NOTHING — `node()`
+   * below cannot resolve `''` and the row returns null — but it still entered `order`, so the
+   * reorder payload went out as
+   *     {"order":["bafyrei…","bafyrei…","","bafyrei…", …]}
+   * and the server answered 400 for the whole request. Her reordering then reverted on reload
+   * with no message: the exact silent failure this screen exists to remove.
+   *
+   * A duplicate id is rejected the same way and for the same reason — it makes a ranking that
+   * names one row twice, and two React children with one key.
+   *
+   * Filtering HERE rather than at the send site is deliberate: `order`, the rendered rows and
+   * the ▲▼ indices all have to describe one list, or a move computed in one space lands in
+   * another.
+   */
+  const addressed = addressedWorkItems(ctx.plan).filter((a) => Boolean(a.item.id));
   const items = addressed.map((a) => a.item);
   // The plan item is the authority for done-ness on a plan row (a recurring's done-for-today
   // never reaches the graph). This component previously dropped the items and re-derived every
@@ -99,13 +118,24 @@ export function PriorityList({ ctx, reasonShown = false }: PriorityListProps) {
   const addressById = new Map(addressed.map((a) => [a.item.id, a]));
   const present = new Set(items.map((it) => it.id));
 
+  // The three-step rule, unchanged in intent: start from her stored ranking, drop ids the plan
+  // no longer has, then append anything the ranking does not mention — so a stale order can
+  // never hide a row. `seen` adds only the de-duplication above; an id already placed is not
+  // placed again, in either step.
   const stored = ctx.ui.priOrder;
-  const order = stored
-    ? stored.filter((id) => present.has(id))
-    : items.map((it) => it.id);
-  for (const it of items) {
-    if (order.indexOf(it.id) < 0) order.push(it.id);
-  }
+  const seen = new Set<string>();
+  const order: string[] = [];
+  // ONE gate, not two: `present` is built from the id-filtered `addressed` above, so an id-less
+  // row is already absent from it and needs no second `!id` test here. A duplicated guard reads
+  // as belt-and-braces and behaves as dead code — either half can be removed with every test
+  // still green, which is how a rule quietly stops being enforced.
+  const place = (id: string) => {
+    if (seen.has(id) || !present.has(id)) return;
+    seen.add(id);
+    order.push(id);
+  };
+  for (const id of stored ?? []) place(id);
+  for (const it of items) place(it.id);
 
   /**
    * A2 on the FRAGMENTED day — the same landing slots the schedule view draws, anchored by the
@@ -133,6 +163,25 @@ export function PriorityList({ ctx, reasonShown = false }: PriorityListProps) {
    * resulting full id order to `POST /api/plan/priority-order` instead of a position, which has
    * no index space to disagree with. Reported for a separate task.
    */
+  /*
+   * ⚠ THE VISIBLE NUMBER COUNTS RENDERED ROWS, NOT ENTRIES IN `order`.
+   *
+   * The gutter used to print the `order` index, so any row that did not render still consumed
+   * its number and the list read "1, 2, 4, 5, 6" — she is asked to work a ranked list whose
+   * numbering says a row is missing. A row can still fail to render for a reason this component
+   * does not control: `node(ctx.idx, id)` resolves against the graph, and a plan can name a task
+   * the loaded graph does not have.
+   *
+   * Such a row keeps its place in `order` — dropping it would silently discard its ranking on
+   * the next save — so the two indices are tracked separately: `order` position drives ▲▼ (the
+   * space `move` works in), and this map drives what she reads.
+   */
+  const renderIndex = new Map<string, number>();
+  for (const id of order) {
+    const a = addressById.get(id);
+    if (a?.item.kind === 'block' || node(ctx.idx, id)) renderIndex.set(id, renderIndex.size);
+  }
+
   const placing = placementFor(ctx);
   const slotFor = (afterId: string | null) =>
     placing.movingId
@@ -335,7 +384,7 @@ export function PriorityList({ ctx, reasonShown = false }: PriorityListProps) {
                   cursor: expandable ? "pointer" : "default",
                 }}
               >
-                {numberGutter(i)}
+                {numberGutter(renderIndex.get(id)!)}
                 <button
                   onClick={(e) => {
                     e.stopPropagation();
@@ -420,7 +469,7 @@ export function PriorityList({ ctx, reasonShown = false }: PriorityListProps) {
               padding: "9px 14px",
             }}
           >
-            {numberGutter(i)}
+            {numberGutter(renderIndex.get(id)!)}
             <button
               onClick={() => ctx.apply(toggleDone(ctx.graph, id, done))}
               aria-label="mark done"
