@@ -5,7 +5,7 @@ const domToPng = vi.fn();
 // the descriptor walk, and that a capture failure degrades to null instead of throwing.
 vi.mock('modern-screenshot', () => ({ domToPng: (...a: unknown[]) => domToPng(...a) }));
 
-import { describeTarget, snapshot } from '../capture.ts';
+import { describeTarget, snapshot, SNAPSHOT_TIMEOUT_MS } from '../capture.ts';
 
 beforeEach(() => {
   domToPng.mockReset();
@@ -83,5 +83,31 @@ describe('snapshot', () => {
     chrome.setAttribute('data-cd-capture-chrome', '');
     expect(opts.filter(chrome)).toBe(false);
     expect(opts.filter(document.createElement('p'))).toBe(true);
+  });
+});
+
+describe('snapshot never hangs', () => {
+  it('resolves null when the renderer never settles, instead of hanging forever', async () => {
+    vi.useFakeTimers();
+    domToPng.mockReturnValue(new Promise(() => {}));   // never settles — the iOS Safari failure
+    const p = snapshot(document.body);
+    let done = false;
+    void p.then(() => { done = true; });
+    await vi.advanceTimersByTimeAsync(SNAPSHOT_TIMEOUT_MS - 100);
+    expect(done).toBe(false);                          // still waiting: it does not cut off early
+    await vi.advanceTimersByTimeAsync(200);
+    expect(await p).toBeNull();                        // ...but it DOES give up
+    vi.useRealTimers();
+  });
+
+  it('still returns a picture that arrives before the deadline', async () => {
+    vi.useFakeTimers();
+    domToPng.mockReturnValue(
+      new Promise((r) => setTimeout(() => r('data:image/png;base64,AAAA'), 1000)),
+    );
+    const p = snapshot(document.body);
+    await vi.advanceTimersByTimeAsync(1100);
+    expect(await p).toBe('data:image/png;base64,AAAA');
+    vi.useRealTimers();
   });
 });

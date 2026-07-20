@@ -137,7 +137,17 @@ export function Surface({ T, name, setTheme, source }: SurfaceProps) {
       {/* The quiet always-there way in — "this whole screen is wrong", and the guaranteed path
           when a gesture misfires. Marked as capture chrome so `snapshot()`'s filter drops it;
           without that every picture would have this button burned into its corner. */}
-      {!capture.state.open && !capture.state.busy && !barShowing ? (
+      {/*
+        NOT hidden while a capture is STARTING (`capture.state.busy`), deliberately.
+
+        It used to be, and that turned a slow snapshot into a dead feature: when `domToPng` hung
+        under an iOS Safari user agent (2026-07-20), `busy` stayed true forever, the editor never
+        opened, AND this button vanished — so June had no way in at all and no sign anything had
+        happened. Hiding it was never protecting the picture either: it carries CHROME_ATTR, so
+        the snapshot filter already excludes it. `snapshot()` is now bounded too, but the button
+        must not be the thing that disappears when something downstream is slow.
+      */}
+      {!capture.state.open && !barShowing ? (
         <button
           type="button"
           {...{ [CHROME_ATTR]: '' }}

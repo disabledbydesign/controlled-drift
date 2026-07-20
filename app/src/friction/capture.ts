@@ -76,24 +76,58 @@ export function describeTarget(el: Element | null): PressTarget | null {
  * That is why the entry also carries the view and the press target: the record stays useful even
  * when the picture is imperfect.
  *
- * NEVER throws. A failed snapshot must still leave her able to file a text-only entry — losing
- * the whole capture because the image did not render would be strictly worse than the old path.
+ * NEVER throws, and NEVER hangs. A failed snapshot must still leave her able to file a text-only
+ * entry — losing the whole capture because the image did not render would be strictly worse than
+ * the old path.
  */
 export async function snapshot(node?: HTMLElement | null): Promise<string | null> {
   const root = node || document.body;
   if (!root) return null;
   try {
-    const url = await domToPng(root, {
-      // The overlay is drawn before the async render finishes in some orderings; excluding it by
-      // attribute is cheaper and more reliable than trying to sequence around it.
-      filter: (n: Node) =>
-        !(n instanceof Element && n.hasAttribute(CHROME_ATTR)),
-      // 1 rather than devicePixelRatio: a 3x phone screen would produce a multi-megabyte PNG for
-      // no legibility gain at the size she will actually look at it.
-      scale: 1,
-    });
+    const url = await withTimeout(
+      domToPng(root, {
+        // The overlay is drawn before the async render finishes in some orderings; excluding it by
+        // attribute is cheaper and more reliable than trying to sequence around it.
+        filter: (n: Node) =>
+          !(n instanceof Element && n.hasAttribute(CHROME_ATTR)),
+        // 1 rather than devicePixelRatio: a 3x phone screen would produce a multi-megabyte PNG for
+        // no legibility gain at the size she will actually look at it.
+        scale: 1,
+      }),
+    );
     return typeof url === 'string' && url.startsWith('data:image/png') ? url : null;
   } catch {
     return null;
   }
+}
+
+/**
+ * How long to wait for a picture before giving up and letting her write the entry anyway.
+ *
+ * Generous — a full-page render on a phone is genuinely slow, and cutting off a picture that was
+ * about to arrive is the worse error. But BOUNDED, which is the point.
+ */
+export const SNAPSHOT_TIMEOUT_MS = 10_000;
+
+/**
+ * Resolve to null rather than hanging.
+ *
+ * ── why this exists, found by driving a real phone profile (2026-07-20) ─────
+ * `domToPng` NEVER SETTLED under an iOS Safari user agent — the library takes Safari-specific
+ * paths, and one of them hangs. A promise that never settles is worse than one that rejects: the
+ * catch above cannot fire, so the capture sat in its "busy" state forever, no editor ever opened,
+ * and — because the trigger button hides while a capture is starting — June was left with NO WAY
+ * IN AT ALL. Her real phone is iOS Safari, so this was on the path she would actually have used.
+ *
+ * A rejected promise degrades to a text-only entry, which is a documented, honest outcome. An
+ * unsettled one degrades to a dead feature that looks like nothing happened.
+ */
+function withTimeout<T>(p: Promise<T>): Promise<T | null> {
+  return new Promise((resolve) => {
+    const t = setTimeout(() => resolve(null), SNAPSHOT_TIMEOUT_MS);
+    p.then(
+      (v) => { clearTimeout(t); resolve(v); },
+      () => { clearTimeout(t); resolve(null); },
+    );
+  });
 }
