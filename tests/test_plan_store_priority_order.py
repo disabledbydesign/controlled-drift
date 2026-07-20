@@ -15,16 +15,23 @@ KEYED BY OBJECT ID, NEVER BY SLOT POSITION. A regenerated plan reassigns slots, 
 position-keyed order reattaches to whatever now sits at that index. Commit b721103 moved block
 state off slot keys for this reason and `chunked` carried the same bug before it.
 
-WHAT HAPPENS ON A REGENERATION — the decision this file also pins down. Because the order lives
-INSIDE the plan record, `save_plan` (which writes a fresh record) drops it. A regenerated plan
-is a fresh ranking the generator composed from current data; carrying yesterday's manual order
-over it would silently govern a set of items she never ordered. Stale ids are also the thing
-the id-keying rule above exists to avoid. This is the conservative reading and it is flagged
-for June rather than treated as settled.
+WHAT HAPPENS ON A REGENERATION — SETTLED 2026-07-19, REVERSING WHAT THIS FILE USED TO SAY. The
+first build dropped the ranking on a regeneration, on the reasoning that carrying it would let
+yesterday's order govern items she never ranked. That was the conservative reading and it was
+flagged for June rather than treated as settled. She settled it: "if the same thing recurs,
+yeah it should be in the same spot." The ranking is now CARRIED ACROSS a regeneration and
+merged BY ID — an item in both keeps its rank, a row the generator just added goes after.
+
+An item that is not on today's list is REMEMBERED rather than dropped, because "the same thing
+recurs" is exactly the chore that appears most days and not every day; dropping it would let one
+missing day demote it permanently. The cost is that an item gone for weeks can come back
+carrying a rank she no longer remembers. June: "we can log the friction to see if its a problem
+pretty easily" — so each return goes to `corrections_log` and the question stays answerable
+with evidence instead of being engineered away on a guess.
 
 All paths are redirected into tmp_path — tests never touch June's real ~/.controlled-drift/.
 """
-import sys, os
+import sys, os, json, datetime as dt
 
 import pytest
 
@@ -35,6 +42,18 @@ import plan_store
 
 def _redirect(tmp_path, monkeypatch):
     monkeypatch.setenv("CD_CONFIG_DIR", str(tmp_path))
+    # CD_DATA_DIR too, because the returning-item record below writes to `corrections.jsonl`,
+    # which resolves through `cd_paths.data_file` — a different root from the plan cache.
+    monkeypatch.setenv("CD_DATA_DIR", str(tmp_path))
+
+
+def _corrections(tmp_path):
+    """Every record in the sandboxed corrections log, oldest first."""
+    path = os.path.join(str(tmp_path), "corrections.jsonl")
+    if not os.path.exists(path):
+        return []
+    with open(path) as f:
+        return [json.loads(line) for line in f if line.strip()]
 
 
 A, B, C = "bafyA", "bafyB", "bafyC"
@@ -147,17 +166,160 @@ def test_a_clock_shape_plan_has_no_priority_list_to_rank(tmp_path, monkeypatch):
         plan_store.set_priority_order([A])
 
 
-def test_a_regeneration_drops_the_saved_order(tmp_path, monkeypatch):
-    """THE DECISION, asserted positively. A new plan carries no stale ranking: `save_plan`
-    writes a fresh record and the order does not survive it. She sees the generator's order on a
-    regenerated day, not yesterday's manual one applied to a different set of items."""
+D = "bafyD"
+
+
+def _plan_with(*ids):
+    """A fragmented-day plan holding exactly these ids, in this order."""
+    titles = {A: "Call the pharmacy", B: "Rent portal", C: "Water the plants", D: "Sweep"}
+    return {
+        "shape": "priority",
+        "header": "A short list to pull from.",
+        "items": [{"id": i, "task": titles[i]} for i in ids],
+    }
+
+
+def test_a_regeneration_keeps_the_rank_of_an_item_that_is_still_there(tmp_path, monkeypatch):
+    """THE DECISION, REVERSED 2026-07-19 — June: "if the same thing recurs, yeah it should be in
+    the same spot." A regeneration used to drop the ranking outright (the conservative reading
+    this file's header used to record, flagged for her rather than settled). She has now settled
+    it: an item in both the saved order and the new plan keeps the rank she gave it."""
     _redirect(tmp_path, monkeypatch)
     plan_store.save_plan(_plan())
     plan_store.set_priority_order([C, A, B])
 
     plan_store.save_plan(_plan())
 
-    assert "priority_order" not in plan_store.load_plan()
+    assert plan_store.load_plan()["priority_order"] == [C, A, B]
+
+
+def test_an_item_the_generator_just_added_goes_after_the_ones_she_ranked(tmp_path, monkeypatch):
+    """"Anything new goes after" — a row she has never seen cannot claim a rank she chose, so it
+    lands below every one she did, in the generator's own order."""
+    _redirect(tmp_path, monkeypatch)
+    plan_store.save_plan(_plan())
+    plan_store.set_priority_order([C, A, B])
+
+    plan_store.save_plan(_plan_with(A, B, C, D))
+
+    assert plan_store.load_plan()["priority_order"] == [C, A, B, D]
+
+
+def test_the_merge_is_by_id_never_wholesale(tmp_path, monkeypatch):
+    """A saved ranking is NOT reapplied to a different item set as a block. Only the ids that are
+    genuinely in both plans carry a rank across; the rest of the list is the generator's."""
+    _redirect(tmp_path, monkeypatch)
+    plan_store.save_plan(_plan())
+    plan_store.set_priority_order([C, A, B])
+
+    # A completely different day: only C survives from the ranked set.
+    plan_store.save_plan(_plan_with(D, C))
+
+    order = plan_store.load_plan()["priority_order"]
+    # C keeps its rank ahead of everything she ranked below it; D is new, so it goes after.
+    assert order.index(C) < order.index(D)
+    assert set(order) >= {C, D}
+
+
+def test_an_item_that_leaves_the_plan_still_has_its_spot_when_it_comes_back(
+        tmp_path, monkeypatch):
+    """The point of "if the same thing recurs, it should be in the same spot". A chore that is
+    not on today's list must not lose the rank she gave it — otherwise one missing day silently
+    demotes it forever. Its id is RETAINED in the saved order while it is away.
+
+    `PriorityList.tsx` already drops ids that are not in the plan when it renders, so a retained
+    id is invisible to her until the item itself is back."""
+    _redirect(tmp_path, monkeypatch)
+    plan_store.save_plan(_plan())
+    plan_store.set_priority_order([C, A, B])
+
+    plan_store.save_plan(_plan_with(C, A))       # B is not on today's list
+    assert B in plan_store.load_plan()["priority_order"]
+
+    plan_store.save_plan(_plan_with(A, B, C))    # B is back
+    assert plan_store.load_plan()["priority_order"] == [C, A, B]
+
+
+def test_a_returning_item_is_recorded_with_how_long_it_was_gone_and_where_it_landed(
+        tmp_path, monkeypatch):
+    """June: "we can log the friction to see if its a problem pretty easily."
+
+    An item can come back after weeks still carrying a rank from a plan she no longer remembers.
+    That is not engineered away — it is RECORDED, so whether it actually feels wrong is a
+    question with evidence behind it rather than a guess. A bare "reapplied a rank" would answer
+    nothing, so the record names the item, how long it had been away, and both the rank it took
+    and the rank the generator would have given it."""
+    _redirect(tmp_path, monkeypatch)
+    plan_store.save_plan(_plan())
+    plan_store.set_priority_order([C, A, B])
+    plan_store.save_plan(_plan_with(C, A))       # B goes away
+
+    plan_store.save_plan(_plan_with(A, B, C))    # B comes back
+
+    rec = [r for r in _corrections(tmp_path) if r["kind"] == "priority_rank_returned"]
+    assert len(rec) == 1
+    assert rec[0]["object_id"] == B
+    assert rec[0]["before"]["task"] == "Rent portal"
+    assert rec[0]["before"]["days_away"] == 0          # same test run, so: today
+    assert rec[0]["before"]["last_ranked_in_a_plan_from"]
+    assert rec[0]["after"]["rank"] == 2                # [C, A, B]
+    assert rec[0]["after"]["generator_rank"] == 1      # the plan itself had it second
+
+
+def test_an_item_that_never_left_is_not_recorded_as_returning(tmp_path, monkeypatch):
+    """Only a genuine return is worth recording. Logging every carried rank would bury the one
+    case June asked about under one record per row per regeneration."""
+    _redirect(tmp_path, monkeypatch)
+    plan_store.save_plan(_plan())
+    plan_store.set_priority_order([C, A, B])
+
+    plan_store.save_plan(_plan())
+
+    assert [r for r in _corrections(tmp_path) if r["kind"] == "priority_rank_returned"] == []
+
+
+def test_a_block_row_keeps_its_rank_across_a_regeneration(tmp_path, monkeypatch):
+    """⚠ A BLOCK ROW HAS NO `id` — its id is in `project_id`. This fixture is June's real
+    fragmented-day shape, read off the live server, where three of seven rows were blocks. The
+    merge resolves a row's identity the same way `set_priority_order` does; reading `id` alone
+    would carry no rank at all for a block and would put `None` in the merged list."""
+    _redirect(tmp_path, monkeypatch)
+    plan_store.save_plan(_real_shape_plan())
+    plan_store.set_priority_order([B, C, A])     # B is the BLOCK row
+
+    plan_store.save_plan(_real_shape_plan())
+
+    assert plan_store.load_plan()["priority_order"] == [B, C, A]
+
+
+def test_a_clock_day_in_between_does_not_wipe_the_ranking(tmp_path, monkeypatch):
+    """A clock-shape day has no priority list to rank, but it must not erase one either — a
+    single scheduled day would otherwise throw away everything she had ordered."""
+    _redirect(tmp_path, monkeypatch)
+    plan_store.save_plan(_plan())
+    plan_store.set_priority_order([C, A, B])
+
+    plan_store.save_plan({"shape": "clock", "blocks": [{"label": "Morning", "items": []}]})
+    plan_store.save_plan(_plan())
+
+    assert plan_store.load_plan()["priority_order"] == [C, A, B]
+
+
+def test_reordering_keeps_a_remembered_item_that_is_not_on_screen(tmp_path, monkeypatch):
+    """She can only reorder what is in front of her, so her order names today's rows and nothing
+    else. Storing it verbatim would delete every remembered rank for an item that happens to be
+    away — one reorder on a day a chore is missing, and the chore's spot is gone.
+
+    A remembered id keeps the row it sat BEHIND. That is the only anchor available: its position
+    relative to rows she can see is the one fact her new order does not restate."""
+    _redirect(tmp_path, monkeypatch)
+    plan_store.save_plan(_plan())
+    plan_store.set_priority_order([C, A, B])
+    plan_store.save_plan(_plan_with(C, A))       # B is away, remembered behind A
+
+    plan_store.set_priority_order([A, C])        # she reorders the two rows she can see
+
+    assert plan_store.load_plan()["priority_order"] == [A, B, C]
 
 
 def test_a_server_side_move_clears_the_saved_order(tmp_path, monkeypatch):

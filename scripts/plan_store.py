@@ -104,16 +104,170 @@ def _ensure_dir():
 
 # --- current plan -----------------------------------------------------------
 
+def _row_id(item):
+    """A plan row's identity.
+
+    ⚠ A BLOCK ROW HAS NO `id` — its id lives in `project_id`, and `id` is absent entirely. See
+    the long note in `set_priority_order`: this exact assumption crashed the ranking feature on
+    June's real plan, where three of seven rows were blocks. `api/adapt.ts` reads
+    `it.id ?? it.project_id` and the surface sends a block's project_id as its id, so anything
+    here that reads `id` alone disagrees with every id the client can possibly send.
+
+    Returns None for a row carrying neither. Callers decide whether that is a refusal (ranking a
+    list she is looking at) or a row simply left out (carrying ranks forward across a
+    regeneration, where a nameless row can be appended by the surface's own ordering rule).
+    """
+    return item.get("id") or item.get("project_id")
+
+
+def _weave_remembered(stored, order):
+    """Fold June's new ordering of TODAY'S rows back into the remembered ranking.
+
+    `order` names only what was on her screen. `stored` may also name items that are not on
+    today's list and are being remembered for when they come back (see `save_plan`). Writing
+    `order` verbatim would delete every one of those, so one reorder made on a day a chore
+    happens to be missing would throw away that chore's spot for good.
+
+    A remembered id keeps the row it sat BEHIND. That is the only anchor there is: its position
+    relative to the rows she can see is the single fact her new order does not restate. An id
+    remembered ahead of every visible row stays at the front.
+    """
+    visible = set(order)
+    leading = []
+    behind = {}            # visible id -> the remembered ids that followed it
+    anchor = None
+    for sid in stored:
+        if sid in visible:
+            anchor = sid
+        elif anchor is None:
+            leading.append(sid)
+        else:
+            behind.setdefault(anchor, []).append(sid)
+    woven = list(leading)
+    for oid in order:
+        woven.append(oid)
+        woven.extend(behind.get(oid, []))
+    return woven
+
+
+def _carry_priority_order(previous, record):
+    """Carry June's manual ranking across a REGENERATION, merging by id.
+
+    ── THE DECISION, AND THAT IT WAS REVERSED ──────────────────────────────────
+    A regeneration used to drop the ranking outright. That was the conservative reading, taken
+    deliberately and FLAGGED FOR JUNE rather than settled (commit 1e029d9). She settled it on
+    2026-07-19: "if the same thing recurs, yeah it should be in the same spot."
+
+    So: an id in both the saved ranking and the new plan KEEPS its rank; a row the generator has
+    just added goes after every row she ranked, in the generator's own order. The merge is BY ID
+    and never wholesale — a saved ranking is not re-applied as a block to a different set.
+
+    ── WHY AN ABSENT ITEM IS REMEMBERED RATHER THAN DROPPED ────────────────────
+    "The same thing recurs" is the case she named: a chore that is on the list most days but not
+    every day. If a missing day dropped its id, one absence would demote it permanently, which is
+    the opposite of her ruling. So an id stays in the ranking while the item is away.
+    `PriorityList.tsx` already filters the order down to ids that are in the plan before it
+    renders, so a remembered id is invisible to her until the item itself is back.
+
+    ── THE HARD CASE IS LOGGED, NOT ENGINEERED AWAY ────────────────────────────
+    An item can be gone for weeks and come back still carrying a rank from a plan she no longer
+    remembers. There is no way to tell from here whether that will feel right or wrong, and
+    guessing would build a rule on nothing. June: "we can log the friction to see if its a
+    problem pretty easily." So each return is recorded through `corrections_log` — the existing
+    log, not a fourteenth .jsonl — naming the item, how long it was away, the rank it took and
+    the rank the generator would have given it, which is enough to answer the question later
+    instead of re-opening it.
+
+    Mutates `record` in place. Writes nothing when she has no saved ranking: with nothing of hers
+    to carry, the generator's order stands and the plan record stays as small as it was.
+    """
+    if not previous:
+        return
+    stored = previous.get("priority_order")
+    if not stored:
+        return
+
+    # A row with no id of any kind cannot be ranked, so it is left out of the ranking rather than
+    # refused — the surface's own ordering rule appends any plan row the order does not mention,
+    # so it still renders. `set_priority_order` DOES refuse it, because there she is looking at
+    # the list and a row with no position would be a hole on screen.
+    present = [i for i in (_row_id(it) for it in (record.get("items") or [])) if i]
+    ranked = set(stored)
+    merged = list(stored) + [i for i in present if i not in ranked]
+
+    away = dict(previous.get("priority_order_away") or {})
+    # Ids that were away and are back. Reading this from a remembered away-map rather than from
+    # the previous plan's own rows is what keeps a CLOCK day from reporting every row as
+    # returning: a clock day has no priority list, so it moves nobody in or out.
+    returning = [i for i in present if i in away]
+
+    record["priority_order"] = merged
+    if record.get("items"):
+        last_seen = previous.get("generated_at") or record["generated_at"]
+        record["priority_order_away"] = {
+            **{i: t for i, t in away.items() if i not in set(present)},
+            **{i: last_seen for i in merged if i not in set(present) and i not in away},
+        }
+    elif away:
+        record["priority_order_away"] = away
+
+    if returning:
+        visible = [i for i in merged if i in set(present)]
+        titles = {_row_id(it): it.get("task") or "" for it in (record.get("items") or [])}
+        for rid in returning:
+            _log_returning_rank(rid, titles.get(rid, ""), away.get(rid),
+                                visible.index(rid), present.index(rid))
+
+
+def _log_returning_rank(row_id, task, last_seen, rank, generator_rank):
+    """One record per item that came back and took a rank it was given before it left.
+
+    Routed through `corrections_log` (`kind='priority_rank_returned'`), which already carries
+    several non-correction record types and is the repo's answer to "where does a new signal go"
+    — `scripts/data/` holds thirteen .jsonl files and the rule is to widen what exists.
+
+    ⚠ NO `field`, deliberately, for the reason that log's own header gives: its
+    `resolve_authored_by` fold reads any non-authorship record for an (object_id, field) pair as
+    June having overwritten that field. This is the system recording something it did on its own,
+    so a `field` here would report her as the author of a value she never touched.
+
+    A failed log must never cost her the plan — the plan write is the real work and this is a
+    note about it — so a failure is reported to stderr and the save continues. That is the same
+    handling `server.py` gives its own corrections_log writes.
+    """
+    days = None
+    if last_seen:
+        try:
+            days = (dt.datetime.now() - dt.datetime.fromisoformat(last_seen)).days
+        except ValueError:
+            days = None
+    try:
+        import corrections_log
+        corrections_log.log_correction(
+            "priority_rank_returned",
+            {"task": task, "days_away": days, "last_ranked_in_a_plan_from": last_seen},
+            {"rank": rank, "generator_rank": generator_rank},
+            object_id=row_id, surface="plan_store")
+    except Exception as e:                                  # noqa: BLE001 — see docstring
+        print(f"[priority-order] could not record the return of {row_id!r}: {e}",
+              file=sys.stderr)
+
+
 def save_plan(plan, source="generate"):
     """Persist a generated plan. `plan` is the structured dict the overlay reads.
 
     Stamps generated_at + source so the overlay (and any future learning) can tell a
     fresh morning plan from a renegotiated one.
+
+    Carries June's manual ranking of a fragmented-day list across the regeneration — see
+    `_carry_priority_order` for that decision and what it does with an item that has been away.
     """
     _ensure_dir()
+    previous = load_plan()      # read BEFORE the overwrite: her ranking rides in this record
     record = dict(plan)
     record["generated_at"] = dt.datetime.now().isoformat()
     record["source"] = source
+    _carry_priority_order(previous, record)
     path = _plan_path()
     tmp = path + ".tmp"
     with open(tmp, "w") as f:
@@ -625,14 +779,13 @@ def set_priority_order(order):
     whatever now sits at that index. Commit b721103 moved block state off slot keys for exactly
     this reason and `chunked` carried the same bug before it.
 
-    ── WHAT A REGENERATION DOES TO IT — the decision, stated ────────────────────
-    Nothing explicit: the ranking lives INSIDE the plan record, and `save_plan` writes a fresh
-    record, so a regeneration drops it and the generator's order stands. That is deliberate and
-    conservative. A regenerated plan is a fresh ranking over possibly different items, and
-    reapplying her ordering across it would silently govern a set she never ordered — the
-    failure mode the id-keying above exists to prevent, arriving by a second route. The
-    alternative (carry it over, merging by id) is a real option and is FLAGGED FOR JUNE rather
-    than decided here.
+    ── WHAT A REGENERATION DOES TO IT — SETTLED 2026-07-19, and REVERSED ────────
+    It used to drop the ranking: the order lived inside the plan record and `save_plan` wrote a
+    fresh one. That was the conservative reading, taken deliberately and flagged for June rather
+    than settled. She settled it: "if the same thing recurs, yeah it should be in the same spot."
+    The ranking is now carried across a regeneration, MERGED BY ID — see
+    `_carry_priority_order`, which also explains why an item that is away is remembered rather
+    than dropped, and what gets logged when it comes back.
 
     ── WHY NOT A NEW .jsonl ────────────────────────────────────────────────────
     This is per-plan state, the same family as the moves, deferrals and chunk flags this module
@@ -663,7 +816,7 @@ def set_priority_order(order):
     #
     # Found by POSTing to the running server, NOT by a test — the fixture gave every row an
     # `id`, so it could not see this. Same class as the block-id bug `adapt.ts` records.
-    known = [it.get("id") or it.get("project_id") for it in items]
+    known = [_row_id(it) for it in items]
     if not all(known):
         raise ValueError("that plan has a row with no id, so it cannot be ranked")
     if set(order) != set(known):
@@ -674,7 +827,11 @@ def set_priority_order(order):
             + (f"; not in the plan: {unknown}" if unknown else "")
             + (f"; left out of the order: {missing}" if missing else ""))
 
-    plan["priority_order"] = order
+    # Her order names TODAY'S rows and nothing else, because that is all she can see. The saved
+    # ranking may also be remembering ids whose items are away (see `_carry_priority_order`), and
+    # storing `order` verbatim would delete every one of them — so one reorder made on a day a
+    # chore happens to be missing would throw that chore's spot away for good.
+    plan["priority_order"] = _weave_remembered(plan.get("priority_order") or [], order)
     _write_plan(plan)      # deliberately does NOT re-stamp generated_at — a reorder is not a
     return plan            # regeneration, and the surface reports the plan's age from that stamp
 
