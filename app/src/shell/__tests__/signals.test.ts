@@ -1,3 +1,8 @@
+// @vitest-environment node
+// Pure logic — no DOM (localStorage is stubbed wholesale below, and jsdom's own
+// localStorage is non-functional here anyway). Opting out of jsdom keeps 53 environment
+// setups from contending for 8 cores, which is what made the suite time out under load.
+
 /**
  * The presentation policy and the failure log (Task 11).
  *

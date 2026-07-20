@@ -1,3 +1,7 @@
+// @vitest-environment node
+// Pure logic — no DOM. Opting out of jsdom keeps 53 environment setups from
+// contending for 8 cores, which is what made the suite time out under load.
+
 import { describe, expect, it } from 'vitest';
 import { navAnimation, navDir, TAB_BAR } from '../tabs.ts';
 

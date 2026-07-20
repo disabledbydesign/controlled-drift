@@ -1,3 +1,7 @@
+// @vitest-environment node
+// Pure logic — no DOM. Opting out of jsdom keeps 53 environment setups from
+// contending for 8 cores, which is what made the suite time out under load.
+
 /**
  * Tests for the PER-ROW plan write seam — "not today", duration, and move.
  *

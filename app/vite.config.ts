@@ -44,9 +44,38 @@ export default defineConfig({
     sourcemap: true,
   },
 
-  // Component tests need a DOM. Model-layer tests are pure and unaffected.
   test: {
+    // jsdom is the DEFAULT because most tests here are component tests: a new component
+    // test is then correct with no ceremony, and the failure mode of forgetting is a
+    // passing test rather than a confusing "document is not defined".
+    //
+    // The 18 pure model/API/logic files opt OUT explicitly with a `@vitest-environment node`
+    // docblock. That is not a micro-optimisation. Building a jsdom for a file that never
+    // touches the DOM is pure contention: measured on this 8-core machine, environment
+    // setup cost MORE than running the tests (47.97s env vs 54.02s tests unloaded; 237s env
+    // vs 204s tests under load). Those wasted setups are what pushed ordinary tests past
+    // their timeout whenever another agent was building or running the backend suite.
     environment: 'jsdom',
+
+    // Deliberate: component tests call `afterEach(cleanup)` explicitly. Turning globals on
+    // would silently change every test file's assumptions.
     globals: false,
+
+    // Cap file-level parallelism below the core count. Vitest's default sizes the pool to
+    // the machine, which is right for a machine running only the suite — but this suite
+    // routinely runs while agents run builds and the Python suite. Leaving headroom means
+    // the suite degrades (runs slower) under load instead of failing (timing out).
+    // (Vitest 4 replaced `poolOptions.forks.maxForks` with a top-level `maxWorkers`;
+    // the old key is silently ignored, so it must not be reintroduced.)
+    pool: 'forks',
+    maxWorkers: 6,
+
+    // Backstop only — NOT the fix. The fix is the two settings above, which remove the
+    // contention that made tests slow. This timeout exists because the suite shares a
+    // machine with work it cannot see or control, and a test that would pass in 200ms
+    // should not be failed for losing a scheduling race. It is sized so that a genuine
+    // hang still fails the run in reasonable time rather than hanging CI.
+    testTimeout: 20_000,
+    hookTimeout: 20_000,
   },
 });
