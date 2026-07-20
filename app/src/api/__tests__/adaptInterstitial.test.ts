@@ -68,6 +68,22 @@ describe('an interstitial row that carries an id is a real short task', () => {
   });
 });
 
+describe('an id-less row is a break EVEN WHEN it is not flagged interstitial', () => {
+  // The real payload does NOT flag meals/fillers interstitial: live 2026-07-20, both "Lunch" and
+  // "Rest — stand up, stretch, move" arrive `interstitial:false` with no id. Read as `kind:'task'`
+  // with id '' they hit `TaskRow`'s `node(idx,'') === null` guard and render NOTHING — a silent gap
+  // in the schedule. A row with no addressable id has nothing to check off; it is a break.
+  it('converts an id-less Lunch that is not flagged interstitial', () => {
+    const row = oneRow({ task: 'Lunch', time: '12:30', interstitial: false });
+    expect(row).toEqual({ kind: 'break', time: '12:30', task: 'Lunch' });
+  });
+
+  it('converts an id-less model-authored filler that is not flagged interstitial', () => {
+    const row = oneRow({ task: 'Rest — stand up, stretch, move', time: '17:00' });
+    expect(row.kind).toBe('break');
+  });
+});
+
 describe('an interstitial row with no id is a genuine anchor', () => {
   it('converts Lunch to a break, which is what has nothing to address', () => {
     const row = oneRow({ task: 'Lunch', time: '12:30', interstitial: true });
@@ -143,9 +159,15 @@ describe('project_id on a NON-block row is the parent project, not the row', () 
     expect(row).toEqual({ kind: 'break', time: '', task: 'Lunch' });
   });
 
-  it('gives an id-less ordinary task an empty id rather than its project’s', () => {
+  it('makes an id-less row a break, and never carries its project’s id onto it', () => {
+    // An id-less row that carries only its PARENT project's id has nothing of its own to
+    // address, so it is a break (which renders) rather than a task with id '' (which hit
+    // TaskRow's null-node guard and vanished — the schedule gap fixed 2026-07-20). The security
+    // property the earlier fix guarded still holds, more strongly: a break has no `id` field at
+    // all, so the parent's id cannot leak onto the row.
     const row = oneRow({ task: 'Rest or light activity', project_id: 'bafyrei-household' });
-    expect(row).toMatchObject({ kind: 'task', id: '' });
+    expect(row.kind).toBe('break');
+    expect('id' in row).toBe(false);
   });
 
   /**
@@ -162,16 +184,19 @@ describe('project_id on a NON-block row is the parent project, not the row', () 
    * guard that catches a future change routing the task branch through `usableId`. The fixture
    * that DOES bite is the interstitial one below; see its note.
    */
-  it('does not let block_project make a task row addressable as its parent project', () => {
+  it('never lets block_project address an id-less row as its parent project', () => {
     const row = oneRow({
       task: 'Draft the cover letter',
       block_project: true,
       project_id: 'bafyrei-parent-project',
       duration_min: 30,
     });
-    expect(row).toMatchObject({ kind: 'task', id: '', task: 'Draft the cover letter' });
-    // Named directly, so a future `project_id` fallback cannot pass this by being "not undefined".
-    expect(row.kind === 'task' && row.id).toBe('');
+    // block_project does not make usableId return the parent (that gate was removed), so this
+    // id-less row is a break — and a break carries no `id`, so the parent's id cannot reach the
+    // wire. The rule the earlier fix stated ("not addressable as its parent") holds; the row now
+    // renders instead of vanishing.
+    expect(row.kind).toBe('break');
+    expect('id' in row).toBe(false);
   });
 
   /**

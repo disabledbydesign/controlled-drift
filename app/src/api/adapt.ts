@@ -179,18 +179,23 @@ export function planFromLive(live: LivePlan): Plan {
   const shape = live.shape === 'priority' ? 'priority' : 'schedule';
   const conv = (it: LivePlanItem): PlanItem => {
     /*
-     * ⚠ `interstitial` ALONE DOES NOT MEAN "a break" — it means "short", and a real task can be
-     * short. The LLM prompt (JSON rule 3) instructs the model to flag real tasks of 15 minutes
-     * or less as interstitial too, so the backend's own test is `interstitial AND no id`
-     * (`scripts/plan_generate.py:1338`). Reading the flag by itself is the same test with the
-     * second half missing, and it read one of June's real recurring chores — "Do the dishes",
-     * with a real Anytype id — as a rest break: the row vanished from her Priority list and lost
-     * its checkbox, live, 2026-07-20.
+     * WHAT MAKES A ROW A BREAK: it has no addressable id, so there is nothing to check off. That
+     * is the whole test — `!usableId(it)` — and it is deliberately NOT gated on `interstitial`.
      *
-     * So an interstitial row that carries an id is an ordinary short task and converts like one.
-     * Only an interstitial row with no id is an anchor (Lunch, Rest) with nothing to address.
+     * ⚠ Two ways this was wrong before, both live 2026-07-20:
+     *   · `interstitial` ALONE is not "a break" — it means "short", and the LLM prompt (JSON rule
+     *     3) flags real ≤15-min TASKS interstitial too. Reading the flag by itself deleted a real
+     *     chore ("Do the dishes", with a real id) from the Priority list. A row with an id is a
+     *     task whatever the flag says — `usableId` (which reads `project_id` for a block) is the
+     *     authority, so an id-carrying short task keeps `kind:'task'`.
+     *   · `interstitial AND no id` was too NARROW the other way: meals and model-authored fillers
+     *     ("Lunch", "Rest — stand up, stretch, move") arrive with NO id and `interstitial:false`,
+     *     so they fell through to `kind:'task'` with id '' and hit `TaskRow`'s `node(idx,'')===null`
+     *     guard — rendering nothing, a silent gap in the schedule. With no id they are not tasks;
+     *     they are breaks, and now render as such (a block keeps its id in `project_id`, so
+     *     `usableId` keeps a real work block out of this branch).
      */
-    if (it.interstitial && !usableId(it)) {
+    if (!usableId(it) && !it.block) {
       return { kind: 'break', time: it.time ?? '', task: it.task ?? '' };
     }
     if (it.block) {
