@@ -410,6 +410,17 @@ Notes the frontend track needs:
 - `/api/capture` polls **`/api/status`** — the *shared* plan-generation status, not a capture-specific
   one — then reads `/api/session?stream=capture` for the result. `/api/focus/author` and
   `/api/focus/edit` poll a *different* endpoint, `/api/focus/status`. Easy to wire wrong.
+- ⚠ **`POST /api/focus/edit` is RETIRED (June, 2026-07-19) — it is not an unwired endpoint awaiting
+  a client.** It works, nothing calls it, and nothing should. Her words: *"i dont know if we need to
+  revise by voice anymore. Now that i can just edit in text."* Spoken revision was replaced by the
+  text path: `POST /api/focus/reflect` returns the itemised read-back she corrects field by field,
+  then `POST /api/focus/update` writes it. `focus_period_adapter.reflect_back`'s edit-DIFF half
+  serves only the retired route and is retirable with it. Left in place on purpose — she may want
+  voice back, and deleting a working path costs more than carrying it.
+  **This does NOT retire `GET /api/focus/edit-fields`**, a different endpoint that is still live.
+  An earlier audit flagged `edit-fields` as uncalled and that was a FALSE POSITIVE: the app reaches
+  the same fields through `/api/periods` and the shared adapter, so the focus editor does read
+  before it writes.
 - Async writes return **202 `{state, started}`**, and `started: false` means a run was already in
   flight — **not an error**. The UI must not surface it as a failure.
 - `/api/focus/commit` returns **200 `{"blocked": [labels]}`** when required fields are missing — a

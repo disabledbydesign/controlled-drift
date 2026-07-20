@@ -81,8 +81,19 @@ Routes:
                                 {blocked:[...]} rather than writing a period that never activates;
                                 on success re-fetches and verifies every field, reactivates any
                                 as-needed tasks she named -> {ok, id, name, reactivate_*?}
-  POST /api/focus/edit    {text} -> a broad SPOKEN revision of the ACTIVE period (async, 202); the
-                                result carries a changed-vs-stayed DIFF so a clobber is visible
+  POST /api/focus/edit    ⚠ RETIRED 2026-07-19 BY JUNE — NOT A BUG, NOT AN UNWIRED ENDPOINT.
+                                A broad SPOKEN revision of the ACTIVE period (async, 202), whose
+                                result carries a changed-vs-stayed DIFF. It works; nothing calls it
+                                and nothing should. June, 2026-07-19: "i dont know if we need to
+                                revise by voice anymore. Now that i can just edit in text." The
+                                text-editing path that replaced it is /api/focus/reflect (the
+                                itemised read-back she corrects field by field) + /api/focus/update.
+                                ⚠ DO NOT confuse this with GET /api/focus/edit-fields below, which
+                                is a DIFFERENT endpoint and is NOT retired.
+                                `focus_period_adapter.reflect_back`'s edit-DIFF half serves only
+                                this route and is retirable with it. Left in place deliberately:
+                                deleting a working path costs more than carrying it, and June may
+                                want voice back. Do not "fix" its absence of callers.
   POST /api/focus/update  {id, fields, raw_text} -> confirm an edit: UPDATE IN PLACE (same guards,
                                 same read-back verification and reactivation as /api/focus/commit)
 
